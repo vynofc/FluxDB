@@ -1,0 +1,394 @@
+﻿<Window x:Class="FluxDB.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:FluxDB"
+        mc:Ignorable="d"
+        Title="FluxDB - File Database Manager" Height="700" Width="1200"
+        WindowStartupLocation="CenterScreen"
+        Background="#1e1e1e">
+    
+    <Window.Resources>
+        <!-- Dark Theme Colors -->
+        <SolidColorBrush x:Key="BackgroundBrush" Color="#1e1e1e"/>
+        <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="#252526"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#3c3c3c"/>
+        <SolidColorBrush x:Key="ForegroundBrush" Color="#cccccc"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#0078d4"/>
+        <SolidColorBrush x:Key="AccentHoverBrush" Color="#1e88e5"/>
+        <SolidColorBrush x:Key="SuccessBrush" Color="#4caf50"/>
+        <SolidColorBrush x:Key="WarningBrush" Color="#ff9800"/>
+        <SolidColorBrush x:Key="ErrorBrush" Color="#f44336"/>
+        <SolidColorBrush x:Key="FolderBrush" Color="#dcb67a"/>
+        
+        <!-- Button Style -->
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="4" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <Style x:Key="SecondaryButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#3c3c3c"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- Navigation Button Style -->
+        <Style x:Key="NavButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="4" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#3c3c3c"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- TextBox Style -->
+        <Style x:Key="SearchTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="CaretBrush" Value="{StaticResource ForegroundBrush}"/>
+        </Style>
+        
+        <!-- Breadcrumb Button Style -->
+        <Style x:Key="BreadcrumbButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource AccentHoverBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource SecondaryBackgroundBrush}" Padding="20,15">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="📁 FluxDB" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="txtCurrentFolder" Text="" FontSize="14" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Margin="20,0,0,0" Opacity="0.7"/>
+                </StackPanel>
+                
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="btnSelectFolder" Content="📂 Select Folder" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSelectFolder_Click" Margin="0,0,10,0"/>
+                    <Button x:Name="btnRefresh" Content="🔄 Refresh" Style="{StaticResource SecondaryButtonStyle}" Click="BtnRefresh_Click" Margin="0,0,10,0" IsEnabled="False"/>
+                    <Button x:Name="btnExport" Content="💾 Export Index" Style="{StaticResource SecondaryButtonStyle}" Click="BtnExport_Click" Margin="0,0,10,0" IsEnabled="False"/>
+                    <Button x:Name="btnLicense" Content="🔑 License" Style="{StaticResource SecondaryButtonStyle}" Click="BtnLicense_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        
+        <!-- Navigation Bar (Breadcrumbs + Back/Forward) -->
+        <Border Grid.Row="1" Background="{StaticResource BackgroundBrush}" Padding="20,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Navigation Buttons -->
+                <Button x:Name="btnBack" Content="◀" Style="{StaticResource NavButtonStyle}" Click="BtnBack_Click" IsEnabled="False" FontSize="16" ToolTip="Back"/>
+                <Button x:Name="btnForward" Content="▶" Style="{StaticResource NavButtonStyle}" Click="BtnForward_Click" IsEnabled="False" FontSize="16" Margin="5,0,0,0" Grid.Column="1" ToolTip="Forward"/>
+                <Button x:Name="btnUp" Content="▲" Style="{StaticResource NavButtonStyle}" Click="BtnUp_Click" IsEnabled="False" FontSize="16" Margin="5,0,15,0" Grid.Column="2" ToolTip="Up one level"/>
+                
+                <!-- Breadcrumb Path -->
+                <ScrollViewer Grid.Column="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="pnlBreadcrumbs" Orientation="Horizontal"/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+        
+        <!-- Search Bar -->
+        <Border Grid.Row="2" Background="{StaticResource BackgroundBrush}" Padding="20,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBox x:Name="txtSearch" 
+                         Style="{StaticResource SearchTextBoxStyle}" 
+                         Text=""
+                         Tag="🔍 Search files by name, path, tags, or notes..."
+                         KeyUp="TxtSearch_KeyUp"/>
+                
+                <Button Grid.Column="1" x:Name="btnSearch" Content="Search" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSearch_Click" Margin="10,0,0,0"/>
+                <Button Grid.Column="2" x:Name="btnClearSearch" Content="Clear" Style="{StaticResource SecondaryButtonStyle}" Click="BtnClearSearch_Click" Margin="10,0,0,0"/>
+            </Grid>
+        </Border>
+        
+        <!-- Main Content -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="350"/>
+            </Grid.ColumnDefinitions>
+            
+            <!-- Files DataGrid -->
+            <Border Background="{StaticResource SecondaryBackgroundBrush}" Margin="20,10,10,10" CornerRadius="8">
+                <DataGrid x:Name="dgFiles" 
+                          AutoGenerateColumns="False" 
+                          IsReadOnly="True"
+                          SelectionMode="Single"
+                          SelectionChanged="DgFiles_SelectionChanged"
+                          MouseDoubleClick="DgFiles_MouseDoubleClick"
+                          Background="Transparent"
+                          Foreground="{StaticResource ForegroundBrush}"
+                          BorderThickness="0"
+                          GridLinesVisibility="Horizontal"
+                          HorizontalGridLinesBrush="#3c3c3c"
+                          RowBackground="#252526"
+                          AlternatingRowBackground="#2d2d30"
+                          HeadersVisibility="Column"
+                          CanUserResizeRows="False"
+                          FontSize="13">
+                    
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#1e1e1e"/>
+                            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+                            <Setter Property="Padding" Value="12,10"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="BorderBrush" Value="#3c3c3c"/>
+                            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+                    
+                    <DataGrid.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="Padding" Value="12,8"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="DataGridCell">
+                                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.CellStyle>
+                    
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="" Width="30">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Icon}" FontSize="16"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200"/>
+                        <DataGridTextColumn Header="Type" Binding="{Binding TypeDisplay}" Width="80"/>
+                        <DataGridTextColumn Header="Size" Binding="{Binding SizeDisplay}" Width="100"/>
+                        <DataGridTextColumn Header="Tags" Binding="{Binding TagsText}" Width="150"/>
+                        <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Width="140"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+            
+            <!-- Details Panel -->
+            <Border Grid.Column="1" Background="{StaticResource SecondaryBackgroundBrush}" Margin="10,10,20,10" CornerRadius="8" Padding="20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="pnlDetails">
+                        <TextBlock Text="File Details" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,20"/>
+                        
+                        <TextBlock Text="No file selected" x:Name="txtNoSelection" Foreground="{StaticResource ForegroundBrush}" Opacity="0.5"/>
+                        
+                        <StackPanel x:Name="pnlFileDetails" Visibility="Collapsed">
+                            <!-- File Name -->
+                            <TextBlock Text="Name" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                            <TextBlock x:Name="txtFileName" FontSize="14" Foreground="{StaticResource ForegroundBrush}" TextWrapping="Wrap" Margin="0,5,0,15"/>
+                            
+                            <!-- Full Path -->
+                            <TextBlock Text="Full Path" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                            <TextBox x:Name="txtFilePath" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Background="Transparent" BorderThickness="0" IsReadOnly="True" TextWrapping="Wrap" Margin="0,5,0,15"/>
+                            
+                            <!-- Size -->
+                            <TextBlock Text="Size" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                            <TextBlock x:Name="txtFileSize" FontSize="14" Foreground="{StaticResource ForegroundBrush}" Margin="0,5,0,15"/>
+                            
+                            <!-- Created -->
+                            <TextBlock Text="Created" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                            <TextBlock x:Name="txtFileCreated" FontSize="14" Foreground="{StaticResource ForegroundBrush}" Margin="0,5,0,15"/>
+                            
+                            <!-- Modified -->
+                            <TextBlock Text="Modified" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                            <TextBlock x:Name="txtFileModified" FontSize="14" Foreground="{StaticResource ForegroundBrush}" Margin="0,5,0,15"/>
+                            
+                            <!-- Separator -->
+                            <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,10,0,20"/>
+                            
+                            <!-- Tags Editor -->
+                            <TextBlock Text="Tags (comma separated)" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                            <TextBox x:Name="txtTags" 
+                                     Style="{StaticResource SearchTextBoxStyle}" 
+                                     Margin="0,5,0,10"
+                                     TextWrapping="Wrap"
+                                     AcceptsReturn="False"/>
+                            
+                            <!-- Notes Editor -->
+                            <TextBlock Text="Notes" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                            <TextBox x:Name="txtNotes" 
+                                     Style="{StaticResource SearchTextBoxStyle}" 
+                                     Margin="0,5,0,15"
+                                     TextWrapping="Wrap"
+                                     AcceptsReturn="True"
+                                     Height="100"
+                                     VerticalScrollBarVisibility="Auto"/>
+                            
+                            <!-- Save Button -->
+                            <Button x:Name="btnSaveTags" Content="💾 Save Tags &amp; Notes" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSaveTags_Click"/>
+                            
+                            <!-- Open File Button -->
+                            <Button x:Name="btnOpenFile" Content="📂 Open File Location" Style="{StaticResource SecondaryButtonStyle}" Click="BtnOpenFile_Click" Margin="0,10,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+        
+        <!-- Progress Bar -->
+        <Border Grid.Row="4" Background="{StaticResource SecondaryBackgroundBrush}" Padding="20,10" x:Name="pnlProgress" Visibility="Collapsed">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="txtProgressStatus" Text="Indexing..." Foreground="{StaticResource ForegroundBrush}" FontSize="13"/>
+                    <Button Grid.Column="1" x:Name="btnCancelIndex" Content="Cancel" Style="{StaticResource SecondaryButtonStyle}" Click="BtnCancelIndex_Click" Padding="10,5"/>
+                </Grid>
+                <ProgressBar x:Name="progressBar" Height="6" Margin="0,8,0,0" Background="#3c3c3c" Foreground="{StaticResource AccentBrush}" BorderThickness="0"/>
+            </StackPanel>
+        </Border>
+        
+        <!-- Status Bar -->
+        <Border Grid.Row="5" Background="{StaticResource SecondaryBackgroundBrush}" Padding="20,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBlock x:Name="txtStatus" Text="Ready - Select a folder to start indexing" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" FontSize="12"/>
+                <TextBlock x:Name="txtFileCount" Text="0 files" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Margin="0,0,20,0" Grid.Column="1" FontSize="12"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Ellipse x:Name="licenseIndicator" Width="10" Height="10" Fill="{StaticResource WarningBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="txtLicenseStatus" Text="No License" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" FontSize="12" Opacity="0.7"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
