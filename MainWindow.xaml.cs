@@ -97,6 +97,10 @@ namespace FluxDB
                 btnExport.IsEnabled = true;
 
                 InitializeDatabaseForFolder(_currentRootFolder);
+                
+                // Load saved filter for this folder
+                LoadFilterForFolder(_currentRootFolder);
+                
                 NavigateToFolder(_currentRootFolder, addToHistory: false);
                 
                 if (HasExistingIndex(_currentRootFolder))
@@ -430,12 +434,59 @@ namespace FluxDB
         private void CmbFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             // Don't process during initialization
-            if (dgFiles == null || _databaseService == null) return;
+            if (dgFiles == null || cmbFilter == null) return;
             
             if (cmbFilter.SelectedItem is ComboBoxItem item)
             {
                 _currentFilter = item.Content.ToString();
-                RefreshCurrentFolderView();
+                
+                // Save filter for current folder
+                if (!string.IsNullOrEmpty(_currentRootFolder))
+                {
+                    SaveFilterForFolder(_currentRootFolder, _currentFilter);
+                }
+                
+                // Only refresh if database is ready
+                if (_databaseService != null)
+                {
+                    RefreshCurrentFolderView();
+                }
+            }
+        }
+
+        private void SaveFilterForFolder(string folderPath, string filter)
+        {
+            var settings = _settingsService.Load();
+            if (settings.FolderFilters == null)
+            {
+                settings.FolderFilters = new Dictionary<string, string>();
+            }
+            settings.FolderFilters[folderPath] = filter;
+            _settingsService.Save(settings);
+        }
+
+        private void LoadFilterForFolder(string folderPath)
+        {
+            var settings = _settingsService.Load();
+            if (settings.FolderFilters != null && settings.FolderFilters.TryGetValue(folderPath, out var filter))
+            {
+                _currentFilter = filter;
+                
+                // Update ComboBox selection
+                foreach (ComboBoxItem item in cmbFilter.Items)
+                {
+                    if (item.Content.ToString() == filter)
+                    {
+                        cmbFilter.SelectedItem = item;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                // Default to "All Files"
+                _currentFilter = "All Files";
+                cmbFilter.SelectedIndex = 0;
             }
         }
 
@@ -471,21 +522,24 @@ namespace FluxDB
 
         private void UpdatePreview(FileEntry file)
         {
-            pnlPreview.Visibility = Visibility.Visible;
+            // Reset all
+            imgPreview.Source = null;
             imgPreview.Visibility = Visibility.Collapsed;
             txtPreviewScroll.Visibility = Visibility.Collapsed;
             txtNoPreview.Visibility = Visibility.Collapsed;
+            txtNoPreview.Text = "No preview available";
 
-            if (file == null || file.IsFolder)
+            if (file == null || file.IsFolder || !File.Exists(file.Path))
             {
                 pnlPreview.Visibility = Visibility.Collapsed;
                 return;
             }
 
+            pnlPreview.Visibility = Visibility.Visible;
             var ext = (file.Extension ?? "").ToLower();
 
             // Image preview
-            if (new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico" }.Contains(ext))
+            if (new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico", ".webp" }.Contains(ext))
             {
                 try
                 {
@@ -495,30 +549,37 @@ namespace FluxDB
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.DecodePixelWidth = 400;
                     bitmap.EndInit();
+                    bitmap.Freeze(); // Prevent memory leaks
                     
+
                     imgPreview.Source = bitmap;
                     imgPreview.Visibility = Visibility.Visible;
                 }
-                catch
+                catch (Exception)
                 {
+                    txtNoPreview.Text = "Cannot load image";
                     txtNoPreview.Visibility = Visibility.Visible;
                 }
             }
             // Text preview
             else if (new[] { ".txt", ".md", ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", 
-                           ".html", ".css", ".xaml", ".xml", ".json", ".sql", ".log", ".ini", ".cfg" }.Contains(ext))
+                           ".html", ".css", ".xaml", ".xml", ".json", ".sql", ".log", ".ini", ".cfg",
+                           ".bat", ".ps1", ".sh", ".yml", ".yaml", ".toml", ".config" }.Contains(ext))
             {
                 try
                 {
-                    var content = File.ReadAllText(file.Path);
-                    if (content.Length > 5000)
+                    using (var reader = new StreamReader(file.Path))
                     {
-                        content = content.Substring(0, 5000) + "\n\n... (truncated)";
+                        var content = reader.ReadToEnd();
+                        if (content.Length > 5000)
+                        {
+                            content = content.Substring(0, 5000) + "\n\n... (truncated)";
+                        }
+                        txtPreview.Text = content;
                     }
-                    txtPreview.Text = content;
                     txtPreviewScroll.Visibility = Visibility.Visible;
                 }
-                catch
+                catch (Exception)
                 {
                     txtNoPreview.Text = "Cannot read file";
                     txtNoPreview.Visibility = Visibility.Visible;
@@ -526,7 +587,6 @@ namespace FluxDB
             }
             else
             {
-                txtNoPreview.Text = "No preview available";
                 txtNoPreview.Visibility = Visibility.Visible;
             }
         }
@@ -943,6 +1003,9 @@ namespace FluxDB
             btnExport.IsEnabled = true;
 
             InitializeDatabaseForFolder(_currentRootFolder);
+            
+            // Load saved filter for this folder
+            LoadFilterForFolder(_currentRootFolder);
 
             if (HasExistingIndex(_currentRootFolder) && _databaseService.GetFileCount() > 0)
             {

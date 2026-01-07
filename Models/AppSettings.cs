@@ -15,5 +15,10 @@ namespace FluxDB.Models
         public bool LicenseValid { get; set; }
         public DateTime? LicenseExpiresAt { get; set; }
         public List<string> RecentFolders { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Stores filter settings per folder (folder path -> filter name)
+        /// </summary>
+        public Dictionary<string, string> FolderFilters { get; set; } = new Dictionary<string, string>();
     }
 }

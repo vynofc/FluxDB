@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,107 +12,117 @@ namespace FluxDB.Services
     /// </summary>
     public class LicenseService
     {
-        private readonly string _licenseEndpoint;
-        private readonly string _uploadEndpoint;
-        private readonly HttpClient _httpClient;
         private readonly SettingsService _settings;
+        private readonly HttpClient _httpClient;
+        private readonly string _verifyEndpoint;
+        private readonly string _uploadEndpoint;
 
-        // Cache duration for license check (24 hours)
-        private static readonly TimeSpan CacheDuration = TimeSpan.FromHours(24);
-
-        public LicenseService(SettingsService settings, string baseUrl = "https://your-nextjs-site.com/api")
+        public LicenseService(SettingsService settings, string baseUrl = "https://fluxdb.nsce.fr/api")
         {
             _settings = settings;
-            _licenseEndpoint = $"{baseUrl}/license/check";
-            _uploadEndpoint = $"{baseUrl}/license/upload";
-            _httpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(30)
-            };
+            _httpClient = new HttpClient();
+            _httpClient.Timeout = TimeSpan.FromSeconds(30);
+            _verifyEndpoint = $"{baseUrl}/license/verify";
+            _uploadEndpoint = $"{baseUrl}/index/upload";
         }
 
         /// <summary>
-        /// Get current device ID
+        /// Get current device ID (8-128 characters)
         /// </summary>
         public string GetDeviceId()
         {
             var settings = _settings.Load();
-            
             if (string.IsNullOrEmpty(settings.DeviceId))
             {
-                settings.DeviceId = Guid.NewGuid().ToString();
+                settings.DeviceId = GenerateDeviceId();
                 _settings.Save(settings);
             }
-
             return settings.DeviceId;
+        }
+
+        private string GenerateDeviceId()
+        {
+            // Generate a unique device ID (32 chars, within 8-128 range)
+            var machineInfo = Environment.MachineName + Environment.UserName + Environment.ProcessorCount + DateTime.Now.Ticks;
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(machineInfo));
+                return BitConverter.ToString(hash).Replace("-", "").Substring(0, 32).ToLower();
+            }
         }
 
         /// <summary>
         /// Check license status (uses cache if valid)
+        /// POST /api/license/verify
         /// </summary>
         public async Task<LicenseInfo> CheckLicenseAsync(string licenseKey, bool forceRefresh = false)
         {
             var settings = _settings.Load();
 
-            // Check cache first
-            if (!forceRefresh && settings.LastLicenseCheck.HasValue)
+            // Return cached if still valid and not forcing refresh
+            if (!forceRefresh && settings.LicenseValid && settings.LicenseKey == licenseKey)
             {
-                var cacheAge = DateTime.Now - settings.LastLicenseCheck.Value;
-                if (cacheAge < CacheDuration && settings.LicenseKey == licenseKey)
+                if (settings.LastLicenseCheck.HasValue)
                 {
-                    return new LicenseInfo
+                    var hoursSinceCheck = (DateTime.Now - settings.LastLicenseCheck.Value).TotalHours;
+                    if (hoursSinceCheck < 24) // Cache for 24 hours
                     {
-                        Valid = settings.LicenseValid,
-                        LicenseKey = licenseKey,
-                        ExpiresAt = settings.LicenseExpiresAt,
-                        LastChecked = settings.LastLicenseCheck.Value
-                    };
+                        return new LicenseInfo
+                        {
+                            Valid = settings.LicenseValid,
+                            LicenseKey = licenseKey,
+                            ExpiresAt = settings.LicenseExpiresAt,
+                            LastChecked = settings.LastLicenseCheck.Value
+                        };
+                    }
                 }
             }
 
-            // Make online check
             try
             {
-                var request = new LicenseCheckRequest
+                // API: POST /api/license/verify
+                var payload = new
                 {
-                    LicenseKey = licenseKey,
-                    DeviceId = GetDeviceId(),
-                    AppVersion = GetAppVersion()
+                    licenseKey = licenseKey,
+                    deviceId = GetDeviceId(),
+                    appVersion = GetAppVersion()
                 };
 
-                var json = JsonConvert.SerializeObject(request);
+                var json = JsonConvert.SerializeObject(payload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var response = await _httpClient.PostAsync(_licenseEndpoint, content);
+                var response = await _httpClient.PostAsync(_verifyEndpoint, content);
                 var responseJson = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<LicenseVerifyResponse>(responseJson);
 
-                if (response.IsSuccessStatusCode)
+                if (result.Valid)
                 {
-                    var licenseResponse = JsonConvert.DeserializeObject<LicenseCheckResponse>(responseJson);
-                    
-                    // Update cache
+                    // Save to settings
                     settings.LicenseKey = licenseKey;
-                    settings.LicenseValid = licenseResponse.Valid;
-                    settings.LicenseExpiresAt = licenseResponse.ExpiresAt;
+                    settings.LicenseValid = true;
+                    settings.LicenseExpiresAt = result.ExpiresAt;
                     settings.LastLicenseCheck = DateTime.Now;
                     _settings.Save(settings);
 
                     return new LicenseInfo
                     {
-                        Valid = licenseResponse.Valid,
+                        Valid = true,
                         LicenseKey = licenseKey,
-                        ExpiresAt = licenseResponse.ExpiresAt,
-                        Features = licenseResponse.Features,
+                        ExpiresAt = result.ExpiresAt,
                         LastChecked = DateTime.Now
                     };
                 }
                 else
                 {
+                    // Invalid license
+                    settings.LicenseValid = false;
+                    _settings.Save(settings);
+
                     return new LicenseInfo
                     {
                         Valid = false,
                         LicenseKey = licenseKey,
-                        ErrorMessage = $"Server returned: {response.StatusCode}",
+                        ErrorMessage = result.Error ?? "License invalid",
                         LastChecked = DateTime.Now
                     };
                 }
@@ -155,28 +164,53 @@ namespace FluxDB.Services
 
         /// <summary>
         /// Upload index to server (only if license is valid)
+        /// POST /api/index/upload
         /// </summary>
-        public async Task<bool> UploadIndexAsync(string licenseKey, IndexExport index)
+        public async Task<UploadResult> UploadIndexAsync(string licenseKey, IndexExport index)
         {
             try
             {
+                // API: POST /api/index/upload
                 var payload = new
                 {
-                    licenseKey,
+                    licenseKey = licenseKey,
                     deviceId = GetDeviceId(),
-                    indexVersion = index.Version,
-                    content = index
+                    version = 1,
+                    indexJson = index
                 };
 
                 var json = JsonConvert.SerializeObject(payload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.PostAsync(_uploadEndpoint, content);
-                return response.IsSuccessStatusCode;
+                var responseJson = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<UploadResponse>(responseJson);
+
+                if (result.Ok)
+                {
+                    return new UploadResult
+                    {
+                        Success = true,
+                        Message = "Upload successful",
+                        IndexId = result.IndexId
+                    };
+                }
+                else
+                {
+                    return new UploadResult
+                    {
+                        Success = false,
+                        Message = result.Error ?? $"Upload failed: {response.StatusCode}"
+                    };
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                return false;
+                return new UploadResult
+                {
+                    Success = false,
+                    Message = $"Upload error: {ex.Message}"
+                };
             }
         }
 
@@ -186,10 +220,10 @@ namespace FluxDB.Services
         public bool IsLicenseValid()
         {
             var settings = _settings.Load();
-            
+
             if (!settings.LicenseValid) return false;
             if (!settings.LicenseExpiresAt.HasValue) return settings.LicenseValid;
-            
+
             return settings.LicenseExpiresAt.Value > DateTime.Now;
         }
 
@@ -220,5 +254,49 @@ namespace FluxDB.Services
             var version = assembly.GetName().Version;
             return version?.ToString() ?? "1.0.0";
         }
+
+        // Response classes for JSON deserialization
+        private class LicenseVerifyResponse
+        {
+            [JsonProperty("valid")]
+            public bool Valid { get; set; }
+
+            [JsonProperty("error")]
+            public string Error { get; set; }
+
+            [JsonProperty("expiresAt")]
+            public DateTime? ExpiresAt { get; set; }
+
+            [JsonProperty("features")]
+            public LicenseFeatures Features { get; set; }
+        }
+
+        private class LicenseFeatures
+        {
+            [JsonProperty("upload")]
+            public bool Upload { get; set; }
+        }
+
+        private class UploadResponse
+        {
+            [JsonProperty("ok")]
+            public bool Ok { get; set; }
+
+            [JsonProperty("error")]
+            public string Error { get; set; }
+
+            [JsonProperty("indexId")]
+            public string IndexId { get; set; }
+        }
+    }
+
+    /// <summary>
+    /// Result of an upload operation
+    /// </summary>
+    public class UploadResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public string IndexId { get; set; }
     }
 }

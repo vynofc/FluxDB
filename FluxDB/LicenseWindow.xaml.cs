@@ -115,7 +115,7 @@ namespace FluxDB
 
         private async void BtnUploadIndex_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrEmpty(_rootFolder))
+            if (_exportService == null || string.IsNullOrEmpty(_rootFolder))
             {
                 MessageBox.Show("Please index a folder first.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -134,15 +134,15 @@ namespace FluxDB
             try
             {
                 var export = _exportService.CreateExport(_rootFolder);
-                var success = await _licenseService.UploadIndexAsync(licenseKey, export);
+                var result = await _licenseService.UploadIndexAsync(licenseKey, export);
 
-                if (success)
+                if (result.Success)
                 {
-                    MessageBox.Show("Index uploaded successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(result.Message ?? "Index uploaded successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else
                 {
-                    MessageBox.Show("Failed to upload index. Please check your connection and try again.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(result.Message ?? "Failed to upload index.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
             catch (Exception ex)
@@ -152,7 +152,7 @@ namespace FluxDB
             finally
             {
                 btnUploadIndex.IsEnabled = true;
-                btnUploadIndex.Content = "?? Upload Index to Server";
+                btnUploadIndex.Content = "Upload Index to Server";
             }
         }
 
