@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace FluxDB.Models
 {
@@ -10,8 +11,8 @@ namespace FluxDB.Models
         public bool Valid { get; set; }
         public string LicenseKey { get; set; }
         public DateTime? ExpiresAt { get; set; }
-        public string[] Features { get; set; }
-        public DateTime LastChecked { get; set; }
+        public Dictionary<string, bool> Features { get; set; }
+        public DateTime? LastChecked { get; set; }
         public string ErrorMessage { get; set; }
     }
 
@@ -32,7 +33,7 @@ namespace FluxDB.Models
     {
         public bool Valid { get; set; }
         public DateTime? ExpiresAt { get; set; }
-        public string[] Features { get; set; }
+        public Dictionary<string, bool> Features { get; set; }
         public string Message { get; set; }
     }
 }

@@ -61,7 +61,7 @@ namespace FluxDB
             }
 
             txtLicenseExpires.Text = license.ExpiresAt?.ToString("yyyy-MM-dd HH:mm") ?? "Never";
-            txtLastCheck.Text = license.LastChecked.ToString("yyyy-MM-dd HH:mm");
+            txtLastCheck.Text = license.LastChecked.HasValue ? license.LastChecked.Value.ToString("yyyy-MM-dd HH:mm") : "-";
 
             if (!string.IsNullOrEmpty(license.ErrorMessage))
             {

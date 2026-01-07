@@ -20,5 +20,15 @@ namespace FluxDB.Models
         /// Stores filter settings per folder (folder path -> filter name)
         /// </summary>
         public Dictionary<string, string> FolderFilters { get; set; } = new Dictionary<string, string>();
+
+        /// <summary>
+        /// Cached license feature flags from server
+        /// </summary>
+        public Dictionary<string, bool> LicenseFeatures { get; set; } = new Dictionary<string, bool>();
+
+        /// <summary>
+        /// Mapping of rootFolder -> last uploaded index hash
+        /// </summary>
+        public Dictionary<string, string> UploadedIndexHashes { get; set; } = new Dictionary<string, string>();
     }
 }
