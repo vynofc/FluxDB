@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -26,13 +27,17 @@ namespace FluxDB
         private CancellationTokenSource _indexCancellation;
         private FileEntry _selectedFile;
         private string _currentRootFolder;
-        private string _currentViewFolder;  // Aktuell angezeigter Ordner
+        private string _currentViewFolder;
         private bool _isIndexing;
         private bool _isSearchMode;
 
         // Navigation History
         private Stack<string> _backHistory = new Stack<string>();
         private Stack<string> _forwardHistory = new Stack<string>();
+
+        // Drag & Drop
+        private Point _dragStartPoint;
+        private bool _isDragging;
 
         private const string DatabaseFileName = ".fluxdb";
 
@@ -91,21 +96,220 @@ namespace FluxDB
             }
             else
             {
-                txtStatus.Text = "Ready - Select a folder to start indexing";
+                txtStatus.Text = "Ready - Select a folder or drag & drop to start";
             }
 
             UpdateLicenseStatus();
         }
 
-        /// <summary>
-        /// Navigiert zu einem Ordner und zeigt dessen Inhalt an
-        /// </summary>
+        #region Drag & Drop
+
+        private void Window_DragOver(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                if (files != null && files.Length > 0)
+                {
+                    // Check if it's a folder or files
+                    var firstPath = files[0];
+                    if (Directory.Exists(firstPath))
+                    {
+                        txtDropHint.Text = "📂 Drop folder here to index";
+                        e.Effects = DragDropEffects.Copy;
+                    }
+                    else if (File.Exists(firstPath))
+                    {
+                        txtDropHint.Text = $"📄 Drop {files.Length} file(s) to add to index";
+                        e.Effects = DragDropEffects.Copy;
+                    }
+                    else
+                    {
+                        e.Effects = DragDropEffects.None;
+                    }
+                    
+                    dropOverlay.Visibility = Visibility.Visible;
+                }
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        }
+
+        private async void Window_Drop(object sender, DragEventArgs e)
+        {
+            dropOverlay.Visibility = Visibility.Collapsed;
+
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+                return;
+
+            var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
+            if (paths == null || paths.Length == 0)
+                return;
+
+            var firstPath = paths[0];
+
+            // If dropping a folder, use it as the root folder
+            if (Directory.Exists(firstPath))
+            {
+                await OpenFolderAsync(firstPath);
+            }
+            // If dropping files, add them to the current index
+            else if (_databaseService != null && _currentRootFolder != null)
+            {
+                var addedCount = 0;
+                foreach (var filePath in paths.Where(File.Exists))
+                {
+                    try
+                    {
+                        // Only add if file is within the current root folder
+                        if (filePath.StartsWith(_currentRootFolder, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var fileInfo = new FileInfo(filePath);
+                            var entry = new FileEntry
+                            {
+                                Path = filePath,
+                                Name = fileInfo.Name,
+                                Extension = fileInfo.Extension,
+                                Size = fileInfo.Length,
+                                CreatedAt = fileInfo.CreationTime,
+                                ModifiedAt = fileInfo.LastWriteTime
+                            };
+                            _databaseService.UpsertFile(entry);
+                            addedCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error adding file {filePath}: {ex.Message}");
+                    }
+                }
+
+                if (addedCount > 0)
+                {
+                    RefreshCurrentFolderView();
+                    txtStatus.Text = $"Added {addedCount} file(s) to index";
+                }
+                else
+                {
+                    txtStatus.Text = "Files must be within the indexed folder";
+                }
+            }
+            else
+            {
+                MessageBox.Show("Please select a root folder first before dropping files.", 
+                    "No Folder Selected", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        protected override void OnDragLeave(DragEventArgs e)
+        {
+            base.OnDragLeave(e);
+            
+            // Only hide if leaving the window entirely
+            var pos = e.GetPosition(this);
+            if (pos.X < 0 || pos.Y < 0 || pos.X > ActualWidth || pos.Y > ActualHeight)
+            {
+                dropOverlay.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        // Drag files OUT of the application
+        private void DgFiles_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _dragStartPoint = e.GetPosition(null);
+            _isDragging = false;
+        }
+
+        private void DgFiles_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                _isDragging = false;
+                return;
+            }
+
+            var currentPos = e.GetPosition(null);
+            var diff = _dragStartPoint - currentPos;
+
+            // Check if we've moved enough to start dragging
+            if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+            {
+                if (_isDragging) return;
+                _isDragging = true;
+
+                // Get selected files
+                var selectedItems = dgFiles.SelectedItems.Cast<FileEntry>()
+                    .Where(f => !f.IsFolder && File.Exists(f.Path))
+                    .Select(f => f.Path)
+                    .ToArray();
+
+                if (selectedItems.Length > 0)
+                {
+                    var data = new DataObject();
+                    var fileDropList = new StringCollection();
+                    fileDropList.AddRange(selectedItems);
+                    data.SetFileDropList(fileDropList);
+
+                    DragDrop.DoDragDrop(dgFiles, data, DragDropEffects.Copy);
+                }
+
+                _isDragging = false;
+            }
+        }
+
+        #endregion
+
+        private async Task OpenFolderAsync(string folderPath)
+        {
+            _currentRootFolder = folderPath;
+            _currentViewFolder = _currentRootFolder;
+            txtCurrentFolder.Text = $"📁 {_currentRootFolder}";
+            _settingsService.AddRecentFolder(_currentRootFolder);
+            
+            _backHistory.Clear();
+            _forwardHistory.Clear();
+            
+            btnRefresh.IsEnabled = true;
+            btnExport.IsEnabled = true;
+
+            InitializeDatabaseForFolder(_currentRootFolder);
+
+            if (HasExistingIndex(_currentRootFolder) && _databaseService.GetFileCount() > 0)
+            {
+                var result = MessageBox.Show(
+                    $"This folder already has an index with {_databaseService.GetFileCount()} files.\n\n" +
+                    "Do you want to refresh the index?\n\n" +
+                    "• Yes = Refresh index (update changes)\n" +
+                    "• No = Use existing index",
+                    "Existing Index Found",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    await StartIndexing();
+                }
+                else
+                {
+                    NavigateToFolder(_currentRootFolder, addToHistory: false);
+                    txtStatus.Text = "Loaded existing index";
+                }
+            }
+            else
+            {
+                await StartIndexing();
+            }
+        }
+
         private void NavigateToFolder(string folderPath, bool addToHistory = true)
         {
             if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath))
                 return;
 
-            // History aktualisieren
             if (addToHistory && !string.IsNullOrEmpty(_currentViewFolder) && _currentViewFolder != folderPath)
             {
                 _backHistory.Push(_currentViewFolder);
@@ -115,17 +319,11 @@ namespace FluxDB
             _currentViewFolder = folderPath;
             _isSearchMode = false;
 
-            // Navigation Buttons aktualisieren
             UpdateNavigationButtons();
             UpdateBreadcrumbs();
-            
-            // Ordnerinhalt laden
             RefreshCurrentFolderView();
         }
 
-        /// <summary>
-        /// Aktualisiert die Anzeige des aktuellen Ordners
-        /// </summary>
         private void RefreshCurrentFolderView()
         {
             if (_databaseService == null || string.IsNullOrEmpty(_currentViewFolder))
@@ -137,11 +335,10 @@ namespace FluxDB
 
             var items = new List<FileEntry>();
 
-            // Unterordner hinzufügen (aus Dateisystem)
             try
             {
                 var directories = Directory.GetDirectories(_currentViewFolder)
-                    .Where(d => !Path.GetFileName(d).StartsWith("."))  // Versteckte Ordner ausblenden
+                    .Where(d => !Path.GetFileName(d).StartsWith("."))
                     .OrderBy(d => Path.GetFileName(d));
 
                 foreach (var dir in directories)
@@ -149,7 +346,7 @@ namespace FluxDB
                     var dirInfo = new DirectoryInfo(dir);
                     items.Add(new FileEntry
                     {
-                        Id = -1,  // Ordner haben keine DB-ID
+                        Id = -1,
                         Path = dir,
                         Name = dirInfo.Name,
                         IsFolder = true,
@@ -161,7 +358,6 @@ namespace FluxDB
             catch (UnauthorizedAccessException) { }
             catch (DirectoryNotFoundException) { }
 
-            // Dateien aus der Datenbank laden (nur für aktuellen Ordner)
             var allFiles = _databaseService.GetAllFiles();
             var filesInFolder = allFiles
                 .Where(f => Path.GetDirectoryName(f.Path) == _currentViewFolder)
@@ -176,9 +372,6 @@ namespace FluxDB
             txtFileCount.Text = $"{folderCount} folders, {fileCount} files";
         }
 
-        /// <summary>
-        /// Aktualisiert die Breadcrumb-Navigation
-        /// </summary>
         private void UpdateBreadcrumbs()
         {
             pnlBreadcrumbs.Children.Clear();
@@ -369,45 +562,7 @@ namespace FluxDB
 
                 if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
                 {
-                    _currentRootFolder = dialog.SelectedPath;
-                    _currentViewFolder = _currentRootFolder;
-                    txtCurrentFolder.Text = $"📁 {_currentRootFolder}";
-                    _settingsService.AddRecentFolder(_currentRootFolder);
-                    
-                    // History zurücksetzen
-                    _backHistory.Clear();
-                    _forwardHistory.Clear();
-                    
-                    btnRefresh.IsEnabled = true;
-                    btnExport.IsEnabled = true;
-
-                    InitializeDatabaseForFolder(_currentRootFolder);
-
-                    if (HasExistingIndex(_currentRootFolder) && _databaseService.GetFileCount() > 0)
-                    {
-                        var result = MessageBox.Show(
-                            $"This folder already has an index with {_databaseService.GetFileCount()} files.\n\n" +
-                            "Do you want to refresh the index?\n\n" +
-                            "• Yes = Refresh index (update changes)\n" +
-                            "• No = Use existing index",
-                            "Existing Index Found",
-                            MessageBoxButton.YesNo,
-                            MessageBoxImage.Question);
-
-                        if (result == MessageBoxResult.Yes)
-                        {
-                            await StartIndexing();
-                        }
-                        else
-                        {
-                            NavigateToFolder(_currentRootFolder, addToHistory: false);
-                            txtStatus.Text = "Loaded existing index";
-                        }
-                    }
-                    else
-                    {
-                        await StartIndexing();
-                    }
+                    await OpenFolderAsync(dialog.SelectedPath);
                 }
             }
         }
