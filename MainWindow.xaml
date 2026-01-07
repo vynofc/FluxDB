@@ -182,7 +182,7 @@
                                Foreground="{StaticResource ForegroundBrush}" 
                                HorizontalAlignment="Center"
                                Margin="0,20,0,0"/>
-                    <TextBlock Text="or drop files to add to current index" 
+                    <TextBlock Text="Hold SHIFT to move instead of copy" 
                                FontSize="14" 
                                Foreground="{StaticResource ForegroundBrush}" 
                                Opacity="0.7"

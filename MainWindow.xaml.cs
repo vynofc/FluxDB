@@ -111,21 +111,44 @@ namespace FluxDB
                 var files = (string[])e.Data.GetData(DataFormats.FileDrop);
                 if (files != null && files.Length > 0)
                 {
-                    // Check if it's a folder or files
                     var firstPath = files[0];
-                    if (Directory.Exists(firstPath))
+                    
+                    // Prüfen ob es ein Ordner ist (zum Öffnen als Root)
+                    if (Directory.Exists(firstPath) && string.IsNullOrEmpty(_currentRootFolder))
                     {
                         txtDropHint.Text = "📂 Drop folder here to index";
                         e.Effects = DragDropEffects.Copy;
                     }
-                    else if (File.Exists(firstPath))
+                    // Dateien/Ordner in aktuellen Ordner kopieren/verschieben
+                    else if (!string.IsNullOrEmpty(_currentViewFolder))
                     {
-                        txtDropHint.Text = $"📄 Drop {files.Length} file(s) to add to index";
-                        e.Effects = DragDropEffects.Copy;
+                        var fileCount = files.Count(f => File.Exists(f));
+                        var folderCount = files.Count(f => Directory.Exists(f));
+                        
+                        var itemText = "";
+                        if (folderCount > 0 && fileCount > 0)
+                            itemText = $"{folderCount} folder(s) and {fileCount} file(s)";
+                        else if (folderCount > 0)
+                            itemText = $"{folderCount} folder(s)";
+                        else
+                            itemText = $"{fileCount} file(s)";
+
+                        // Shift = Move, sonst Copy
+                        if ((e.KeyStates & DragDropKeyStates.ShiftKey) == DragDropKeyStates.ShiftKey)
+                        {
+                            txtDropHint.Text = $"📥 Move {itemText} here";
+                            e.Effects = DragDropEffects.Move;
+                        }
+                        else
+                        {
+                            txtDropHint.Text = $"📋 Copy {itemText} here";
+                            e.Effects = DragDropEffects.Copy;
+                        }
                     }
                     else
                     {
-                        e.Effects = DragDropEffects.None;
+                        txtDropHint.Text = "📂 Drop a folder to start";
+                        e.Effects = DragDropEffects.Copy;
                     }
                     
                     dropOverlay.Visibility = Visibility.Visible;
@@ -150,57 +173,210 @@ namespace FluxDB
                 return;
 
             var firstPath = paths[0];
+            var isMove = (e.KeyStates & DragDropKeyStates.ShiftKey) == DragDropKeyStates.ShiftKey;
 
-            // If dropping a folder, use it as the root folder
-            if (Directory.Exists(firstPath))
+            // Wenn kein Root-Ordner gesetzt ist und ein Ordner gedroppt wird -> Als Root öffnen
+            if (string.IsNullOrEmpty(_currentRootFolder) && Directory.Exists(firstPath))
             {
                 await OpenFolderAsync(firstPath);
+                return;
             }
-            // If dropping files, add them to the current index
-            else if (_databaseService != null && _currentRootFolder != null)
+
+            // Dateien/Ordner in den aktuellen Ordner kopieren/verschieben
+            if (!string.IsNullOrEmpty(_currentViewFolder))
             {
-                var addedCount = 0;
-                foreach (var filePath in paths.Where(File.Exists))
+                await CopyOrMoveFilesAsync(paths, _currentViewFolder, isMove);
+            }
+        }
+
+        private async Task CopyOrMoveFilesAsync(string[] sourcePaths, string targetFolder, bool move)
+        {
+            var copiedCount = 0;
+            var movedCount = 0;
+            var errorCount = 0;
+            var skippedCount = 0;
+
+            await Task.Run(() =>
+            {
+                foreach (var sourcePath in sourcePaths)
                 {
                     try
                     {
-                        // Only add if file is within the current root folder
-                        if (filePath.StartsWith(_currentRootFolder, StringComparison.OrdinalIgnoreCase))
+                        // Prüfen ob Quelle = Ziel
+                        var sourceParent = Path.GetDirectoryName(sourcePath);
+                        if (sourceParent.Equals(targetFolder, StringComparison.OrdinalIgnoreCase))
                         {
-                            var fileInfo = new FileInfo(filePath);
-                            var entry = new FileEntry
+                            skippedCount++;
+                            continue;
+                        }
+
+                        if (File.Exists(sourcePath))
+                        {
+                            // Datei kopieren/verschieben
+                            var fileName = Path.GetFileName(sourcePath);
+                            var targetPath = Path.Combine(targetFolder, fileName);
+                            targetPath = GetUniqueFilePath(targetPath);
+
+                            if (move)
                             {
-                                Path = filePath,
-                                Name = fileInfo.Name,
-                                Extension = fileInfo.Extension,
-                                Size = fileInfo.Length,
-                                CreatedAt = fileInfo.CreationTime,
-                                ModifiedAt = fileInfo.LastWriteTime
-                            };
-                            _databaseService.UpsertFile(entry);
-                            addedCount++;
+                                File.Move(sourcePath, targetPath);
+                                movedCount++;
+                            }
+                            else
+                            {
+                                File.Copy(sourcePath, targetPath);
+                                copiedCount++;
+                            }
+
+                            // Zur Datenbank hinzufügen
+                            Dispatcher.Invoke(() => AddFileToIndex(targetPath));
+                        }
+                        else if (Directory.Exists(sourcePath))
+                        {
+                            // Ordner kopieren/verschieben
+                            var dirName = Path.GetFileName(sourcePath);
+                            var targetPath = Path.Combine(targetFolder, dirName);
+                            targetPath = GetUniqueFolderPath(targetPath);
+
+                            if (move)
+                            {
+                                Directory.Move(sourcePath, targetPath);
+                                movedCount++;
+                            }
+                            else
+                            {
+                                CopyDirectory(sourcePath, targetPath);
+                                copiedCount++;
+                            }
+
+                            // Alle Dateien im Ordner zur Datenbank hinzufügen
+                            Dispatcher.Invoke(() => AddFolderToIndex(targetPath));
                         }
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"Error adding file {filePath}: {ex.Message}");
+                        Debug.WriteLine($"Error copying/moving {sourcePath}: {ex.Message}");
+                        errorCount++;
                     }
                 }
+            });
 
-                if (addedCount > 0)
-                {
-                    RefreshCurrentFolderView();
-                    txtStatus.Text = $"Added {addedCount} file(s) to index";
-                }
-                else
-                {
-                    txtStatus.Text = "Files must be within the indexed folder";
-                }
+            // UI aktualisieren
+            RefreshCurrentFolderView();
+
+            // Status-Meldung
+            var actionText = move ? "Moved" : "Copied";
+            var totalCount = move ? movedCount : copiedCount;
+            
+            if (errorCount > 0)
+            {
+                txtStatus.Text = $"{actionText} {totalCount} item(s), {errorCount} error(s)";
+            }
+            else if (skippedCount > 0)
+            {
+                txtStatus.Text = $"{actionText} {totalCount} item(s), {skippedCount} skipped (same location)";
             }
             else
             {
-                MessageBox.Show("Please select a root folder first before dropping files.", 
-                    "No Folder Selected", MessageBoxButton.OK, MessageBoxImage.Information);
+                txtStatus.Text = $"{actionText} {totalCount} item(s) successfully";
+            }
+        }
+
+        private void AddFileToIndex(string filePath)
+        {
+            if (_databaseService == null) return;
+
+            try
+            {
+                var fileInfo = new FileInfo(filePath);
+                var entry = new FileEntry
+                {
+                    Path = filePath,
+                    Name = fileInfo.Name,
+                    Extension = fileInfo.Extension,
+                    Size = fileInfo.Length,
+                    CreatedAt = fileInfo.CreationTime,
+                    ModifiedAt = fileInfo.LastWriteTime
+                };
+                _databaseService.UpsertFile(entry);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error adding file to index: {ex.Message}");
+            }
+        }
+
+        private void AddFolderToIndex(string folderPath)
+        {
+            if (_databaseService == null) return;
+
+            try
+            {
+                var files = Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories);
+                foreach (var file in files)
+                {
+                    AddFileToIndex(file);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error adding folder to index: {ex.Message}");
+            }
+        }
+
+        private string GetUniqueFilePath(string path)
+        {
+            if (!File.Exists(path))
+                return path;
+
+            var directory = Path.GetDirectoryName(path);
+            var fileName = Path.GetFileNameWithoutExtension(path);
+            var extension = Path.GetExtension(path);
+            var counter = 1;
+
+            while (File.Exists(path))
+            {
+                path = Path.Combine(directory, $"{fileName} ({counter}){extension}");
+                counter++;
+            }
+
+            return path;
+        }
+
+        private string GetUniqueFolderPath(string path)
+        {
+            if (!Directory.Exists(path))
+                return path;
+
+            var parent = Path.GetDirectoryName(path);
+            var folderName = Path.GetFileName(path);
+            var counter = 1;
+
+            while (Directory.Exists(path))
+            {
+                path = Path.Combine(parent, $"{folderName} ({counter})");
+                counter++;
+            }
+
+            return path;
+        }
+
+        private void CopyDirectory(string sourceDir, string targetDir)
+        {
+            Directory.CreateDirectory(targetDir);
+
+            foreach (var file in Directory.GetFiles(sourceDir))
+            {
+                var fileName = Path.GetFileName(file);
+                var targetFile = Path.Combine(targetDir, fileName);
+                File.Copy(file, targetFile);
+            }
+
+            foreach (var dir in Directory.GetDirectories(sourceDir))
+            {
+                var dirName = Path.GetFileName(dir);
+                var targetSubDir = Path.Combine(targetDir, dirName);
+                CopyDirectory(dir, targetSubDir);
             }
         }
 
@@ -208,7 +384,6 @@ namespace FluxDB
         {
             base.OnDragLeave(e);
             
-            // Only hide if leaving the window entirely
             var pos = e.GetPosition(this);
             if (pos.X < 0 || pos.Y < 0 || pos.X > ActualWidth || pos.Y > ActualHeight)
             {
@@ -216,7 +391,7 @@ namespace FluxDB
             }
         }
 
-        // Drag files OUT of the application
+        // Dateien AUS der App ziehen - NUR KOPIEREN
         private void DgFiles_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _dragStartPoint = e.GetPosition(null);
@@ -234,16 +409,14 @@ namespace FluxDB
             var currentPos = e.GetPosition(null);
             var diff = _dragStartPoint - currentPos;
 
-            // Check if we've moved enough to start dragging
             if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
                 Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
             {
                 if (_isDragging) return;
                 _isDragging = true;
 
-                // Get selected files
                 var selectedItems = dgFiles.SelectedItems.Cast<FileEntry>()
-                    .Where(f => !f.IsFolder && File.Exists(f.Path))
+                    .Where(f => (f.IsFolder && Directory.Exists(f.Path)) || (!f.IsFolder && File.Exists(f.Path)))
                     .Select(f => f.Path)
                     .ToArray();
 
@@ -254,6 +427,7 @@ namespace FluxDB
                     fileDropList.AddRange(selectedItems);
                     data.SetFileDropList(fileDropList);
 
+                    // NUR COPY erlauben wenn aus der App gezogen wird
                     DragDrop.DoDragDrop(dgFiles, data, DragDropEffects.Copy);
                 }
 
@@ -379,14 +553,12 @@ namespace FluxDB
             if (string.IsNullOrEmpty(_currentViewFolder) || string.IsNullOrEmpty(_currentRootFolder))
                 return;
 
-            // Relativen Pfad berechnen
             var relativePath = _currentViewFolder;
             if (_currentViewFolder.StartsWith(_currentRootFolder))
             {
                 relativePath = _currentViewFolder.Substring(_currentRootFolder.Length).TrimStart('\\');
             }
 
-            // Root-Button
             var rootButton = new Button
             {
                 Content = Path.GetFileName(_currentRootFolder),
@@ -396,7 +568,6 @@ namespace FluxDB
             rootButton.Click += BreadcrumbButton_Click;
             pnlBreadcrumbs.Children.Add(rootButton);
 
-            // Pfadteile
             if (!string.IsNullOrEmpty(relativePath))
             {
                 var parts = relativePath.Split(new[] { '\\' }, StringSplitOptions.RemoveEmptyEntries);
@@ -404,7 +575,6 @@ namespace FluxDB
 
                 foreach (var part in parts)
                 {
-                    // Separator
                     pnlBreadcrumbs.Children.Add(new TextBlock
                     {
                         Text = " › ",
@@ -528,12 +698,10 @@ namespace FluxDB
 
             if (selectedItem.IsFolder)
             {
-                // In Ordner navigieren
                 NavigateToFolder(selectedItem.Path);
             }
             else
             {
-                // Datei öffnen
                 try
                 {
                     Process.Start(new ProcessStartInfo
@@ -781,7 +949,7 @@ namespace FluxDB
 
                 if (result.Success)
                 {
-                    txtStatus.Text = $"Indexed {result.FilesIndexed} files in {result.Duration.TotalSeconds:F1}s - Index saved to folder";
+                    txtStatus.Text = $"Indexed {result.FilesIndexed} files in {result.Duration.TotalSeconds:F1}s";
                 }
                 else if (result.Cancelled)
                 {
