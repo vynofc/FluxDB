@@ -5,12 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:FluxDB"
         mc:Ignorable="d"
-        Title="FluxDB - File Database Manager" Height="700" Width="1200"
+        Title="FluxDB - File Database Manager" Height="750" Width="1400"
         WindowStartupLocation="CenterScreen"
         Background="#1e1e1e"
         AllowDrop="True"
         Drop="Window_Drop"
-        DragOver="Window_DragOver">
+        DragOver="Window_DragOver"
+        PreviewKeyDown="Window_PreviewKeyDown">
     
     <Window.Resources>
         <!-- Dark Theme Colors -->
@@ -149,6 +150,33 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        
+        <!-- Filter ComboBox Style -->
+        <Style x:Key="FilterComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        
+        <!-- Context Menu Style -->
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="#2d2d30"/>
+            <Setter Property="BorderBrush" Value="#3c3c3c"/>
+            <Setter Property="Foreground" Value="#cccccc"/>
+        </Style>
+        <Style TargetType="MenuItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#cccccc"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Style.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter Property="Background" Value="#3c3c3c"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     
     <Grid>
@@ -161,7 +189,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         
-        <!-- Drop Overlay (shows when dragging files over the window) -->
+        <!-- Drop Overlay -->
         <Border x:Name="dropOverlay" 
                 Grid.RowSpan="6" 
                 Background="#80000000" 
@@ -174,7 +202,7 @@
                     Margin="50"
                     Padding="40">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="📂" FontSize="64" HorizontalAlignment="Center"/>
+                    <TextBlock Text="[+]" FontSize="64" HorizontalAlignment="Center" Foreground="{StaticResource AccentBrush}" FontWeight="Bold"/>
                     <TextBlock x:Name="txtDropHint" 
                                Text="Drop folder here to index" 
                                FontSize="24" 
@@ -201,20 +229,20 @@
                 </Grid.ColumnDefinitions>
                 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="📁 FluxDB" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Text="[F] FluxDB" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
                     <TextBlock x:Name="txtCurrentFolder" Text="" FontSize="14" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Margin="20,0,0,0" Opacity="0.7"/>
                 </StackPanel>
                 
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="btnSelectFolder" Content="📂 Select Folder" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSelectFolder_Click" Margin="0,0,10,0"/>
-                    <Button x:Name="btnRefresh" Content="🔄 Refresh" Style="{StaticResource SecondaryButtonStyle}" Click="BtnRefresh_Click" Margin="0,0,10,0" IsEnabled="False"/>
-                    <Button x:Name="btnExport" Content="💾 Export Index" Style="{StaticResource SecondaryButtonStyle}" Click="BtnExport_Click" Margin="0,0,10,0" IsEnabled="False"/>
-                    <Button x:Name="btnLicense" Content="🔑 License" Style="{StaticResource SecondaryButtonStyle}" Click="BtnLicense_Click"/>
+                    <Button x:Name="btnSelectFolder" Content="[+] Select Folder" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSelectFolder_Click" Margin="0,0,10,0"/>
+                    <Button x:Name="btnRefresh" Content="[R] Refresh" Style="{StaticResource SecondaryButtonStyle}" Click="BtnRefresh_Click" Margin="0,0,10,0" IsEnabled="False"/>
+                    <Button x:Name="btnExport" Content="[S] Export" Style="{StaticResource SecondaryButtonStyle}" Click="BtnExport_Click" Margin="0,0,10,0" IsEnabled="False"/>
+                    <Button x:Name="btnLicense" Content="[L] License" Style="{StaticResource SecondaryButtonStyle}" Click="BtnLicense_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
         
-        <!-- Navigation Bar (Breadcrumbs + Back/Forward) -->
+        <!-- Navigation Bar -->
         <Border Grid.Row="1" Background="{StaticResource BackgroundBrush}" Padding="20,10">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -222,17 +250,32 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
                 <!-- Navigation Buttons -->
-                <Button x:Name="btnBack" Content="◀" Style="{StaticResource NavButtonStyle}" Click="BtnBack_Click" IsEnabled="False" FontSize="16" ToolTip="Back"/>
-                <Button x:Name="btnForward" Content="▶" Style="{StaticResource NavButtonStyle}" Click="BtnForward_Click" IsEnabled="False" FontSize="16" Margin="5,0,0,0" Grid.Column="1" ToolTip="Forward"/>
-                <Button x:Name="btnUp" Content="▲" Style="{StaticResource NavButtonStyle}" Click="BtnUp_Click" IsEnabled="False" FontSize="16" Margin="5,0,15,0" Grid.Column="2" ToolTip="Up one level"/>
+                <Button x:Name="btnBack" Content="&lt;" Style="{StaticResource NavButtonStyle}" Click="BtnBack_Click" IsEnabled="False" FontSize="16" ToolTip="Back (Alt+Left)" FontWeight="Bold"/>
+                <Button x:Name="btnForward" Content="&gt;" Style="{StaticResource NavButtonStyle}" Click="BtnForward_Click" IsEnabled="False" FontSize="16" Margin="5,0,0,0" Grid.Column="1" ToolTip="Forward (Alt+Right)" FontWeight="Bold"/>
+                <Button x:Name="btnUp" Content="^" Style="{StaticResource NavButtonStyle}" Click="BtnUp_Click" IsEnabled="False" FontSize="16" Margin="5,0,15,0" Grid.Column="2" ToolTip="Up (Alt+Up)" FontWeight="Bold"/>
                 
                 <!-- Breadcrumb Path -->
                 <ScrollViewer Grid.Column="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <StackPanel x:Name="pnlBreadcrumbs" Orientation="Horizontal"/>
                 </ScrollViewer>
+                
+                <!-- Filter -->
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="15,0,0,0">
+                    <TextBlock Text="Filter:" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12"/>
+                    <ComboBox x:Name="cmbFilter" Width="120" Style="{StaticResource FilterComboBoxStyle}" SelectionChanged="CmbFilter_SelectionChanged">
+                        <ComboBoxItem Content="All Files" IsSelected="True"/>
+                        <ComboBoxItem Content="Images"/>
+                        <ComboBoxItem Content="Audio"/>
+                        <ComboBoxItem Content="Video"/>
+                        <ComboBoxItem Content="Documents"/>
+                        <ComboBoxItem Content="Archives"/>
+                        <ComboBoxItem Content="Code"/>
+                    </ComboBox>
+                </StackPanel>
             </Grid>
         </Border>
         
@@ -248,7 +291,7 @@
                 <TextBox x:Name="txtSearch" 
                          Style="{StaticResource SearchTextBoxStyle}" 
                          Text=""
-                         Tag="🔍 Search files by name, path, tags, or notes..."
+                         Tag="Search files... (Ctrl+F)"
                          KeyUp="TxtSearch_KeyUp"/>
                 
                 <Button Grid.Column="1" x:Name="btnSearch" Content="Search" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSearch_Click" Margin="10,0,0,0"/>
@@ -259,12 +302,13 @@
         <!-- Main Content -->
         <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="350"/>
+                <ColumnDefinition Width="*" MinWidth="400"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="350" MinWidth="200"/>
             </Grid.ColumnDefinitions>
             
             <!-- Files DataGrid -->
-            <Border Background="{StaticResource SecondaryBackgroundBrush}" Margin="20,10,10,10" CornerRadius="8">
+            <Border Background="{StaticResource SecondaryBackgroundBrush}" Margin="20,10,0,10" CornerRadius="8">
                 <DataGrid x:Name="dgFiles" 
                           AutoGenerateColumns="False" 
                           IsReadOnly="True"
@@ -273,6 +317,7 @@
                           MouseDoubleClick="DgFiles_MouseDoubleClick"
                           PreviewMouseLeftButtonDown="DgFiles_PreviewMouseLeftButtonDown"
                           PreviewMouseMove="DgFiles_PreviewMouseMove"
+                          Sorting="DgFiles_Sorting"
                           Background="Transparent"
                           Foreground="{StaticResource ForegroundBrush}"
                           BorderThickness="0"
@@ -282,7 +327,27 @@
                           AlternatingRowBackground="#2d2d30"
                           HeadersVisibility="Column"
                           CanUserResizeRows="False"
+                          CanUserSortColumns="True"
                           FontSize="13">
+                    
+                    <!-- Context Menu -->
+                    <DataGrid.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Open" Click="ContextMenu_Open" FontWeight="Bold"/>
+                            <MenuItem Header="Open File Location" Click="ContextMenu_OpenLocation"/>
+                            <Separator/>
+                            <MenuItem Header="Copy (Ctrl+C)" Click="ContextMenu_Copy"/>
+                            <MenuItem Header="Cut (Ctrl+X)" Click="ContextMenu_Cut"/>
+                            <MenuItem Header="Paste (Ctrl+V)" Click="ContextMenu_Paste"/>
+                            <Separator/>
+                            <MenuItem Header="Rename (F2)" Click="ContextMenu_Rename"/>
+                            <MenuItem Header="Delete (Del)" Click="ContextMenu_Delete" Foreground="#f44336"/>
+                            <Separator/>
+                            <MenuItem Header="New Folder" Click="ContextMenu_NewFolder"/>
+                            <Separator/>
+                            <MenuItem Header="Properties" Click="ContextMenu_Properties"/>
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
                     
                     <DataGrid.ColumnHeaderStyle>
                         <Style TargetType="DataGridColumnHeader">
@@ -292,6 +357,12 @@
                             <Setter Property="FontWeight" Value="SemiBold"/>
                             <Setter Property="BorderBrush" Value="#3c3c3c"/>
                             <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#2d2d30"/>
+                                </Trigger>
+                            </Style.Triggers>
                         </Style>
                     </DataGrid.ColumnHeaderStyle>
                     
@@ -318,7 +389,7 @@
                     </DataGrid.CellStyle>
                     
                     <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="" Width="35">
+                        <DataGridTemplateColumn Header="" Width="35" CanUserSort="False">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding Icon}" 
@@ -330,73 +401,114 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200"/>
-                        <DataGridTextColumn Header="Type" Binding="{Binding TypeDisplay}" Width="80"/>
-                        <DataGridTextColumn Header="Size" Binding="{Binding SizeDisplay}" Width="100"/>
-                        <DataGridTextColumn Header="Tags" Binding="{Binding TagsText}" Width="150"/>
-                        <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Width="140"/>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200" SortMemberPath="Name"/>
+                        <DataGridTextColumn Header="Type" Binding="{Binding TypeDisplay}" Width="80" SortMemberPath="TypeDisplay"/>
+                        <DataGridTextColumn Header="Size" Binding="{Binding SizeDisplay}" Width="100" SortMemberPath="Size"/>
+                        <DataGridTextColumn Header="Tags" Binding="{Binding TagsText}" Width="120" CanUserSort="False"/>
+                        <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Width="140" SortMemberPath="ModifiedAt"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Border>
             
-            <!-- Details Panel -->
-            <Border Grid.Column="1" Background="{StaticResource SecondaryBackgroundBrush}" Margin="10,10,20,10" CornerRadius="8" Padding="20">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel x:Name="pnlDetails">
-                        <TextBlock Text="File Details" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,20"/>
-                        
-                        <TextBlock Text="No file selected" x:Name="txtNoSelection" Foreground="{StaticResource ForegroundBrush}" Opacity="0.5"/>
-                        
-                        <StackPanel x:Name="pnlFileDetails" Visibility="Collapsed">
-                            <!-- File Name -->
-                            <TextBlock Text="Name" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
-                            <TextBlock x:Name="txtFileName" FontSize="14" Foreground="{StaticResource ForegroundBrush}" TextWrapping="Wrap" Margin="0,5,0,15"/>
+            <!-- GridSplitter -->
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"/>
+            
+            <!-- Details & Preview Panel -->
+            <Border Grid.Column="2" Background="{StaticResource SecondaryBackgroundBrush}" Margin="0,10,20,10" CornerRadius="8" Padding="15">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- Preview Panel -->
+                    <Border x:Name="pnlPreview" Grid.Row="0" Background="#1e1e1e" CornerRadius="6" Margin="0,0,0,15" Height="180" Visibility="Collapsed">
+                        <Grid>
+                            <!-- Image Preview -->
+                            <Image x:Name="imgPreview" Stretch="Uniform" Margin="10" Visibility="Collapsed"/>
+                            <!-- Text Preview -->
+                            <ScrollViewer x:Name="txtPreviewScroll" Visibility="Collapsed" Margin="10">
+                                <TextBox x:Name="txtPreview" 
+                                         IsReadOnly="True" 
+                                         Background="Transparent" 
+                                         Foreground="{StaticResource ForegroundBrush}"
+                                         BorderThickness="0"
+                                         FontFamily="Consolas"
+                                         FontSize="11"
+                                         TextWrapping="Wrap"
+                                         AcceptsReturn="True"/>
+                            </ScrollViewer>
+                            <!-- No Preview -->
+                            <TextBlock x:Name="txtNoPreview" 
+                                       Text="No Preview Available" 
+                                       HorizontalAlignment="Center" 
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource ForegroundBrush}"
+                                       Opacity="0.5"
+                                       Visibility="Collapsed"/>
+                        </Grid>
+                    </Border>
+                    
+                    <!-- Details Panel -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="pnlDetails">
+                            <TextBlock Text="Details" FontSize="16" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,15"/>
                             
-                            <!-- Full Path -->
-                            <TextBlock Text="Full Path" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
-                            <TextBox x:Name="txtFilePath" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Background="Transparent" BorderThickness="0" IsReadOnly="True" TextWrapping="Wrap" Margin="0,5,0,15"/>
+                            <TextBlock Text="No file selected" x:Name="txtNoSelection" Foreground="{StaticResource ForegroundBrush}" Opacity="0.5"/>
                             
-                            <!-- Size -->
-                            <TextBlock Text="Size" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
-                            <TextBlock x:Name="txtFileSize" FontSize="14" Foreground="{StaticResource ForegroundBrush}" Margin="0,5,0,15"/>
-                            
-                            <!-- Created -->
-                            <TextBlock Text="Created" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
-                            <TextBlock x:Name="txtFileCreated" FontSize="14" Foreground="{StaticResource ForegroundBrush}" Margin="0,5,0,15"/>
-                            
-                            <!-- Modified -->
-                            <TextBlock Text="Modified" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
-                            <TextBlock x:Name="txtFileModified" FontSize="14" Foreground="{StaticResource ForegroundBrush}" Margin="0,5,0,15"/>
-                            
-                            <!-- Separator -->
-                            <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,10,0,20"/>
-                            
-                            <!-- Tags Editor -->
-                            <TextBlock Text="Tags (comma separated)" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
-                            <TextBox x:Name="txtTags" 
-                                     Style="{StaticResource SearchTextBoxStyle}" 
-                                     Margin="0,5,0,10"
-                                     TextWrapping="Wrap"
-                                     AcceptsReturn="False"/>
-                            
-                            <!-- Notes Editor -->
-                            <TextBlock Text="Notes" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
-                            <TextBox x:Name="txtNotes" 
-                                     Style="{StaticResource SearchTextBoxStyle}" 
-                                     Margin="0,5,0,15"
-                                     TextWrapping="Wrap"
-                                     AcceptsReturn="True"
-                                     Height="100"
-                                     VerticalScrollBarVisibility="Auto"/>
-                            
-                            <!-- Save Button -->
-                            <Button x:Name="btnSaveTags" Content="💾 Save Tags &amp; Notes" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSaveTags_Click"/>
-                            
-                            <!-- Open File Button -->
-                            <Button x:Name="btnOpenFile" Content="📂 Open File Location" Style="{StaticResource SecondaryButtonStyle}" Click="BtnOpenFile_Click" Margin="0,10,0,0"/>
+                            <StackPanel x:Name="pnlFileDetails" Visibility="Collapsed">
+                                <TextBlock Text="Name" FontSize="11" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                                <TextBlock x:Name="txtFileName" FontSize="13" Foreground="{StaticResource ForegroundBrush}" TextWrapping="Wrap" Margin="0,3,0,12"/>
+                                
+                                <TextBlock Text="Path" FontSize="11" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                                <TextBox x:Name="txtFilePath" FontSize="11" Foreground="{StaticResource ForegroundBrush}" Background="Transparent" BorderThickness="0" IsReadOnly="True" TextWrapping="Wrap" Margin="0,3,0,12"/>
+                                
+                                <TextBlock Text="Size" FontSize="11" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                                <TextBlock x:Name="txtFileSize" FontSize="13" Foreground="{StaticResource ForegroundBrush}" Margin="0,3,0,12"/>
+                                
+                                <TextBlock Text="Created" FontSize="11" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                                <TextBlock x:Name="txtFileCreated" FontSize="13" Foreground="{StaticResource ForegroundBrush}" Margin="0,3,0,12"/>
+                                
+                                <TextBlock Text="Modified" FontSize="11" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                                <TextBlock x:Name="txtFileModified" FontSize="13" Foreground="{StaticResource ForegroundBrush}" Margin="0,3,0,12"/>
+                                
+                                <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,5,0,15"/>
+                                
+                                <TextBlock Text="Tags" FontSize="11" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                                <TextBox x:Name="txtTags" 
+                                         Style="{StaticResource SearchTextBoxStyle}" 
+                                         Margin="0,3,0,8"
+                                         TextWrapping="Wrap"
+                                         FontSize="12"
+                                         AcceptsReturn="False"/>
+                                
+                                <TextBlock Text="Notes" FontSize="11" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>
+                                <TextBox x:Name="txtNotes" 
+                                         Style="{StaticResource SearchTextBoxStyle}" 
+                                         Margin="0,3,0,12"
+                                         TextWrapping="Wrap"
+                                         AcceptsReturn="True"
+                                         Height="80"
+                                         FontSize="12"
+                                         VerticalScrollBarVisibility="Auto"/>
+                                
+                                <Button x:Name="btnSaveTags" Content="Save" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSaveTags_Click" Padding="10,6"/>
+                                <Button x:Name="btnOpenFile" Content="Open Location" Style="{StaticResource SecondaryButtonStyle}" Click="BtnOpenFile_Click" Margin="0,8,0,0" Padding="10,6"/>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
+                    </ScrollViewer>
+                    
+                    <!-- Keyboard Shortcuts Info -->
+                    <Border Grid.Row="2" Background="#1e1e1e" CornerRadius="4" Padding="10" Margin="0,10,0,0">
+                        <TextBlock Text="Ctrl+C Copy | Ctrl+X Cut | Ctrl+V Paste | Del Delete | F2 Rename | F5 Refresh" 
+                                   FontSize="10" 
+                                   Foreground="{StaticResource ForegroundBrush}" 
+                                   Opacity="0.5"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"/>
+                    </Border>
+                </Grid>
             </Border>
         </Grid>
         

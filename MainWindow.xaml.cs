@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -8,8 +9,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using FluxDB.Models;
 using FluxDB.Services;
 using Microsoft.Win32;
@@ -38,6 +41,13 @@ namespace FluxDB
         // Drag & Drop
         private Point _dragStartPoint;
         private bool _isDragging;
+
+        // Clipboard
+        private List<string> _clipboardFiles = new List<string>();
+        private bool _clipboardIsCut = false;
+
+        // Filter
+        private string _currentFilter = "All Files";
 
         private const string DatabaseFileName = ".fluxdb";
 
@@ -82,7 +92,7 @@ namespace FluxDB
             {
                 _currentRootFolder = settings.LastRootFolder;
                 _currentViewFolder = _currentRootFolder;
-                txtCurrentFolder.Text = $"📁 {_currentRootFolder}";
+                txtCurrentFolder.Text = _currentRootFolder;
                 btnRefresh.IsEnabled = true;
                 btnExport.IsEnabled = true;
 
@@ -102,8 +112,491 @@ namespace FluxDB
             UpdateLicenseStatus();
         }
 
-        #region Drag & Drop
+        #region Keyboard Shortcuts
 
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            // Don't handle if focus is in a TextBox
+            if (e.OriginalSource is TextBox)
+            {
+                // Only handle Escape in TextBox
+                if (e.Key == Key.Escape)
+                {
+                    dgFiles.Focus();
+                    e.Handled = true;
+                }
+                return;
+            }
+
+            // Ctrl + C = Copy
+            if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                CopySelectedFiles(false);
+                e.Handled = true;
+            }
+            // Ctrl + X = Cut
+            else if (e.Key == Key.X && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                CopySelectedFiles(true);
+                e.Handled = true;
+            }
+            // Ctrl + V = Paste
+            else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                PasteFiles();
+                e.Handled = true;
+            }
+            // Delete = Delete
+            else if (e.Key == Key.Delete)
+            {
+                DeleteSelectedFiles();
+                e.Handled = true;
+            }
+            // F2 = Rename
+            else if (e.Key == Key.F2)
+            {
+                RenameSelectedFile();
+                e.Handled = true;
+            }
+            // F5 = Refresh
+            else if (e.Key == Key.F5)
+            {
+                RefreshCurrentFolderView();
+                e.Handled = true;
+            }
+            // Ctrl + F = Focus Search
+            else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                txtSearch.Focus();
+                txtSearch.SelectAll();
+                e.Handled = true;
+            }
+            // Alt + Left = Back
+            else if (e.Key == Key.Left && Keyboard.Modifiers == ModifierKeys.Alt)
+            {
+                BtnBack_Click(null, null);
+                e.Handled = true;
+            }
+            // Alt + Right = Forward
+            else if (e.Key == Key.Right && Keyboard.Modifiers == ModifierKeys.Alt)
+            {
+                BtnForward_Click(null, null);
+                e.Handled = true;
+            }
+            // Alt + Up = Up
+            else if (e.Key == Key.Up && Keyboard.Modifiers == ModifierKeys.Alt)
+            {
+                BtnUp_Click(null, null);
+                e.Handled = true;
+            }
+            // Enter = Open
+            else if (e.Key == Key.Enter)
+            {
+                OpenSelectedItem();
+                e.Handled = true;
+            }
+            // Backspace = Go Up
+            else if (e.Key == Key.Back)
+            {
+                BtnUp_Click(null, null);
+                e.Handled = true;
+            }
+        }
+
+        #endregion
+
+        #region Clipboard Operations
+
+        private void CopySelectedFiles(bool cut)
+        {
+            var selected = dgFiles.SelectedItems.Cast<FileEntry>().ToList();
+            if (selected.Count == 0) return;
+
+            _clipboardFiles = selected.Select(f => f.Path).Where(p => File.Exists(p) || Directory.Exists(p)).ToList();
+            _clipboardIsCut = cut;
+
+            // Also set system clipboard
+            var fileCollection = new StringCollection();
+            fileCollection.AddRange(_clipboardFiles.ToArray());
+            Clipboard.SetFileDropList(fileCollection);
+
+            txtStatus.Text = cut ? $"Cut {_clipboardFiles.Count} item(s)" : $"Copied {_clipboardFiles.Count} item(s)";
+        }
+
+        private async void PasteFiles()
+        {
+            if (string.IsNullOrEmpty(_currentViewFolder)) return;
+
+            // Try system clipboard first
+            List<string> filesToPaste = new List<string>();
+            
+            if (Clipboard.ContainsFileDropList())
+            {
+                filesToPaste = Clipboard.GetFileDropList().Cast<string>().ToList();
+            }
+            else if (_clipboardFiles.Count > 0)
+            {
+                filesToPaste = _clipboardFiles;
+            }
+
+            if (filesToPaste.Count == 0)
+            {
+                txtStatus.Text = "Nothing to paste";
+                return;
+            }
+
+            await CopyOrMoveFilesAsync(filesToPaste.ToArray(), _currentViewFolder, _clipboardIsCut);
+
+            if (_clipboardIsCut)
+            {
+                _clipboardFiles.Clear();
+                _clipboardIsCut = false;
+            }
+        }
+
+        private void DeleteSelectedFiles()
+        {
+            var selected = dgFiles.SelectedItems.Cast<FileEntry>().ToList();
+            if (selected.Count == 0) return;
+
+            var result = MessageBox.Show(
+                $"Are you sure you want to delete {selected.Count} item(s)?\n\nThis action cannot be undone!",
+                "Confirm Delete",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result != MessageBoxResult.Yes) return;
+
+            var deletedCount = 0;
+            foreach (var item in selected)
+            {
+                try
+                {
+                    if (item.IsFolder && Directory.Exists(item.Path))
+                    {
+                        Directory.Delete(item.Path, true);
+                        deletedCount++;
+                    }
+                    else if (File.Exists(item.Path))
+                    {
+                        File.Delete(item.Path);
+                        
+                        // Remove from database
+                        if (_databaseService != null && item.Id > 0)
+                        {
+                            _databaseService.MarkFileAsDeleted(item.Id);
+                        }
+                        deletedCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error deleting {item.Path}: {ex.Message}");
+                    MessageBox.Show($"Could not delete {item.Name}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+
+            RefreshCurrentFolderView();
+            txtStatus.Text = $"Deleted {deletedCount} item(s)";
+        }
+
+        private void RenameSelectedFile()
+        {
+            var selected = dgFiles.SelectedItem as FileEntry;
+            if (selected == null) return;
+
+            var currentName = selected.IsFolder ? selected.Name : Path.GetFileNameWithoutExtension(selected.Name);
+            var extension = selected.IsFolder ? "" : Path.GetExtension(selected.Name);
+
+            var dialog = new RenameDialog(currentName);
+            dialog.Owner = this;
+            
+            if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.NewName))
+            {
+                var newName = dialog.NewName + extension;
+                var newPath = Path.Combine(Path.GetDirectoryName(selected.Path), newName);
+
+                try
+                {
+                    if (selected.IsFolder)
+                    {
+                        Directory.Move(selected.Path, newPath);
+                    }
+                    else
+                    {
+                        File.Move(selected.Path, newPath);
+                        
+                        // Update database
+                        if (_databaseService != null && selected.Id > 0)
+                        {
+                            _databaseService.UpdateFilePathAndName(selected.Id, newPath, newName);
+                        }
+                    }
+
+                    RefreshCurrentFolderView();
+                    txtStatus.Text = $"Renamed to {newName}";
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Could not rename: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void CreateNewFolder()
+        {
+            if (string.IsNullOrEmpty(_currentViewFolder)) return;
+
+            var dialog = new RenameDialog("New Folder");
+            dialog.Owner = this;
+            dialog.Title = "New Folder";
+
+            if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.NewName))
+            {
+                var newPath = Path.Combine(_currentViewFolder, dialog.NewName);
+                newPath = GetUniqueFolderPath(newPath);
+
+                try
+                {
+                    Directory.CreateDirectory(newPath);
+                    RefreshCurrentFolderView();
+                    txtStatus.Text = $"Created folder: {Path.GetFileName(newPath)}";
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Could not create folder: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Context Menu
+
+        private void ContextMenu_Open(object sender, RoutedEventArgs e)
+        {
+            OpenSelectedItem();
+        }
+
+        private void ContextMenu_OpenLocation(object sender, RoutedEventArgs e)
+        {
+            BtnOpenFile_Click(null, null);
+        }
+
+        private void ContextMenu_Copy(object sender, RoutedEventArgs e)
+        {
+            CopySelectedFiles(false);
+        }
+
+        private void ContextMenu_Cut(object sender, RoutedEventArgs e)
+        {
+            CopySelectedFiles(true);
+        }
+
+        private void ContextMenu_Paste(object sender, RoutedEventArgs e)
+        {
+            PasteFiles();
+        }
+
+        private void ContextMenu_Rename(object sender, RoutedEventArgs e)
+        {
+            RenameSelectedFile();
+        }
+
+        private void ContextMenu_Delete(object sender, RoutedEventArgs e)
+        {
+            DeleteSelectedFiles();
+        }
+
+        private void ContextMenu_NewFolder(object sender, RoutedEventArgs e)
+        {
+            CreateNewFolder();
+        }
+
+        private void ContextMenu_Properties(object sender, RoutedEventArgs e)
+        {
+            var selected = dgFiles.SelectedItem as FileEntry;
+            if (selected == null) return;
+
+            // Show Windows properties dialog
+            var info = new ProcessStartInfo("explorer.exe", $"/select,\"{selected.Path}\"");
+            Process.Start(info);
+        }
+
+        #endregion
+
+        #region Filter
+
+        private void CmbFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Don't process during initialization
+            if (dgFiles == null || _databaseService == null) return;
+            
+            if (cmbFilter.SelectedItem is ComboBoxItem item)
+            {
+                _currentFilter = item.Content.ToString();
+                RefreshCurrentFolderView();
+            }
+        }
+
+        private bool MatchesFilter(FileEntry entry)
+        {
+            if (entry.IsFolder) return true;
+            if (_currentFilter == "All Files") return true;
+
+            var ext = (entry.Extension ?? "").ToLower();
+
+            switch (_currentFilter)
+            {
+                case "Images":
+                    return new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".ico", ".svg" }.Contains(ext);
+                case "Audio":
+                    return new[] { ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a" }.Contains(ext);
+                case "Video":
+                    return new[] { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm" }.Contains(ext);
+                case "Documents":
+                    return new[] { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf", ".odt" }.Contains(ext);
+                case "Archives":
+                    return new[] { ".zip", ".rar", ".7z", ".tar", ".gz" }.Contains(ext);
+                case "Code":
+                    return new[] { ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", ".html", ".css", ".xaml", ".xml", ".json", ".sql" }.Contains(ext);
+                default:
+                    return true;
+            }
+        }
+
+        #endregion
+
+        #region Preview
+
+        private void UpdatePreview(FileEntry file)
+        {
+            pnlPreview.Visibility = Visibility.Visible;
+            imgPreview.Visibility = Visibility.Collapsed;
+            txtPreviewScroll.Visibility = Visibility.Collapsed;
+            txtNoPreview.Visibility = Visibility.Collapsed;
+
+            if (file == null || file.IsFolder)
+            {
+                pnlPreview.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var ext = (file.Extension ?? "").ToLower();
+
+            // Image preview
+            if (new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico" }.Contains(ext))
+            {
+                try
+                {
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(file.Path);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.DecodePixelWidth = 400;
+                    bitmap.EndInit();
+                    
+                    imgPreview.Source = bitmap;
+                    imgPreview.Visibility = Visibility.Visible;
+                }
+                catch
+                {
+                    txtNoPreview.Visibility = Visibility.Visible;
+                }
+            }
+            // Text preview
+            else if (new[] { ".txt", ".md", ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", 
+                           ".html", ".css", ".xaml", ".xml", ".json", ".sql", ".log", ".ini", ".cfg" }.Contains(ext))
+            {
+                try
+                {
+                    var content = File.ReadAllText(file.Path);
+                    if (content.Length > 5000)
+                    {
+                        content = content.Substring(0, 5000) + "\n\n... (truncated)";
+                    }
+                    txtPreview.Text = content;
+                    txtPreviewScroll.Visibility = Visibility.Visible;
+                }
+                catch
+                {
+                    txtNoPreview.Text = "Cannot read file";
+                    txtNoPreview.Visibility = Visibility.Visible;
+                }
+            }
+            else
+            {
+                txtNoPreview.Text = "No preview available";
+                txtNoPreview.Visibility = Visibility.Visible;
+            }
+        }
+
+        #endregion
+
+        #region Sorting
+
+        private void DgFiles_Sorting(object sender, DataGridSortingEventArgs e)
+        {
+            e.Handled = true;
+            
+            var column = e.Column;
+            var direction = column.SortDirection == ListSortDirection.Ascending 
+                ? ListSortDirection.Descending 
+                : ListSortDirection.Ascending;
+            
+            column.SortDirection = direction;
+
+            var items = dgFiles.ItemsSource as List<FileEntry>;
+            if (items == null) return;
+
+            // Always put folders first
+            var folders = items.Where(f => f.IsFolder);
+            var files = items.Where(f => !f.IsFolder);
+
+            IOrderedEnumerable<FileEntry> sortedFolders;
+            IOrderedEnumerable<FileEntry> sortedFiles;
+
+            switch (column.SortMemberPath)
+            {
+                case "Name":
+                    sortedFolders = direction == ListSortDirection.Ascending 
+                        ? folders.OrderBy(f => f.Name) 
+                        : folders.OrderByDescending(f => f.Name);
+                    sortedFiles = direction == ListSortDirection.Ascending 
+                        ? files.OrderBy(f => f.Name) 
+                        : files.OrderByDescending(f => f.Name);
+                    break;
+                case "Size":
+                    sortedFolders = folders.OrderBy(f => f.Name);
+                    sortedFiles = direction == ListSortDirection.Ascending 
+                        ? files.OrderBy(f => f.Size) 
+                        : files.OrderByDescending(f => f.Size);
+                    break;
+                case "ModifiedAt":
+                    sortedFolders = direction == ListSortDirection.Ascending 
+                        ? folders.OrderBy(f => f.ModifiedAt) 
+                        : folders.OrderByDescending(f => f.ModifiedAt);
+                    sortedFiles = direction == ListSortDirection.Ascending 
+                        ? files.OrderBy(f => f.ModifiedAt) 
+                        : files.OrderByDescending(f => f.ModifiedAt);
+                    break;
+                case "TypeDisplay":
+                    sortedFolders = folders.OrderBy(f => f.Name);
+                    sortedFiles = direction == ListSortDirection.Ascending 
+                        ? files.OrderBy(f => f.TypeDisplay) 
+                        : files.OrderByDescending(f => f.TypeDisplay);
+                    break;
+                default:
+                    return;
+            }
+
+            dgFiles.ItemsSource = sortedFolders.Concat(sortedFiles).ToList();
+        }
+
+        #endregion
+
+        #region Drag & Drop
+        
         private void Window_DragOver(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
@@ -113,13 +606,11 @@ namespace FluxDB
                 {
                     var firstPath = files[0];
                     
-                    // Prüfen ob es ein Ordner ist (zum Öffnen als Root)
                     if (Directory.Exists(firstPath) && string.IsNullOrEmpty(_currentRootFolder))
                     {
-                        txtDropHint.Text = "📂 Drop folder here to index";
+                        txtDropHint.Text = "Drop folder here to index";
                         e.Effects = DragDropEffects.Copy;
                     }
-                    // Dateien/Ordner in aktuellen Ordner kopieren/verschieben
                     else if (!string.IsNullOrEmpty(_currentViewFolder))
                     {
                         var fileCount = files.Count(f => File.Exists(f));
@@ -133,21 +624,20 @@ namespace FluxDB
                         else
                             itemText = $"{fileCount} file(s)";
 
-                        // Shift = Move, sonst Copy
                         if ((e.KeyStates & DragDropKeyStates.ShiftKey) == DragDropKeyStates.ShiftKey)
                         {
-                            txtDropHint.Text = $"📥 Move {itemText} here";
+                            txtDropHint.Text = $"Move {itemText} here";
                             e.Effects = DragDropEffects.Move;
                         }
                         else
                         {
-                            txtDropHint.Text = $"📋 Copy {itemText} here";
+                            txtDropHint.Text = $"Copy {itemText} here";
                             e.Effects = DragDropEffects.Copy;
                         }
                     }
                     else
                     {
-                        txtDropHint.Text = "📂 Drop a folder to start";
+                        txtDropHint.Text = "Drop a folder to start";
                         e.Effects = DragDropEffects.Copy;
                     }
                     
@@ -175,14 +665,12 @@ namespace FluxDB
             var firstPath = paths[0];
             var isMove = (e.KeyStates & DragDropKeyStates.ShiftKey) == DragDropKeyStates.ShiftKey;
 
-            // Wenn kein Root-Ordner gesetzt ist und ein Ordner gedroppt wird -> Als Root öffnen
             if (string.IsNullOrEmpty(_currentRootFolder) && Directory.Exists(firstPath))
             {
                 await OpenFolderAsync(firstPath);
                 return;
             }
 
-            // Dateien/Ordner in den aktuellen Ordner kopieren/verschieben
             if (!string.IsNullOrEmpty(_currentViewFolder))
             {
                 await CopyOrMoveFilesAsync(paths, _currentViewFolder, isMove);
@@ -202,9 +690,8 @@ namespace FluxDB
                 {
                     try
                     {
-                        // Prüfen ob Quelle = Ziel
                         var sourceParent = Path.GetDirectoryName(sourcePath);
-                        if (sourceParent.Equals(targetFolder, StringComparison.OrdinalIgnoreCase))
+                        if (sourceParent != null && sourceParent.Equals(targetFolder, StringComparison.OrdinalIgnoreCase))
                         {
                             skippedCount++;
                             continue;
@@ -212,7 +699,6 @@ namespace FluxDB
 
                         if (File.Exists(sourcePath))
                         {
-                            // Datei kopieren/verschieben
                             var fileName = Path.GetFileName(sourcePath);
                             var targetPath = Path.Combine(targetFolder, fileName);
                             targetPath = GetUniqueFilePath(targetPath);
@@ -228,12 +714,10 @@ namespace FluxDB
                                 copiedCount++;
                             }
 
-                            // Zur Datenbank hinzufügen
                             Dispatcher.Invoke(() => AddFileToIndex(targetPath));
                         }
                         else if (Directory.Exists(sourcePath))
                         {
-                            // Ordner kopieren/verschieben
                             var dirName = Path.GetFileName(sourcePath);
                             var targetPath = Path.Combine(targetFolder, dirName);
                             targetPath = GetUniqueFolderPath(targetPath);
@@ -249,7 +733,6 @@ namespace FluxDB
                                 copiedCount++;
                             }
 
-                            // Alle Dateien im Ordner zur Datenbank hinzufügen
                             Dispatcher.Invoke(() => AddFolderToIndex(targetPath));
                         }
                     }
@@ -261,25 +744,17 @@ namespace FluxDB
                 }
             });
 
-            // UI aktualisieren
             RefreshCurrentFolderView();
 
-            // Status-Meldung
             var actionText = move ? "Moved" : "Copied";
             var totalCount = move ? movedCount : copiedCount;
             
             if (errorCount > 0)
-            {
                 txtStatus.Text = $"{actionText} {totalCount} item(s), {errorCount} error(s)";
-            }
             else if (skippedCount > 0)
-            {
-                txtStatus.Text = $"{actionText} {totalCount} item(s), {skippedCount} skipped (same location)";
-            }
+                txtStatus.Text = $"{actionText} {totalCount} item(s), {skippedCount} skipped";
             else
-            {
-                txtStatus.Text = $"{actionText} {totalCount} item(s) successfully";
-            }
+                txtStatus.Text = $"{actionText} {totalCount} item(s)";
         }
 
         private void AddFileToIndex(string filePath)
@@ -326,8 +801,7 @@ namespace FluxDB
 
         private string GetUniqueFilePath(string path)
         {
-            if (!File.Exists(path))
-                return path;
+            if (!File.Exists(path)) return path;
 
             var directory = Path.GetDirectoryName(path);
             var fileName = Path.GetFileNameWithoutExtension(path);
@@ -339,14 +813,12 @@ namespace FluxDB
                 path = Path.Combine(directory, $"{fileName} ({counter}){extension}");
                 counter++;
             }
-
             return path;
         }
 
         private string GetUniqueFolderPath(string path)
         {
-            if (!Directory.Exists(path))
-                return path;
+            if (!Directory.Exists(path)) return path;
 
             var parent = Path.GetDirectoryName(path);
             var folderName = Path.GetFileName(path);
@@ -357,7 +829,6 @@ namespace FluxDB
                 path = Path.Combine(parent, $"{folderName} ({counter})");
                 counter++;
             }
-
             return path;
         }
 
@@ -368,22 +839,19 @@ namespace FluxDB
             foreach (var file in Directory.GetFiles(sourceDir))
             {
                 var fileName = Path.GetFileName(file);
-                var targetFile = Path.Combine(targetDir, fileName);
-                File.Copy(file, targetFile);
+                File.Copy(file, Path.Combine(targetDir, fileName));
             }
 
             foreach (var dir in Directory.GetDirectories(sourceDir))
             {
                 var dirName = Path.GetFileName(dir);
-                var targetSubDir = Path.Combine(targetDir, dirName);
-                CopyDirectory(dir, targetSubDir);
+                CopyDirectory(dir, Path.Combine(targetDir, dirName));
             }
         }
 
         protected override void OnDragLeave(DragEventArgs e)
         {
             base.OnDragLeave(e);
-            
             var pos = e.GetPosition(this);
             if (pos.X < 0 || pos.Y < 0 || pos.X > ActualWidth || pos.Y > ActualHeight)
             {
@@ -391,7 +859,6 @@ namespace FluxDB
             }
         }
 
-        // Dateien AUS der App ziehen - NUR KOPIEREN
         private void DgFiles_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _dragStartPoint = e.GetPosition(null);
@@ -427,7 +894,6 @@ namespace FluxDB
                     fileDropList.AddRange(selectedItems);
                     data.SetFileDropList(fileDropList);
 
-                    // NUR COPY erlauben wenn aus der App gezogen wird
                     DragDrop.DoDragDrop(dgFiles, data, DragDropEffects.Copy);
                 }
 
@@ -437,11 +903,37 @@ namespace FluxDB
 
         #endregion
 
+        private void OpenSelectedItem()
+        {
+            var selectedItem = dgFiles.SelectedItem as FileEntry;
+            if (selectedItem == null) return;
+
+            if (selectedItem.IsFolder)
+            {
+                NavigateToFolder(selectedItem.Path);
+            }
+            else
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = selectedItem.Path,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Could not open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
         private async Task OpenFolderAsync(string folderPath)
         {
             _currentRootFolder = folderPath;
             _currentViewFolder = _currentRootFolder;
-            txtCurrentFolder.Text = $"📁 {_currentRootFolder}";
+            txtCurrentFolder.Text = _currentRootFolder;
             _settingsService.AddRecentFolder(_currentRootFolder);
             
             _backHistory.Clear();
@@ -457,16 +949,13 @@ namespace FluxDB
                 var result = MessageBox.Show(
                     $"This folder already has an index with {_databaseService.GetFileCount()} files.\n\n" +
                     "Do you want to refresh the index?\n\n" +
-                    "• Yes = Refresh index (update changes)\n" +
-                    "• No = Use existing index",
+                    "Yes = Refresh | No = Use existing",
                     "Existing Index Found",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
 
                 if (result == MessageBoxResult.Yes)
-                {
                     await StartIndexing();
-                }
                 else
                 {
                     NavigateToFolder(_currentRootFolder, addToHistory: false);
@@ -535,6 +1024,7 @@ namespace FluxDB
             var allFiles = _databaseService.GetAllFiles();
             var filesInFolder = allFiles
                 .Where(f => Path.GetDirectoryName(f.Path) == _currentViewFolder)
+                .Where(MatchesFilter)
                 .OrderBy(f => f.Name);
 
             items.AddRange(filesInFolder);
@@ -577,7 +1067,7 @@ namespace FluxDB
                 {
                     pnlBreadcrumbs.Children.Add(new TextBlock
                     {
-                        Text = " › ",
+                        Text = " > ",
                         Foreground = (Brush)FindResource("ForegroundBrush"),
                         VerticalAlignment = VerticalAlignment.Center,
                         Opacity = 0.5
@@ -599,9 +1089,7 @@ namespace FluxDB
         private void BreadcrumbButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.Tag is string path)
-            {
                 NavigateToFolder(path);
-            }
         }
 
         private void UpdateNavigationButtons()
@@ -611,13 +1099,6 @@ namespace FluxDB
             btnUp.IsEnabled = !string.IsNullOrEmpty(_currentViewFolder) && 
                               _currentViewFolder != _currentRootFolder &&
                               Directory.GetParent(_currentViewFolder)?.FullName != null;
-        }
-
-        private void RefreshFileList()
-        {
-            if (_isSearchMode)
-                return;
-            RefreshCurrentFolderView();
         }
 
         private async void UpdateLicenseStatus()
@@ -647,9 +1128,7 @@ namespace FluxDB
             else
             {
                 licenseIndicator.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#f44336"));
-                txtLicenseStatus.Text = string.IsNullOrEmpty(license.ErrorMessage) 
-                    ? "Invalid License" 
-                    : license.ErrorMessage;
+                txtLicenseStatus.Text = string.IsNullOrEmpty(license.ErrorMessage) ? "Invalid License" : license.ErrorMessage;
             }
         }
 
@@ -660,8 +1139,7 @@ namespace FluxDB
             if (_backHistory.Count > 0)
             {
                 _forwardHistory.Push(_currentViewFolder);
-                var previousFolder = _backHistory.Pop();
-                NavigateToFolder(previousFolder, addToHistory: false);
+                NavigateToFolder(_backHistory.Pop(), addToHistory: false);
             }
         }
 
@@ -670,8 +1148,7 @@ namespace FluxDB
             if (_forwardHistory.Count > 0)
             {
                 _backHistory.Push(_currentViewFolder);
-                var nextFolder = _forwardHistory.Pop();
-                NavigateToFolder(nextFolder, addToHistory: false);
+                NavigateToFolder(_forwardHistory.Pop(), addToHistory: false);
             }
         }
 
@@ -681,40 +1158,15 @@ namespace FluxDB
             {
                 var parent = Directory.GetParent(_currentViewFolder)?.FullName;
                 if (!string.IsNullOrEmpty(parent) && parent.StartsWith(_currentRootFolder))
-                {
                     NavigateToFolder(parent);
-                }
                 else if (_currentViewFolder != _currentRootFolder)
-                {
                     NavigateToFolder(_currentRootFolder);
-                }
             }
         }
 
         private void DgFiles_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            var selectedItem = dgFiles.SelectedItem as FileEntry;
-            if (selectedItem == null) return;
-
-            if (selectedItem.IsFolder)
-            {
-                NavigateToFolder(selectedItem.Path);
-            }
-            else
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = selectedItem.Path,
-                        UseShellExecute = true
-                    });
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Could not open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
+            OpenSelectedItem();
         }
 
         #endregion
@@ -729,18 +1181,14 @@ namespace FluxDB
                 dialog.ShowNewFolderButton = false;
 
                 if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                {
                     await OpenFolderAsync(dialog.SelectedPath);
-                }
             }
         }
 
         private async void BtnRefresh_Click(object sender, RoutedEventArgs e)
         {
             if (!string.IsNullOrEmpty(_currentRootFolder))
-            {
                 await StartIndexing();
-            }
         }
 
         private void BtnExport_Click(object sender, RoutedEventArgs e)
@@ -763,16 +1211,12 @@ namespace FluxDB
                 try
                 {
                     if (dialog.FileName.EndsWith(".gz"))
-                    {
                         _exportService.ExportToGzip(dialog.FileName, _currentRootFolder);
-                    }
                     else
-                    {
                         _exportService.ExportToJson(dialog.FileName, _currentRootFolder);
-                    }
 
-                    txtStatus.Text = $"Index exported to {dialog.FileName}";
-                    MessageBox.Show($"Index successfully exported to:\n{dialog.FileName}", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                    txtStatus.Text = $"Exported to {dialog.FileName}";
+                    MessageBox.Show($"Export complete:\n{dialog.FileName}", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex)
                 {
@@ -805,9 +1249,7 @@ namespace FluxDB
         private void TxtSearch_KeyUp(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
-            {
                 PerformSearch();
-            }
         }
 
         private void PerformSearch()
@@ -830,24 +1272,20 @@ namespace FluxDB
             List<FileEntry> results;
             
             if (query.StartsWith("#"))
-            {
-                var tagName = query.Substring(1);
-                results = _databaseService.SearchByTag(tagName);
-            }
+                results = _databaseService.SearchByTag(query.Substring(1));
             else
-            {
                 results = _databaseService.SearchFiles(query);
-            }
 
-            dgFiles.ItemsSource = results;
-            txtFileCount.Text = $"{results.Count} files found";
-            txtStatus.Text = $"Search results for: {query}";
+            dgFiles.ItemsSource = results.Where(MatchesFilter).ToList();
+            txtFileCount.Text = $"{results.Count} found";
+            txtStatus.Text = $"Search: {query}";
         }
 
         private void DgFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             _selectedFile = dgFiles.SelectedItem as FileEntry;
             UpdateDetailsPanel();
+            UpdatePreview(_selectedFile);
         }
 
         private void UpdateDetailsPanel()
@@ -856,7 +1294,7 @@ namespace FluxDB
             {
                 txtNoSelection.Visibility = Visibility.Visible;
                 pnlFileDetails.Visibility = Visibility.Collapsed;
-                txtNoSelection.Text = _selectedFile?.IsFolder == true ? "Folder selected - double-click to open" : "No file selected";
+                txtNoSelection.Text = _selectedFile?.IsFolder == true ? "Folder selected" : "No file selected";
                 return;
             }
 
@@ -878,11 +1316,8 @@ namespace FluxDB
 
             try
             {
-                var tags = txtTags.Text
-                    .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(t => t.Trim())
-                    .Where(t => !string.IsNullOrEmpty(t))
-                    .ToList();
+                var tags = txtTags.Text.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => !string.IsNullOrEmpty(t)).ToList();
 
                 _databaseService.SetTagsForFile(_selectedFile.Id, tags);
                 _databaseService.SetNoteForFile(_selectedFile.Id, txtNotes.Text);
@@ -892,7 +1327,7 @@ namespace FluxDB
                 _selectedFile.Note = txtNotes.Text;
 
                 dgFiles.Items.Refresh();
-                txtStatus.Text = "Tags and notes saved successfully";
+                txtStatus.Text = "Saved";
             }
             catch (Exception ex)
             {
@@ -908,17 +1343,13 @@ namespace FluxDB
             {
                 var directory = Path.GetDirectoryName(_selectedFile.Path);
                 if (Directory.Exists(directory))
-                {
                     Process.Start("explorer.exe", $"/select,\"{_selectedFile.Path}\"");
-                }
                 else
-                {
-                    MessageBox.Show("File location not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
+                    MessageBox.Show("Location not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to open location: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -948,22 +1379,11 @@ namespace FluxDB
                 var result = await _indexerService.ScanFolderAsync(_currentRootFolder, _indexCancellation.Token);
 
                 if (result.Success)
-                {
                     txtStatus.Text = $"Indexed {result.FilesIndexed} files in {result.Duration.TotalSeconds:F1}s";
-                }
                 else if (result.Cancelled)
-                {
-                    txtStatus.Text = "Indexing cancelled";
-                }
+                    txtStatus.Text = "Cancelled";
                 else
-                {
-                    txtStatus.Text = $"Indexing failed: {result.ErrorMessage}";
-                }
-
-                if (result.Errors.Count > 0)
-                {
-                    Debug.WriteLine($"Indexing errors: {string.Join(", ", result.Errors.Take(10))}");
-                }
+                    txtStatus.Text = $"Failed: {result.ErrorMessage}";
             }
             catch (Exception ex)
             {
@@ -987,16 +1407,13 @@ namespace FluxDB
             Dispatcher.Invoke(() =>
             {
                 progressBar.Value = e.Percentage;
-                txtProgressStatus.Text = $"Indexing: {e.Current}/{e.Total} files ({e.Percentage:F0}%)";
+                txtProgressStatus.Text = $"Indexing: {e.Current}/{e.Total} ({e.Percentage:F0}%)";
             });
         }
 
         private void IndexerService_StatusChanged(object sender, string status)
         {
-            Dispatcher.Invoke(() =>
-            {
-                txtProgressStatus.Text = status;
-            });
+            Dispatcher.Invoke(() => txtProgressStatus.Text = status);
         }
 
         #endregion
