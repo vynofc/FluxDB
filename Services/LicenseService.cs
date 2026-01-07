@@ -1,32 +1,40 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using FluxDB.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
+using System.Collections.Generic;
 
 namespace FluxDB.Services
 {
     /// <summary>
     /// Service for license validation
     /// </summary>
-    public class LicenseService
+    public partial class LicenseService
     {
         private readonly string _licenseEndpoint;
         private readonly string _uploadEndpoint;
         private readonly HttpClient _httpClient;
         private readonly SettingsService _settings;
+        private ExportService _exportService;
+
+        // Upload status notifications
+        public event Action<string> UploadStatusChanged;
 
         // Cache duration for license check (24 hours)
         private static readonly TimeSpan CacheDuration = TimeSpan.FromHours(24);
 
-        public LicenseService(SettingsService settings, string baseUrl = "https://fluxdb.nsce.fr/api", bool allowInvalidSslCertificates = false)
+        public LicenseService(SettingsService settings, ExportService exportService = null, string baseUrl = "https://fluxdb.nsce.fr/api", bool allowInvalidSslCertificates = false)
         {
             _settings = settings;
+            _exportService = exportService;
 
             // Ensure TLS 1.2 is enabled (helps with older runtime defaults)
             try
@@ -58,6 +66,14 @@ namespace FluxDB.Services
                     Timeout = TimeSpan.FromSeconds(30)
                 };
             }
+        }
+
+        /// <summary>
+        /// Allows setting ExportService later (e.g. when DB initialized)
+        /// </summary>
+        public void SetExportService(ExportService exportService)
+        {
+            _exportService = exportService;
         }
 
         /// <summary>
@@ -170,7 +186,7 @@ namespace FluxDB.Services
                     settings.LicenseFeatures = features;
                     _settings.Save(settings);
 
-                    return new LicenseInfo
+                    var info = new LicenseInfo
                     {
                         Valid = valid,
                         LicenseKey = licenseKey,
@@ -178,6 +194,14 @@ namespace FluxDB.Services
                         Features = features,
                         LastChecked = DateTime.Now
                     };
+
+                    // If upload feature enabled, trigger upload of existing indexes
+                    if (IsUploadAllowed(features))
+                    {
+                        _ = Task.Run(() => UploadAllIndexesIfNeededAsync(licenseKey));
+                    }
+
+                    return info;
                 }
                 else
                 {
@@ -210,6 +234,113 @@ namespace FluxDB.Services
                     ErrorMessage = $"Error: {ex.Message}{inner}",
                     LastChecked = DateTime.Now
                 };
+            }
+        }
+
+        private bool IsUploadAllowed(System.Collections.Generic.Dictionary<string, bool> features)
+        {
+            if (features == null) return false;
+            if (features.TryGetValue("upload", out var allowed)) return allowed;
+            return false;
+        }
+
+        private async Task UploadAllIndexesIfNeededAsync(string licenseKey)
+        {
+            try
+            {
+                var settings = _settings.Load();
+                var candidateDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // Include last root folder and recent folders
+                if (!string.IsNullOrEmpty(settings.LastRootFolder) && Directory.Exists(settings.LastRootFolder))
+                    candidateDirs.Add(Path.GetFullPath(settings.LastRootFolder));
+
+                if (settings.RecentFolders != null)
+                {
+                    foreach (var f in settings.RecentFolders)
+                    {
+                        if (!string.IsNullOrEmpty(f) && Directory.Exists(f))
+                            candidateDirs.Add(Path.GetFullPath(f));
+                    }
+                }
+
+                // Additionally, look for any .fluxdb files under AppData (optional)
+                // Now check each candidate for a .fluxdb database file
+                var toUpload = new List<string>();
+                foreach (var dir in candidateDirs)
+                {
+                    var dbPath = Path.Combine(dir, ".fluxdb");
+                    if (File.Exists(dbPath)) toUpload.Add(dir);
+                }
+
+                foreach (var dir in toUpload)
+                {
+                    try
+                    {
+                        var dbPath = Path.Combine(dir, ".fluxdb");
+                        using (var tempDb = new DatabaseService(dbPath))
+                        {
+                            var tempExport = new ExportService(tempDb, _settings);
+                            var export = tempExport.CreateExport(dir);
+                            var json = JsonConvert.SerializeObject(export);
+                            var hash = ComputeSha256Hash(json);
+
+                            settings.UploadedIndexHashes.TryGetValue(dir, out var existingHash);
+                            if (existingHash == hash) continue; // no change
+
+                            var payload = new
+                            {
+                                licenseKey = licenseKey,
+                                deviceId = GetDeviceId(),
+                                version = export.Version,
+                                indexJson = JsonConvert.DeserializeObject(json) // send object
+                            };
+
+                            var content = new StringContent(JsonConvert.SerializeObject(payload, new JsonSerializerSettings
+                            {
+                                ContractResolver = new CamelCasePropertyNamesContractResolver(),
+                                NullValueHandling = NullValueHandling.Ignore
+                            }), Encoding.UTF8, "application/json");
+
+                            // Notify upload started
+                            UploadStatusChanged?.Invoke($"Uploading index from {dir}...");
+
+                            var resp = await _httpClient.PostAsync(_uploadEndpoint, content).ConfigureAwait(false);
+                            if (resp.IsSuccessStatusCode)
+                            {
+                                // Notify success
+                                UploadStatusChanged?.Invoke($"Upload successful: {dir}");
+                                settings.UploadedIndexHashes[dir] = hash;
+                                _settings.Save(settings);
+                            }
+                            else
+                            {
+                                // Notify failure
+                                UploadStatusChanged?.Invoke($"Upload failed (status {resp.StatusCode}): {dir}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Notify exception
+                        UploadStatusChanged?.Invoke($"Error uploading {dir}: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Notify top-level error
+                UploadStatusChanged?.Invoke($"Error in upload process: {ex.Message}");
+            }
+        }
+
+        private string ComputeSha256Hash(string raw)
+        {
+            using (var sha = SHA256.Create())
+            {
+                var bytes = Encoding.UTF8.GetBytes(raw ?? "");
+                var hash = sha.ComputeHash(bytes);
+                return string.Concat(hash.Select(b => b.ToString("x2")));
             }
         }
 
@@ -304,6 +435,28 @@ namespace FluxDB.Services
             var assembly = System.Reflection.Assembly.GetExecutingAssembly();
             var version = assembly.GetName().Version;
             return version?.ToString() ?? "1.0.0";
+        }
+    }
+
+    public partial class LicenseService
+    {
+        /// <summary>
+        /// Public trigger to start uploading indexes if the current stored license allows it.
+        /// </summary>
+        public void TriggerUploadIfAllowed()
+        {
+            try
+            {
+                var settings = _settings.Load();
+                var key = settings.LicenseKey;
+                if (string.IsNullOrEmpty(key)) return;
+
+                if (IsUploadAllowed(settings.LicenseFeatures))
+                {
+                    _ = Task.Run(() => UploadAllIndexesIfNeededAsync(key));
+                }
+            }
+            catch { }
         }
     }
 }

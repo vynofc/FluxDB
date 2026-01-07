@@ -62,6 +62,13 @@ namespace FluxDB
         {
             _settingsService = new SettingsService();
             _licenseService = new LicenseService(_settingsService);
+            _licenseService.UploadStatusChanged += (msg) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    txtStatus.Text = msg;
+                });
+            };
             _databaseService = null;
             _indexerService = null;
             _exportService = null;
@@ -76,6 +83,9 @@ namespace FluxDB
             _exportService = new ExportService(_databaseService, _settingsService);
             _indexerService.ProgressChanged += IndexerService_ProgressChanged;
             _indexerService.StatusChanged += IndexerService_StatusChanged;
+
+            // Inform license service about export service so it can upload indexes
+            _licenseService?.SetExportService(_exportService);
         }
 
         private bool HasExistingIndex(string folderPath)
@@ -1171,6 +1181,8 @@ namespace FluxDB
             {
                 var license = await _licenseService.CheckLicenseAsync(storedKey);
                 UpdateLicenseUI(license);
+                // If license allows uploads, start upload process
+                _licenseService.TriggerUploadIfAllowed();
             }
             else
             {
