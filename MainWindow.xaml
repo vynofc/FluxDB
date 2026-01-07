@@ -318,10 +318,15 @@
                     </DataGrid.CellStyle>
                     
                     <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="" Width="30">
+                        <DataGridTemplateColumn Header="" Width="35">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Icon}" FontSize="16"/>
+                                    <TextBlock Text="{Binding Icon}" 
+                                               Foreground="{Binding IconColor}" 
+                                               FontWeight="Bold" 
+                                               FontSize="11" 
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Center"/>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
