@@ -237,6 +237,7 @@
                     <Button x:Name="btnSelectFolder" Content="[+] Select Folder" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSelectFolder_Click" Margin="0,0,10,0"/>
                     <Button x:Name="btnRefresh" Content="[R] Refresh" Style="{StaticResource SecondaryButtonStyle}" Click="BtnRefresh_Click" Margin="0,0,10,0" IsEnabled="False"/>
                     <Button x:Name="btnExport" Content="[S] Export" Style="{StaticResource SecondaryButtonStyle}" Click="BtnExport_Click" Margin="0,0,10,0" IsEnabled="False"/>
+                    <Button x:Name="btnUpload" Content="Upload" Style="{StaticResource SecondaryButtonStyle}" Click="BtnUpload_Click" Margin="0,0,10,0"/>
                     <Button x:Name="btnLicense" Content="[L] License" Style="{StaticResource SecondaryButtonStyle}" Click="BtnLicense_Click"/>
                 </StackPanel>
             </Grid>
@@ -304,7 +305,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="400"/>
                 <ColumnDefinition Width="5"/>
-                <ColumnDefinition Width="350" MinWidth="200"/>
+                <ColumnDefinition Width="520" MinWidth="300"/>
             </Grid.ColumnDefinitions>
             
             <!-- Files DataGrid -->
@@ -417,18 +418,18 @@
             <Border Grid.Column="2" Background="{StaticResource SecondaryBackgroundBrush}" Margin="0,10,20,10" CornerRadius="8" Padding="15">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="3*"/>
+                        <RowDefinition Height="2*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     
                     <!-- Preview Panel -->
-                    <Border x:Name="pnlPreview" Grid.Row="0" Background="#1e1e1e" CornerRadius="6" Margin="0,0,0,15" Height="180" Visibility="Collapsed">
+                    <Border x:Name="pnlPreview" Grid.Row="0" Background="#1e1e1e" CornerRadius="6" Margin="0,0,0,15" Visibility="Collapsed">
                         <Grid>
                             <!-- Image Preview -->
-                            <Image x:Name="imgPreview" Stretch="Uniform" Margin="10" Visibility="Collapsed"/>
+                            <Image x:Name="imgPreview" Stretch="Uniform" Margin="10" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
                             <!-- PDF Preview (uses embedded WPF WebBrowser control) -->
-                            <WebBrowser x:Name="webPdfPreview" Visibility="Collapsed" Margin="10"/>
+                            <WebBrowser x:Name="webPdfPreview" Visibility="Collapsed" Margin="10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
                             <!-- Text Preview -->
                             <ScrollViewer x:Name="txtPreviewScroll" Visibility="Collapsed" Margin="10">
                                 <TextBox x:Name="txtPreview" 

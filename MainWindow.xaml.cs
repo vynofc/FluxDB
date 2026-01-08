@@ -100,6 +100,20 @@ namespace FluxDB
 
             // Inform license service about export service so it can upload indexes
             _licenseService?.SetExportService(_exportService);
+
+            // Make sure this folder is recorded as recent / last root so uploads include it
+            try
+            {
+                _settingsService.AddRecentFolder(folderPath);
+            }
+            catch { }
+
+            // Trigger upload check now (if a valid license is stored and upload feature is allowed)
+            try
+            {
+                _licenseService?.TriggerUploadIfAllowed();
+            }
+            catch { }
         }
 
         private bool HasExistingIndex(string folderPath)
@@ -131,6 +145,7 @@ namespace FluxDB
                 {
                     txtStatus.Text = "Index loaded from folder";
                 }
+
             }
             else
             {
@@ -227,6 +242,12 @@ namespace FluxDB
             else if (e.Key == Key.Back)
             {
                 BtnUp_Click(null, null);
+                e.Handled = true;
+            }
+            // F8 = Open Log Viewer
+            else if (e.Key == Key.F8)
+            {
+                ShowLogViewer();
                 e.Handled = true;
             }
         }
@@ -1291,8 +1312,8 @@ namespace FluxDB
 
         private async void BtnRefresh_Click(object sender, RoutedEventArgs e)
         {
-            if (!string.IsNullOrEmpty(_currentRootFolder))
-                await StartIndexing();
+            // Open the refresh options dialog instead of immediate full refresh
+            ShowRefreshDialog();
         }
 
         private void BtnExport_Click(object sender, RoutedEventArgs e)
@@ -1374,15 +1395,14 @@ namespace FluxDB
 
             _isSearchMode = true;
             List<FileEntry> results;
-            
-            if (query.StartsWith("#"))
-                results = _databaseService.SearchByTag(query.Substring(1));
-            else
-                results = _databaseService.SearchFiles(query);
+
+            // Always search by tag. Allow queries starting with '#' or plain tag names.
+            var tagQuery = query.StartsWith("#") ? query.Substring(1) : query;
+            results = _databaseService.SearchByTag(tagQuery);
 
             dgFiles.ItemsSource = results.Where(MatchesFilter).ToList();
             txtFileCount.Text = $"{results.Count} found";
-            txtStatus.Text = $"Search: {query}";
+            txtStatus.Text = $"Search tags: {query}";
         }
 
         private void DgFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1522,11 +1542,131 @@ namespace FluxDB
 
         #endregion
 
+        private async void ShowRefreshDialog()
+        {
+            var dlg = new RefreshDialog(_currentViewFolder);
+            dlg.Owner = this;
+            if (dlg.ShowDialog() == true)
+            {
+                if (dlg.Choice == RefreshDialog.RefreshChoice.Entire)
+                {
+                    if (string.IsNullOrEmpty(_currentRootFolder))
+                    {
+                        MessageBox.Show("Please select a root folder first.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    // Reinitialize DB for root folder then start full scan
+                    InitializeDatabaseForFolder(_currentRootFolder);
+                    await StartIndexing();
+                }
+                else if (dlg.Choice == RefreshDialog.RefreshChoice.CurrentView)
+                {
+                    if (string.IsNullOrEmpty(_currentViewFolder))
+                    {
+                        MessageBox.Show("No current view folder.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    // Index only the current view folder
+                    await RefreshSpecificFolderAsync(_currentViewFolder);
+                }
+                else if (dlg.Choice == RefreshDialog.RefreshChoice.SpecificFolder)
+                {
+                    var folder = dlg.SelectedFolder;
+                    if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
+                    {
+                        MessageBox.Show("Please choose a valid folder.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    // If selected folder is under current root folder, ensure DB initialized
+                    if (string.IsNullOrEmpty(_currentRootFolder) || !_currentRootFolder.Equals(folder, StringComparison.OrdinalIgnoreCase))
+                    {
+                        InitializeDatabaseForFolder(folder);
+                    }
+
+                    await RefreshSpecificFolderAsync(folder);
+                }
+            }
+        }
+
+        private async Task RefreshSpecificFolderAsync(string folder)
+        {
+            if (_indexerService == null || _databaseService == null)
+            {
+                InitializeDatabaseForFolder(folder);
+            }
+
+            var cts = new CancellationTokenSource();
+            try
+            {
+                pnlProgress.Visibility = Visibility.Visible;
+                progressBar.Value = 0;
+                _indexCancellation = cts;
+
+                var result = await _indexerService.ScanFolderAsync(folder, cts.Token);
+                if (result.Success)
+                    txtStatus.Text = $"Indexed {result.FilesIndexed} files in {result.Duration.TotalSeconds:F1}s";
+                else if (result.Cancelled)
+                    txtStatus.Text = "Cancelled";
+                else
+                    txtStatus.Text = $"Failed: {result.ErrorMessage}";
+
+                NavigateToFolder(_currentViewFolder ?? folder, addToHistory: false);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error indexing folder: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                pnlProgress.Visibility = Visibility.Collapsed;
+                _indexCancellation = null;
+            }
+        }
+
+        private void ShowLogViewer()
+        {
+            var viewer = new LogViewer();
+            viewer.Owner = this;
+            viewer.ShowDialog();
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             _indexCancellation?.Cancel();
             _databaseService?.Dispose();
             base.OnClosed(e);
+        }
+
+        private async void BtnUpload_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var settings = _settingsService.Load();
+                var key = settings.LicenseKey;
+                if (string.IsNullOrEmpty(key))
+                {
+                    MessageBox.Show("No license key stored. Please enter license in License window.", "Upload", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                btnUpload.IsEnabled = false;
+                txtStatus.Text = "Starting upload...";
+
+                await _licenseService.UploadAllIndexesNowAsync(key);
+
+                txtStatus.Text = "Upload process completed (check logs).";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Upload failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                btnUpload.IsEnabled = true;
+            }
         }
     }
 }

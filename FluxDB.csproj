@@ -64,10 +64,20 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="LogViewer.xaml.cs">
+      <DependentUpon>LogViewer.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="RefreshDialog.xaml.cs">
+      <DependentUpon>RefreshDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Services\LoggingService.cs" />
     <Compile Include="SplashWindow.xaml.cs">
       <DependentUpon>SplashWindow.xaml</DependentUpon>
     </Compile>
     <Page Include="FluxDB\RenameDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="LogViewer.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="MainWindow.xaml">
@@ -103,6 +113,9 @@
     <Compile Include="Services\IndexerService.cs" />
     <Compile Include="Services\LicenseService.cs" />
     <Compile Include="Services\SettingsService.cs" />
+    <Page Include="RefreshDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="SplashWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>

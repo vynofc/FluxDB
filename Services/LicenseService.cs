@@ -11,6 +11,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace FluxDB.Services
 {
@@ -204,6 +205,8 @@ namespace FluxDB.Services
                         _ = Task.Run(() => UploadAllIndexesIfNeededAsync(licenseKey));
                     }
 
+                    LoggingService.Log($"License check for {licenseKey}: success={response.IsSuccessStatusCode}");
+
                     return info;
                 }
                 else
@@ -216,6 +219,8 @@ namespace FluxDB.Services
                         err = j.Value<string>("error") ?? j.Value<string>("message");
                     }
                     catch { }
+
+                    LoggingService.Log($"License check for {licenseKey}: success={response.IsSuccessStatusCode}");
 
                     return new LicenseInfo
                     {
@@ -247,6 +252,39 @@ namespace FluxDB.Services
             return false;
         }
 
+        private IEnumerable<string> SafeEnumerateFiles(string root, string searchPattern)
+        {
+            var results = new List<string>();
+            try
+            {
+                var dirs = new Stack<string>();
+                dirs.Push(root);
+                while (dirs.Count > 0)
+                {
+                    var dir = dirs.Pop();
+                    try
+                    {
+                        foreach (var file in Directory.GetFiles(dir, searchPattern))
+                        {
+                            results.Add(file);
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        foreach (var sub in Directory.GetDirectories(dir))
+                        {
+                            dirs.Push(sub);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return results;
+        }
+
         private async Task UploadAllIndexesIfNeededAsync(string licenseKey)
         {
             try
@@ -267,14 +305,74 @@ namespace FluxDB.Services
                     }
                 }
 
-                // Additionally, look for any .fluxdb files under AppData (optional)
-                // Now check each candidate for a .fluxdb database file
-                var toUpload = new List<string>();
-                foreach (var dir in candidateDirs)
+                // Include any directories previously tracked in UploadedIndexHashes (they may no longer be in RecentFolders)
+                if (settings.UploadedIndexHashes != null)
                 {
-                    var dbPath = Path.Combine(dir, ".fluxdb");
-                    if (File.Exists(dbPath)) toUpload.Add(dir);
+                    foreach (var kv in settings.UploadedIndexHashes.Keys)
+                    {
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(kv) && Directory.Exists(kv))
+                                candidateDirs.Add(Path.GetFullPath(kv));
+                        }
+                        catch { }
+                    }
                 }
+
+                // Also scan the app data directory for any .fluxdb files created by this app
+                try
+                {
+                    var appDataDir = _settings.GetAppDataDirectory();
+                    if (!string.IsNullOrEmpty(appDataDir) && Directory.Exists(appDataDir))
+                    {
+                        var dbFiles = Directory.GetFiles(appDataDir, "*.fluxdb", SearchOption.AllDirectories);
+                        foreach (var db in dbFiles)
+                        {
+                            try
+                            {
+                                var dir = Path.GetDirectoryName(db);
+                                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                                    candidateDirs.Add(Path.GetFullPath(dir));
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+
+                // Additionally, scan all fixed drives for any .fluxdb files created anywhere
+                try
+                {
+                    foreach (var drv in DriveInfo.GetDrives().Where(d => d.IsReady && d.DriveType == DriveType.Fixed))
+                    {
+                        try
+                        {
+                            var root = drv.RootDirectory.FullName;
+                            foreach (var db in SafeEnumerateFiles(root, "*.fluxdb"))
+                            {
+                                try
+                                {
+                                    var dir = Path.GetDirectoryName(db);
+                                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                                        candidateDirs.Add(Path.GetFullPath(dir));
+                                }
+                                catch { }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+
+                 // Now check each candidate for a .fluxdb database file
+                 var toUpload = new List<string>();
+                 foreach (var dir in candidateDirs)
+                 {
+                     var dbPath = Path.Combine(dir, ".fluxdb");
+                     if (File.Exists(dbPath)) toUpload.Add(dir);
+                 }
+
+                LoggingService.Log($"UploadAllIndexesIfNeededAsync started. Candidate dirs: {string.Join(",", candidateDirs)}");
 
                 foreach (var dir in toUpload)
                 {
@@ -305,37 +403,49 @@ namespace FluxDB.Services
                                 NullValueHandling = NullValueHandling.Ignore
                             }), Encoding.UTF8, "application/json");
 
+                            LoggingService.Log($"Uploading index from {dir}");
+
                             // Notify upload started
                             UploadStatusChanged?.Invoke($"Uploading index from {dir}...");
 
-                            var resp = await _httpClient.PostAsync(_uploadEndpoint, content).ConfigureAwait(false);
-                            if (resp.IsSuccessStatusCode)
+                            // Use single-request upload (original behavior)
+                            try
                             {
-                                // Notify success
-                                UploadStatusChanged?.Invoke($"Upload successful: {dir}");
-                                settings.UploadedIndexHashes[dir] = hash;
-                                _settings.Save(settings);
+                                var resp = await _httpClient.PostAsync(_uploadEndpoint, content).ConfigureAwait(false);
+                                var responseJson = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+                                if (resp.IsSuccessStatusCode)
+                                {
+                                    UploadStatusChanged?.Invoke($"Upload successful: {dir}");
+                                    settings.UploadedIndexHashes[dir] = hash;
+                                    _settings.Save(settings);
+                                }
+                                else
+                                {
+                                    string err = null;
+                                    try { var j = JObject.Parse(responseJson); err = j.Value<string>("error") ?? j.Value<string>("message"); } catch { }
+                                    UploadStatusChanged?.Invoke($"Upload failed (status {resp.StatusCode}): {err}");
+                                }
                             }
-                            else
+                            catch (Exception ex)
                             {
-                                // Notify failure
-                                UploadStatusChanged?.Invoke($"Upload failed (status {resp.StatusCode}): {dir}");
+                                UploadStatusChanged?.Invoke($"Upload failed: {ex.Message}");
                             }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        // Notify exception
-                        UploadStatusChanged?.Invoke($"Error uploading {dir}: {ex.Message}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                // Notify top-level error
-                UploadStatusChanged?.Invoke($"Error in upload process: {ex.Message}");
-            }
-        }
+                         }
+                     }
+                     catch (Exception ex)
+                     {
+                         // Notify exception
+                         UploadStatusChanged?.Invoke($"Error uploading {dir}: {ex.Message}");
+                         LoggingService.Log($"Error uploading {dir}: {ex.Message}");
+                     }
+                 }
+             }
+             catch (Exception ex)
+             {
+                 // Notify top-level error
+                 UploadStatusChanged?.Invoke($"Error in upload process: {ex.Message}");
+             }
+         }
 
         private string ComputeSha256Hash(string raw)
         {
@@ -362,7 +472,12 @@ namespace FluxDB.Services
                     indexJson = index
                 };
 
-                var json = JsonConvert.SerializeObject(payload);
+                var json = JsonConvert.SerializeObject(payload, new JsonSerializerSettings
+                {
+                    ContractResolver = new CamelCasePropertyNamesContractResolver(),
+                    NullValueHandling = NullValueHandling.Ignore
+                });
+
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 HttpResponseMessage response;
@@ -370,10 +485,8 @@ namespace FluxDB.Services
                 {
                     response = await _httpClient.PostAsync(_uploadEndpoint, content).ConfigureAwait(false);
                 }
-                catch (HttpRequestException hex)
+                catch (HttpRequestException)
                 {
-                    var inner = hex.InnerException != null ? $" - {hex.InnerException.Message}" : string.Empty;
-                    // Optionally log
                     return false;
                 }
 
@@ -473,6 +586,22 @@ namespace FluxDB.Services
                 return settings.IsAutoGeneratedFreeLicense;
             }
             catch { return false; }
+        }
+
+        /// <summary>
+        /// Public method to trigger upload of all indexes now. If licenseKey is null, uses stored license in settings.
+        /// </summary>
+        public async Task UploadAllIndexesNowAsync(string licenseKey = null)
+        {
+            var settings = _settings.Load();
+            var keyToUse = licenseKey ?? settings.LicenseKey;
+            if (string.IsNullOrEmpty(keyToUse))
+            {
+                throw new InvalidOperationException("No license key provided or stored.");
+            }
+
+            // Directly call upload routine
+            await UploadAllIndexesIfNeededAsync(keyToUse).ConfigureAwait(false);
         }
     }
 }

@@ -1,0 +1,17 @@
+<Window x:Class="FluxDB.LogViewer"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Logs" Height="600" Width="900" WindowStartupLocation="CenterOwner">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBox x:Name="txtLogs" Grid.Row="0" FontFamily="Consolas" FontSize="12" IsReadOnly="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" AcceptsReturn="True" AcceptsTab="True"/>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="6">
+            <Button x:Name="btnRefreshLogs" Content="Refresh" Click="BtnRefreshLogs_Click" Width="80" Margin="4"/>
+            <Button x:Name="btnClearLogs" Content="Clear" Click="BtnClearLogs_Click" Width="80" Margin="4"/>
+            <Button x:Name="btnClose" Content="Close" Click="BtnClose_Click" Width="80" Margin="4"/>
+        </StackPanel>
+    </Grid>
+</Window>
