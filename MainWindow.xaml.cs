@@ -16,6 +16,7 @@ using System.Windows.Media.Imaging;
 using FluxDB.Models;
 using FluxDB.Services;
 using Microsoft.Win32;
+using System.Reflection;
 
 namespace FluxDB
 {
@@ -54,6 +55,19 @@ namespace FluxDB
         public MainWindow()
         {
             InitializeComponent();
+
+            // Load application icon from executable folder if available
+            try
+            {
+                var exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                var icoPath = Path.Combine(exeDir ?? string.Empty, "FluxDB-icon.ico");
+                if (File.Exists(icoPath))
+                {
+                    this.Icon = BitmapFrame.Create(new Uri(icoPath));
+                }
+            }
+            catch { }
+
             InitializeServices();
             LoadInitialData();
         }
@@ -537,7 +551,8 @@ namespace FluxDB
             imgPreview.Visibility = Visibility.Collapsed;
             txtPreviewScroll.Visibility = Visibility.Collapsed;
             txtNoPreview.Visibility = Visibility.Collapsed;
-            txtNoPreview.Text = "No preview available";
+            pnlPreview.Visibility = Visibility.Collapsed;
+            webPdfPreview.Visibility = Visibility.Collapsed;
 
             if (file == null || file.IsFolder || !File.Exists(file.Path))
             {
@@ -560,7 +575,6 @@ namespace FluxDB
                     bitmap.DecodePixelWidth = 400;
                     bitmap.EndInit();
                     bitmap.Freeze(); // Prevent memory leaks
-                    
 
                     imgPreview.Source = bitmap;
                     imgPreview.Visibility = Visibility.Visible;
@@ -568,6 +582,21 @@ namespace FluxDB
                 catch (Exception)
                 {
                     txtNoPreview.Text = "Cannot load image";
+                    txtNoPreview.Visibility = Visibility.Visible;
+                }
+            }
+            // PDF preview
+            else if (ext == ".pdf")
+            {
+                try
+                {
+                    // Use WebBrowser to navigate to local file path (works if system has PDF handler)
+                    webPdfPreview.Navigate(new Uri(file.Path));
+                    webPdfPreview.Visibility = Visibility.Visible;
+                }
+                catch (Exception)
+                {
+                    txtNoPreview.Text = "Cannot preview PDF";
                     txtNoPreview.Visibility = Visibility.Visible;
                 }
             }

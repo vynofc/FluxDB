@@ -427,6 +427,8 @@
                         <Grid>
                             <!-- Image Preview -->
                             <Image x:Name="imgPreview" Stretch="Uniform" Margin="10" Visibility="Collapsed"/>
+                            <!-- PDF Preview (uses embedded WPF WebBrowser control) -->
+                            <WebBrowser x:Name="webPdfPreview" Visibility="Collapsed" Margin="10"/>
                             <!-- Text Preview -->
                             <ScrollViewer x:Name="txtPreviewScroll" Visibility="Collapsed" Margin="10">
                                 <TextBox x:Name="txtPreview" 
