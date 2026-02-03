@@ -12,6 +12,7 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Reflection;
 
 namespace FluxDB.Services
 {
@@ -287,292 +288,23 @@ namespace FluxDB.Services
 
         private async Task UploadAllIndexesIfNeededAsync(string licenseKey)
         {
+            // Upload feature disabled by user request. Log and return.
             try
             {
-                var settings = _settings.Load();
-                var candidateDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                // Include last root folder and recent folders
-                if (!string.IsNullOrEmpty(settings.LastRootFolder) && Directory.Exists(settings.LastRootFolder))
-                    candidateDirs.Add(Path.GetFullPath(settings.LastRootFolder));
-
-                if (settings.RecentFolders != null)
-                {
-                    foreach (var f in settings.RecentFolders)
-                    {
-                        if (!string.IsNullOrEmpty(f) && Directory.Exists(f))
-                            candidateDirs.Add(Path.GetFullPath(f));
-                    }
-                }
-
-                // Include any directories previously tracked in UploadedIndexHashes (they may no longer be in RecentFolders)
-                if (settings.UploadedIndexHashes != null)
-                {
-                    foreach (var kv in settings.UploadedIndexHashes.Keys)
-                    {
-                        try
-                        {
-                            if (!string.IsNullOrEmpty(kv) && Directory.Exists(kv))
-                                candidateDirs.Add(Path.GetFullPath(kv));
-                        }
-                        catch { }
-                    }
-                }
-
-                // Also scan the app data directory for any .fluxdb files created by this app
-                try
-                {
-                    var appDataDir = _settings.GetAppDataDirectory();
-                    if (!string.IsNullOrEmpty(appDataDir) && Directory.Exists(appDataDir))
-                    {
-                        var dbFiles = Directory.GetFiles(appDataDir, "*.fluxdb", SearchOption.AllDirectories);
-                        foreach (var db in dbFiles)
-                        {
-                            try
-                            {
-                                var dir = Path.GetDirectoryName(db);
-                                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
-                                    candidateDirs.Add(Path.GetFullPath(dir));
-                            }
-                            catch { }
-                        }
-                    }
-                }
-                catch { }
-
-                // Additionally, scan all fixed drives for any .fluxdb files created anywhere
-                try
-                {
-                    foreach (var drv in DriveInfo.GetDrives().Where(d => d.IsReady && d.DriveType == DriveType.Fixed))
-                    {
-                        try
-                        {
-                            var root = drv.RootDirectory.FullName;
-                            foreach (var db in SafeEnumerateFiles(root, "*.fluxdb"))
-                            {
-                                try
-                                {
-                                    var dir = Path.GetDirectoryName(db);
-                                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
-                                        candidateDirs.Add(Path.GetFullPath(dir));
-                                }
-                                catch { }
-                            }
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-
-                 // Now check each candidate for a .fluxdb database file
-                 var toUpload = new List<string>();
-                 foreach (var dir in candidateDirs)
-                 {
-                     var dbPath = Path.Combine(dir, ".fluxdb");
-                     if (File.Exists(dbPath)) toUpload.Add(dir);
-                 }
-
-                LoggingService.Log($"UploadAllIndexesIfNeededAsync started. Candidate dirs: {string.Join(",", candidateDirs)}");
-
-                foreach (var dir in toUpload)
-                {
-                    try
-                    {
-                        var dbPath = Path.Combine(dir, ".fluxdb");
-                        using (var tempDb = new DatabaseService(dbPath))
-                        {
-                            var tempExport = new ExportService(tempDb, _settings);
-                            var export = tempExport.CreateExport(dir);
-                            var json = JsonConvert.SerializeObject(export);
-                            var hash = ComputeSha256Hash(json);
-
-                            settings.UploadedIndexHashes.TryGetValue(dir, out var existingHash);
-                            if (existingHash == hash) continue; // no change
-
-                            var payload = new
-                            {
-                                licenseKey = licenseKey,
-                                deviceId = GetDeviceId(),
-                                version = export.Version,
-                                indexJson = JsonConvert.DeserializeObject(json) // send object
-                            };
-
-                            var content = new StringContent(JsonConvert.SerializeObject(payload, new JsonSerializerSettings
-                            {
-                                ContractResolver = new CamelCasePropertyNamesContractResolver(),
-                                NullValueHandling = NullValueHandling.Ignore
-                            }), Encoding.UTF8, "application/json");
-
-                            LoggingService.Log($"Uploading index from {dir}");
-
-                            // Notify upload started
-                            UploadStatusChanged?.Invoke($"Uploading index from {dir}...");
-
-                            // Use single-request upload (original behavior)
-                            try
-                            {
-                                var resp = await _httpClient.PostAsync(_uploadEndpoint, content).ConfigureAwait(false);
-                                var responseJson = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                                if (resp.IsSuccessStatusCode)
-                                {
-                                    UploadStatusChanged?.Invoke($"Upload successful: {dir}");
-                                    settings.UploadedIndexHashes[dir] = hash;
-                                    _settings.Save(settings);
-                                }
-                                else
-                                {
-                                    string err = null;
-                                    try { var j = JObject.Parse(responseJson); err = j.Value<string>("error") ?? j.Value<string>("message"); } catch { }
-                                    UploadStatusChanged?.Invoke($"Upload failed (status {resp.StatusCode}): {err}");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                UploadStatusChanged?.Invoke($"Upload failed: {ex.Message}");
-                            }
-                         }
-                     }
-                     catch (Exception ex)
-                     {
-                         // Notify exception
-                         UploadStatusChanged?.Invoke($"Error uploading {dir}: {ex.Message}");
-                         LoggingService.Log($"Error uploading {dir}: {ex.Message}");
-                     }
-                 }
-             }
-             catch (Exception ex)
-             {
-                 // Notify top-level error
-                 UploadStatusChanged?.Invoke($"Error in upload process: {ex.Message}");
-             }
-         }
-
-        private string ComputeSha256Hash(string raw)
-        {
-            using (var sha = SHA256.Create())
-            {
-                var bytes = Encoding.UTF8.GetBytes(raw ?? "");
-                var hash = sha.ComputeHash(bytes);
-                return string.Concat(hash.Select(b => b.ToString("x2")));
+                LoggingService.Log("Upload disabled: UploadAllIndexesIfNeededAsync called but uploads are turned off.");
             }
+            catch { }
+            await Task.CompletedTask;
         }
 
-        /// <summary>
-        /// Upload index to server (only if license is valid)
-        /// </summary>
-        public async Task<bool> UploadIndexAsync(string licenseKey, IndexExport index)
-        {
-            try
-            {
-                var payload = new
-                {
-                    licenseKey = licenseKey,
-                    deviceId = GetDeviceId(),
-                    version = index.Version,
-                    indexJson = index
-                };
-
-                var json = JsonConvert.SerializeObject(payload, new JsonSerializerSettings
-                {
-                    ContractResolver = new CamelCasePropertyNamesContractResolver(),
-                    NullValueHandling = NullValueHandling.Ignore
-                });
-
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                HttpResponseMessage response;
-                try
-                {
-                    response = await _httpClient.PostAsync(_uploadEndpoint, content).ConfigureAwait(false);
-                }
-                catch (HttpRequestException)
-                {
-                    return false;
-                }
-
-                if (response.IsSuccessStatusCode)
-                    return true;
-
-                // try to log error body
-                var responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                try
-                {
-                    var j = JObject.Parse(responseJson);
-                    var err = j.Value<string>("error") ?? j.Value<string>("message");
-                    // Could surface this to caller by changing signature; currently just return false
-                }
-                catch { }
-
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Check if license is currently valid (from cache)
-        /// </summary>
-        public bool IsLicenseValid()
-        {
-            var settings = _settings.Load();
-
-            if (!settings.LicenseValid) return false;
-            if (!settings.LicenseExpiresAt.HasValue) return settings.LicenseValid;
-
-            return settings.LicenseExpiresAt.Value > DateTime.Now;
-        }
-
-        /// <summary>
-        /// Get stored license key
-        /// </summary>
-        public string GetStoredLicenseKey()
-        {
-            return _settings.Load().LicenseKey;
-        }
-
-        /// <summary>
-        /// Clear license
-        /// </summary>
-        public void ClearLicense()
-        {
-            var settings = _settings.Load();
-            settings.LicenseKey = null;
-            settings.LicenseValid = false;
-            settings.LicenseExpiresAt = null;
-            settings.LastLicenseCheck = null;
-            settings.LicenseFeatures = null;
-            _settings.Save(settings);
-        }
-
-        private string GetAppVersion()
-        {
-            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-            var version = assembly.GetName().Version;
-            return version?.ToString() ?? "1.0.0";
-        }
-    }
-
-    public partial class LicenseService
-    {
         /// <summary>
         /// Public trigger to start uploading indexes if the current stored license allows it.
+        /// Disabled: does nothing now.
         /// </summary>
         public void TriggerUploadIfAllowed()
         {
-            try
-            {
-                var settings = _settings.Load();
-                var key = settings.LicenseKey;
-                if (string.IsNullOrEmpty(key)) return;
-
-                if (IsUploadAllowed(settings.LicenseFeatures))
-                {
-                    _ = Task.Run(() => UploadAllIndexesIfNeededAsync(key));
-                }
-            }
-            catch { }
+            // Intentionally no-op: uploads have been disabled.
+            LoggingService.Log("TriggerUploadIfAllowed called but uploads are disabled.");
         }
 
         /// <summary>
@@ -590,18 +322,66 @@ namespace FluxDB.Services
 
         /// <summary>
         /// Public method to trigger upload of all indexes now. If licenseKey is null, uses stored license in settings.
+        /// Disabled: will not perform uploads.
         /// </summary>
-        public async Task UploadAllIndexesNowAsync(string licenseKey = null)
+        public Task UploadAllIndexesNowAsync(string licenseKey = null)
         {
-            var settings = _settings.Load();
-            var keyToUse = licenseKey ?? settings.LicenseKey;
-            if (string.IsNullOrEmpty(keyToUse))
+            try
             {
-                throw new InvalidOperationException("No license key provided or stored.");
+                LoggingService.Log("UploadAllIndexesNowAsync called but uploads are disabled.");
             }
+            catch { }
+            return Task.CompletedTask;
+        }
 
-            // Directly call upload routine
-            await UploadAllIndexesIfNeededAsync(keyToUse).ConfigureAwait(false);
+        /// <summary>
+        /// Get stored license key
+        /// </summary>
+        public string GetStoredLicenseKey()
+        {
+            try
+            {
+                return _settings.Load().LicenseKey;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// Clear license
+        /// </summary>
+        public void ClearLicense()
+        {
+            try
+            {
+                var settings = _settings.Load();
+                settings.LicenseKey = null;
+                settings.LicenseValid = false;
+                settings.LicenseExpiresAt = null;
+                settings.LastLicenseCheck = null;
+                settings.LicenseFeatures = null;
+                _settings.Save(settings);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Upload index - disabled (returns false)
+        /// </summary>
+        public Task<bool> UploadIndexAsync(string licenseKey, IndexExport index)
+        {
+            LoggingService.Log("UploadIndexAsync called but uploads are disabled.");
+            return Task.FromResult(false);
+        }
+
+        private string GetAppVersion()
+        {
+            try
+            {
+                var assembly = Assembly.GetExecutingAssembly();
+                var version = assembly.GetName().Version;
+                return version?.ToString() ?? "1.0.0";
+            }
+            catch { return "1.0.0"; }
         }
     }
 }

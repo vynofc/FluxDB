@@ -17,6 +17,8 @@ using FluxDB.Models;
 using FluxDB.Services;
 using Microsoft.Win32;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 
 namespace FluxDB
 {
@@ -611,9 +613,18 @@ namespace FluxDB
             {
                 try
                 {
-                    // Use WebBrowser to navigate to local file path (works if system has PDF handler)
-                    webPdfPreview.Navigate(new Uri(file.Path));
-                    webPdfPreview.Visibility = Visibility.Visible;
+                    // Try to get a shell-generated thumbnail for the PDF (works if a PDF handler provides thumbnails)
+                    var thumb = GetShellThumbnail(file.Path, 800);
+                    if (thumb != null)
+                    {
+                        SetImageSource(thumb);
+                    }
+                    else
+                    {
+                        // Fall back to opening externally if no thumbnail available
+                        txtNoPreview.Text = "No embedded preview available. Open externally to view.";
+                        txtNoPreview.Visibility = Visibility.Visible;
+                    }
                 }
                 catch (Exception)
                 {
@@ -649,6 +660,103 @@ namespace FluxDB
             {
                 txtNoPreview.Visibility = Visibility.Visible;
             }
+        }
+
+        private void SetImageSource(BitmapSource bmp)
+        {
+            if (bmp == null)
+            {
+                imgPreview.Source = null;
+                imgPreview.Visibility = Visibility.Collapsed;
+                imgPreviewContainer.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            imgPreview.Source = bmp;
+            imgPreview.Visibility = Visibility.Visible;
+            imgPreviewContainer.Visibility = Visibility.Visible;
+            ResetImageZoom();
+        }
+
+        private void ResetImageZoom()
+        {
+            if (imgPreview.RenderTransform is ScaleTransform st)
+            {
+                st.ScaleX = 1.0;
+                st.ScaleY = 1.0;
+            }
+            else
+            {
+                imgPreview.RenderTransform = new ScaleTransform(1.0, 1.0);
+            }
+            imgPreviewContainer.ScrollToTop();
+            imgPreviewContainer.ScrollToLeftEnd();
+        }
+
+        private void ImgPreviewContainer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            // Vertical-only zoom centered at mouse position. Wheel up = zoom in, down = zoom out.
+            e.Handled = true;
+
+            var st = imgPreview.RenderTransform as ScaleTransform;
+            if (st == null)
+            {
+                st = new ScaleTransform(1.0, 1.0);
+                imgPreview.RenderTransform = st;
+            }
+
+            double baseFactor = 1.1;
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+                baseFactor = 1.25; // faster when Ctrl held
+
+            double zoom = e.Delta > 0 ? baseFactor : 1.0 / baseFactor;
+            var newScaleY = Math.Max(0.1, Math.Min(10.0, st.ScaleY * zoom));
+
+            // If image not yet measured, ignore
+            if (imgPreview.ActualHeight <= 0 || imgPreviewContainer.ViewportHeight <= 0)
+                return;
+
+            // Current visual height (with current scale)
+            double prevVisualHeight = imgPreview.ActualHeight * st.ScaleY;
+            if (prevVisualHeight <= 0) prevVisualHeight = imgPreview.ActualHeight;
+
+            // Mouse position relative to ScrollViewer
+            var mousePos = e.GetPosition(imgPreviewContainer);
+            // Position inside the image (relative to image top in visual coords)
+            double imageY = mousePos.Y + imgPreviewContainer.VerticalOffset;
+
+            // Relative position within the visual image [0..1]
+            double prevRelY = imageY / prevVisualHeight;
+
+            // Apply new scale
+            st.ScaleY = newScaleY;
+            st.ScaleX = 1.0; // keep horizontal unchanged
+
+            imgPreview.UpdateLayout();
+            imgPreviewContainer.UpdateLayout();
+
+            // New visual height
+            double newVisualHeight = imgPreview.ActualHeight * newScaleY;
+
+            // Compute desired new offset so the same relative point stays under the mouse
+            double desiredOffset = prevRelY * newVisualHeight - mousePos.Y;
+
+            // Clamp offset
+            double maxOffset = Math.Max(0.0, newVisualHeight - imgPreviewContainer.ViewportHeight);
+            if (double.IsNaN(desiredOffset) || double.IsInfinity(desiredOffset)) desiredOffset = 0;
+            desiredOffset = Math.Max(0.0, Math.Min(maxOffset, desiredOffset));
+
+            imgPreviewContainer.ScrollToVerticalOffset(desiredOffset);
+
+            // Keep image horizontally centered (no horizontal scrolling)
+            try
+            {
+                double newVisualWidth = imgPreview.ActualWidth * 1.0; // ScaleX is 1
+                double horCenter = Math.Max(0.0, (newVisualWidth - imgPreviewContainer.ViewportWidth) / 2.0);
+                if (!double.IsNaN(horCenter) && !double.IsInfinity(horCenter))
+                    imgPreviewContainer.ScrollToHorizontalOffset(horCenter);
+            }
+            catch { }
         }
 
         #endregion
@@ -1640,32 +1748,61 @@ namespace FluxDB
             base.OnClosed(e);
         }
 
-        private async void BtnUpload_Click(object sender, RoutedEventArgs e)
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SIZE
+        {
+            public int cx;
+            public int cy;
+        }
+
+        [ComImport]
+        [Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IShellItemImageFactory
+        {
+            // HRESULT GetImage([in] SIZE size, [in] SIIGBF flags, [out] HBITMAP *phbm);
+            void GetImage(SIZE size, int flags, out IntPtr phbm);
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+        private static extern int SHCreateItemFromParsingName([MarshalAs(UnmanagedType.LPWStr)] string pszPath, IntPtr pbc, [In] ref Guid riid, out IShellItemImageFactory ppv);
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteObject(IntPtr hObject);
+
+        private const int SIIGBF_RESIZETOFIT = 0x00;
+        private const int SIIGBF_BIGGERSIZEOK = 0x01;
+        private const int SIIGBF_MEMORYONLY = 0x02;
+        private const int SIIGBF_ICONONLY = 0x04;
+        private const int SIIGBF_THUMBNAILONLY = 0x08;
+        private const int SIIGBF_INCACHEONLY = 0x10;
+
+        private BitmapSource GetShellThumbnail(string path, int size)
         {
             try
             {
-                var settings = _settingsService.Load();
-                var key = settings.LicenseKey;
-                if (string.IsNullOrEmpty(key))
+                var iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
+                var hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out var factory);
+                if (hr != 0 || factory == null) return null;
+
+                var sz = new SIZE { cx = size, cy = size };
+                factory.GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_BIGGERSIZEOK, out var hBitmap);
+                if (hBitmap == IntPtr.Zero) return null;
+
+                try
                 {
-                    MessageBox.Show("No license key stored. Please enter license in License window.", "Upload", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
+                    var bitmap = Imaging.CreateBitmapSourceFromHBitmap(hBitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(size, size));
+                    bitmap.Freeze();
+                    return bitmap;
                 }
-
-                btnUpload.IsEnabled = false;
-                txtStatus.Text = "Starting upload...";
-
-                await _licenseService.UploadAllIndexesNowAsync(key);
-
-                txtStatus.Text = "Upload process completed (check logs).";
+                finally
+                {
+                    DeleteObject(hBitmap);
+                }
             }
-            catch (Exception ex)
+            catch
             {
-                MessageBox.Show($"Upload failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                btnUpload.IsEnabled = true;
+                return null;
             }
         }
     }

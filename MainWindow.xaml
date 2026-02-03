@@ -237,7 +237,7 @@
                     <Button x:Name="btnSelectFolder" Content="[+] Select Folder" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSelectFolder_Click" Margin="0,0,10,0"/>
                     <Button x:Name="btnRefresh" Content="[R] Refresh" Style="{StaticResource SecondaryButtonStyle}" Click="BtnRefresh_Click" Margin="0,0,10,0" IsEnabled="False"/>
                     <Button x:Name="btnExport" Content="[S] Export" Style="{StaticResource SecondaryButtonStyle}" Click="BtnExport_Click" Margin="0,0,10,0" IsEnabled="False"/>
-                    <Button x:Name="btnUpload" Content="Upload" Style="{StaticResource SecondaryButtonStyle}" Click="BtnUpload_Click" Margin="0,0,10,0"/>
+                    <!-- Button x:Name="btnUpload" Content="Upload" Style="{StaticResource SecondaryButtonStyle}" Click="BtnUpload_Click" Margin="0,0,10,0"/-->
                     <Button x:Name="btnLicense" Content="[L] License" Style="{StaticResource SecondaryButtonStyle}" Click="BtnLicense_Click"/>
                 </StackPanel>
             </Grid>
@@ -426,8 +426,14 @@
                     <!-- Preview Panel -->
                     <Border x:Name="pnlPreview" Grid.Row="0" Background="#1e1e1e" CornerRadius="6" Margin="0,0,0,15" Visibility="Collapsed">
                         <Grid>
-                            <!-- Image Preview -->
-                            <Image x:Name="imgPreview" Stretch="Uniform" Margin="10" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                            <!-- Image Preview (scrollable & zoomable) -->
+                            <ScrollViewer x:Name="imgPreviewContainer" Margin="10" Visibility="Visible" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" PreviewMouseWheel="ImgPreviewContainer_PreviewMouseWheel">
+                                <Image x:Name="imgPreview" Stretch="Uniform" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Top" RenderTransformOrigin="0.5,0">
+                                    <Image.RenderTransform>
+                                        <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                    </Image.RenderTransform>
+                                </Image>
+                            </ScrollViewer>
                             <!-- PDF Preview (uses embedded WPF WebBrowser control) -->
                             <WebBrowser x:Name="webPdfPreview" Visibility="Collapsed" Margin="10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
                             <!-- Text Preview -->

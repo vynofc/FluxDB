@@ -41,7 +41,6 @@ namespace FluxDB
                 txtLicenseStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ff9800"));
                 txtLicenseExpires.Text = "-";
                 txtLastCheck.Text = "-";
-                btnUploadIndex.IsEnabled = false;
                 return;
             }
 
@@ -51,13 +50,11 @@ namespace FluxDB
             {
                 txtLicenseStatus.Text = "? Active";
                 txtLicenseStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4caf50"));
-                btnUploadIndex.IsEnabled = true;
             }
             else
             {
                 txtLicenseStatus.Text = "? Invalid";
                 txtLicenseStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#f44336"));
-                btnUploadIndex.IsEnabled = false;
             }
 
             txtLicenseExpires.Text = license.ExpiresAt?.ToString("yyyy-MM-dd HH:mm") ?? "Never";
@@ -110,49 +107,6 @@ namespace FluxDB
             {
                 btnActivate.IsEnabled = true;
                 btnActivate.Content = "Activate License";
-            }
-        }
-
-        private async void BtnUploadIndex_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(_rootFolder))
-            {
-                MessageBox.Show("Please index a folder first.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var licenseKey = _licenseService.GetStoredLicenseKey();
-            if (string.IsNullOrEmpty(licenseKey))
-            {
-                MessageBox.Show("Please activate a license first.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            btnUploadIndex.IsEnabled = false;
-            btnUploadIndex.Content = "Uploading...";
-
-            try
-            {
-                var export = _exportService.CreateExport(_rootFolder);
-                var success = await _licenseService.UploadIndexAsync(licenseKey, export);
-
-                if (success)
-                {
-                    MessageBox.Show("Index uploaded successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                else
-                {
-                    MessageBox.Show("Failed to upload index. Please check your connection and try again.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error uploading index: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                btnUploadIndex.IsEnabled = true;
-                btnUploadIndex.Content = "?? Upload Index to Server";
             }
         }
 
