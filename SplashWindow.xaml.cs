@@ -83,7 +83,7 @@ namespace FluxDB
             {
                 txtMessage.Text = "Checking for updates...";
                 LoggingService.Log("Startup: Checking for updates");
-                var ok = await CheckForUpdatesAsync().ConfigureAwait(false);
+                var ok = await CheckForUpdatesAsync();
                 if (!ok)
                 {
                     // Installer was started (or update process handled); exit app now.
@@ -91,19 +91,19 @@ namespace FluxDB
                     return;
                 }
 
-                // Switch back to UI thread for UI updates and license check
-                await Dispatcher.BeginInvoke(new Action(() => txtMessage.Text = "Checking license..."));
-                await EnsureFreeLicenseAsync().ConfigureAwait(false);
+                // Continue on UI thread
+                txtMessage.Text = "Checking license...";
+                await EnsureFreeLicenseAsync();
 
                 // After ensuring license, attempt to upload indexes while still in splash
                 try
                 {
-                    await Dispatcher.BeginInvoke(new Action(() => txtMessage.Text = "Uploading indexes..."));
+                    txtMessage.Text = "Uploading indexes...";
                     var settings = _settingsService.Load();
                     if (!string.IsNullOrEmpty(settings.LicenseKey))
                     {
                         LoggingService.Log("Startup: Triggering upload of indexes from splash");
-                        await _licenseService.UploadAllIndexesNowAsync(settings.LicenseKey).ConfigureAwait(false);
+                        await _licenseService.UploadAllIndexesNowAsync(settings.LicenseKey);
                         LoggingService.Log("Startup: Upload routine finished");
                     }
                     else
@@ -116,21 +116,18 @@ namespace FluxDB
                     LoggingService.Log($"Startup upload failed: {ex.Message}");
                 }
 
-                await Dispatcher.BeginInvoke(new Action(() => txtMessage.Text = "Starting application..."));
-                await Task.Delay(250).ConfigureAwait(false);
+                txtMessage.Text = "Starting application...";
+                await Task.Delay(250);
 
                 // Show main window on UI thread
-                await Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    var main = new MainWindow();
-                    main.Show();
-                    Close();
-                }));
+                var main = new MainWindow();
+                main.Show();
+                Close();
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Startup failed: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                Application.Current.Shutdown();
+                Dispatcher.Invoke(() => Application.Current.Shutdown());
             }
         }
 
