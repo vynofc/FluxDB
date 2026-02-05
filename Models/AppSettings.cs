@@ -11,6 +11,8 @@ namespace FluxDB.Models
         public string DeviceId { get; set; }
         public string LicenseKey { get; set; }
         public string LastRootFolder { get; set; }
+        public string Theme { get; set; } = "Dark";
+        public double PreviewScale { get; set; } = 1.0;
         public DateTime? LastLicenseCheck { get; set; }
         public bool LicenseValid { get; set; }
         public DateTime? LicenseExpiresAt { get; set; }

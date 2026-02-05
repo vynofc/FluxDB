@@ -13,5 +13,8 @@ namespace FluxDB
     /// </summary>
     public partial class App : Application
     {
+        public static bool IsUpdateAvailable { get; set; } = false;
+        public static string AvailableVersion { get; set; } = "";
+        public static bool IsUpdateSkipped { get; set; } = false;
     }
 }

@@ -1474,12 +1474,17 @@ namespace FluxDB
             }
         }
 
-        private void BtnLicense_Click(object sender, RoutedEventArgs e)
+        private void BtnSettings_Click(object sender, RoutedEventArgs e)
         {
-            var licenseWindow = new LicenseWindow(_licenseService, _exportService, _currentRootFolder);
-            licenseWindow.Owner = this;
-            licenseWindow.ShowDialog();
-            UpdateLicenseStatus();
+            var settings = _settingsService.Load();
+            var settingsWindow = new SettingsWindow(settings, _licenseService, _exportService, _currentRootFolder);
+            settingsWindow.Owner = this;
+            if (settingsWindow.ShowDialog() == true)
+            {
+                _settingsService.Save(settingsWindow.Settings);
+                // Apply theme or other settings if needed
+                UpdateLicenseStatus();
+            }
         }
 
         private void BtnSearch_Click(object sender, RoutedEventArgs e)

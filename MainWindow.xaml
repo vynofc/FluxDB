@@ -263,10 +263,10 @@
                             <TextBlock Text="Export" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="btnLicense" Style="{StaticResource SecondaryButtonStyle}" Click="BtnLicense_Click">
+                    <Button x:Name="btnSettings" Style="{StaticResource SecondaryButtonStyle}" Click="BtnSettings_Click">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE8D7;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" VerticalAlignment="Center"/>
-                            <TextBlock Text="License" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" VerticalAlignment="Center"/>
+                            <TextBlock Text="Settings" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>

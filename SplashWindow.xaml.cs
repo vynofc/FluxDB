@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -139,6 +140,8 @@ namespace FluxDB
             {
                 if (string.IsNullOrWhiteSpace(s)) return "";
                 s = s.Trim();
+                // Strip labels starting with '!' (e.g. v0.1.5!beta -> v0.1.5)
+                if (s.Contains("!")) s = s.Split('!')[0].Trim();
                 if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
                 return s;
             }
@@ -159,7 +162,13 @@ namespace FluxDB
                 int ai = 0;
                 if (i < aParts.Length)
                 {
-                    int.TryParse(aParts[i], out ai);
+                    string part = aParts[i];
+                    // Handle version suffixes like -beta1 by taking only the numeric part (e.g. "4-beta1" -> "4")
+                    if (part.Contains("-"))
+                    {
+                        part = part.Split('-')[0];
+                    }
+                    int.TryParse(part, out ai);
                 }
 
                 int bi = 0;
@@ -182,6 +191,10 @@ namespace FluxDB
         {
             try
             {
+                var args = Environment.GetCommandLineArgs();
+                bool skipUpdate = args.Any(a => a.Trim().ToLower() == "--noupdate");
+                App.IsUpdateSkipped = skipUpdate;
+
                 var exePath = Assembly.GetExecutingAssembly().Location;
                 var exeDir = Path.GetDirectoryName(exePath) ?? ".";
                 var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
@@ -202,6 +215,30 @@ namespace FluxDB
 
                     var parts = remoteVersionText.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                     var remoteRaw = parts[parts.Length - 1].Trim();
+
+                    // Strip installer labels starting with '!' (e.g. v0.1.5.4!beta -> v0.1.5.4)
+                    if (remoteRaw.Contains("!"))
+                    {
+                        remoteRaw = remoteRaw.Split('!')[0].Trim();
+                    }
+
+                    // Compare semantic versions
+                    var cmp = CompareVersionToAssembly(remoteRaw, assemblyVersion);
+                    if (cmp <= 0)
+                    {
+                        // up-to-date
+                        return true;
+                    }
+
+                    // New version available
+                    App.IsUpdateAvailable = true;
+                    App.AvailableVersion = remoteRaw;
+
+                    if (skipUpdate)
+                    {
+                        LoggingService.Log("Update available but --noupdate flag is set. Skipping installer.");
+                        return true; // Continue app startup
+                    }
 
                     // expected zip name MUST match exactly the remote string (without .zip)
                     var zipName = $"{remoteRaw}.zip";
@@ -227,14 +264,6 @@ namespace FluxDB
                         LoggingService.Log("Downloading installer as fallback");
                         // Otherwise download and run installer
                         return await DownloadAndRunInstallerAsync(exeDir).ConfigureAwait(false);
-                    }
-
-                    // Compare semantic versions (normalize leading 'v')
-                    var cmp = CompareVersionToAssembly(remoteRaw, assemblyVersion);
-                    if (cmp <= 0)
-                    {
-                        // remote version is less or equal to current -> up-to-date
-                        return true;
                     }
 
                     if (File.Exists(zipPath))
