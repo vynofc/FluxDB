@@ -192,7 +192,7 @@ namespace FluxDB
             try
             {
                 var args = Environment.GetCommandLineArgs();
-                bool skipUpdate = args.Any(a => a.Trim().ToLower() == "--noupdate");
+                bool skipUpdate = args.Any(a => a.Trim().Equals("--noupdate", StringComparison.OrdinalIgnoreCase));
                 App.IsUpdateSkipped = skipUpdate;
 
                 var exePath = Assembly.GetExecutingAssembly().Location;
@@ -208,22 +208,59 @@ namespace FluxDB
                     {
                         remoteVersionText = await http.GetStringAsync(versionUrl).ConfigureAwait(false);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        LoggingService.Log($"Update check: Failed to download version.txt: {ex.Message}");
+                    }
 
                     if (string.IsNullOrEmpty(remoteVersionText))
                         return true; // cannot check, continue
 
                     var parts = remoteVersionText.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-                    var remoteRaw = parts[parts.Length - 1].Trim();
+                    string newestRemoteRelease = null;
+                    Version maxVersion = null;
 
-                    // Strip installer labels starting with '!' (e.g. v0.1.5.4!beta -> v0.1.5.4)
-                    if (remoteRaw.Contains("!"))
+                    foreach (var part in parts)
                     {
-                        remoteRaw = remoteRaw.Split('!')[0].Trim();
+                        var raw = part.Trim();
+                        // Skip beta versions
+                        if (raw.IndexOf("beta", StringComparison.OrdinalIgnoreCase) >= 0)
+                            continue;
+
+                        // Strip installer labels starting with '!'
+                        var cleanVersion = raw;
+                        if (cleanVersion.Contains("!"))
+                        {
+                            cleanVersion = cleanVersion.Split('!')[0].Trim();
+                        }
+
+                        // Parse version for comparison
+                        if (cleanVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                            cleanVersion = cleanVersion.Substring(1);
+
+                        if (Version.TryParse(cleanVersion, out Version parsedVersion))
+                        {
+                            if (maxVersion == null || parsedVersion > maxVersion)
+                            {
+                                maxVersion = parsedVersion;
+                                newestRemoteRelease = raw; // Keep original raw string (with labels if any) for update path
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(newestRemoteRelease))
+                        return true;
+
+                    // Strip '!' labels from newestRemoteRelease for semantic comparison if not already handled
+                    var finalRemoteRaw = newestRemoteRelease;
+                    if (finalRemoteRaw.Contains("!"))
+                    {
+                        finalRemoteRaw = finalRemoteRaw.Split('!')[0].Trim();
                     }
 
                     // Compare semantic versions
-                    var cmp = CompareVersionToAssembly(remoteRaw, assemblyVersion);
+                    var cmp = CompareVersionToAssembly(finalRemoteRaw, assemblyVersion);
+                    LoggingService.Log($"Update check: Remote={finalRemoteRaw}, Local={assemblyVersion}, Result={cmp}");
                     if (cmp <= 0)
                     {
                         // up-to-date
@@ -232,7 +269,7 @@ namespace FluxDB
 
                     // New version available
                     App.IsUpdateAvailable = true;
-                    App.AvailableVersion = remoteRaw;
+                    App.AvailableVersion = finalRemoteRaw;
 
                     if (skipUpdate)
                     {
@@ -241,15 +278,15 @@ namespace FluxDB
                     }
 
                     // expected zip name MUST match exactly the remote string (without .zip)
-                    var zipName = $"{remoteRaw}.zip";
-                    var zipPath = Path.Combine("C:\\nsce\\FluxDB", zipName);
+                    var zipName = $"{finalRemoteRaw}.zip";
+                    var zipPath = Path.Combine("C:\\NSCE\\FluxDB", zipName);
 
                     // If the expected zip is missing, attempt to run installer (from that folder) or download it
                     LoggingService.Log($"Expected zip path: {zipPath} exists={File.Exists(zipPath)}");
                     if (!File.Exists(zipPath))
                     {
                         // If there is an installer in that folder, prefer starting it from there
-                        var installerInFolder = Path.Combine("C:\\nsce\\FluxDB", "FluxDB-Installer.exe");
+                        var installerInFolder = Path.Combine("C:\\NSCE\\FluxDB", "FluxDB-Installer.exe");
                         if (File.Exists(installerInFolder))
                         {
                             var startInfo = new ProcessStartInfo(installerInFolder)
@@ -269,7 +306,7 @@ namespace FluxDB
                     if (File.Exists(zipPath))
                     {
                         // If there is an installer in that folder, prefer starting it from there
-                        var installerInFolder = Path.Combine("C:\\nsce\\FluxDB", "FluxDB-Installer.exe");
+                        var installerInFolder = Path.Combine("C:\\NSCE\\FluxDB", "FluxDB-Installer.exe");
                         if (File.Exists(installerInFolder))
                         {
                             var startInfo = new ProcessStartInfo(installerInFolder)
