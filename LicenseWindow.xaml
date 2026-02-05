@@ -85,8 +85,10 @@
     
     <Grid Margin="30">
         <StackPanel>
-            <!-- Header -->
-            <TextBlock Text="?? License Management" FontSize="22" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,30"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,30">
+                <TextBlock Text="&#xE8D7;" FontSize="22" Foreground="{StaticResource AccentBrush}" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" VerticalAlignment="Center"/>
+                <TextBlock Text=" License Management" FontSize="22" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+            </StackPanel>
             
             <!-- Device ID -->
             <TextBlock Text="Device ID" FontSize="12" Foreground="{StaticResource ForegroundBrush}" Opacity="0.7"/>

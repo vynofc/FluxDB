@@ -72,7 +72,7 @@ namespace FluxDB.Services
             try
             {
                 var json = JsonConvert.SerializeObject(settings, Formatting.Indented);
-                File.WriteAllText(_settingsPath, json);
+                File.WriteAllText(_settingsPath, json, System.Text.Encoding.UTF8);
             }
             catch (Exception ex)
             {

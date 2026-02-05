@@ -161,11 +161,11 @@
             <Setter Property="FontSize" Value="12"/>
         </Style>
         
-        <!-- Context Menu Style -->
         <Style TargetType="ContextMenu">
             <Setter Property="Background" Value="#2d2d30"/>
             <Setter Property="BorderBrush" Value="#3c3c3c"/>
             <Setter Property="Foreground" Value="#cccccc"/>
+            <Setter Property="Padding" Value="2"/>
         </Style>
         <Style TargetType="MenuItem">
             <Setter Property="Background" Value="Transparent"/>
@@ -176,6 +176,16 @@
                     <Setter Property="Background" Value="#3c3c3c"/>
                 </Trigger>
             </Style.Triggers>
+        </Style>
+
+        <!-- ToolTip Style -->
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="#2d2d30"/>
+            <Setter Property="Foreground" Value="#cccccc"/>
+            <Setter Property="BorderBrush" Value="#3c3c3c"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Placement" Value="Bottom"/>
         </Style>
     </Window.Resources>
     
@@ -229,16 +239,36 @@
                 </Grid.ColumnDefinitions>
                 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="[F] FluxDB" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" FontSize="24" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Text=" FluxDB" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" Margin="5,0,0,0"/>
                     <TextBlock x:Name="txtCurrentFolder" Text="" FontSize="14" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Margin="20,0,0,0" Opacity="0.7"/>
                 </StackPanel>
                 
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="btnSelectFolder" Content="[+] Select Folder" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSelectFolder_Click" Margin="0,0,10,0"/>
-                    <Button x:Name="btnRefresh" Content="[R] Refresh" Style="{StaticResource SecondaryButtonStyle}" Click="BtnRefresh_Click" Margin="0,0,10,0" IsEnabled="False"/>
-                    <Button x:Name="btnExport" Content="[S] Export" Style="{StaticResource SecondaryButtonStyle}" Click="BtnExport_Click" Margin="0,0,10,0" IsEnabled="False"/>
-                    <!-- Button x:Name="btnUpload" Content="Upload" Style="{StaticResource SecondaryButtonStyle}" Click="BtnUpload_Click" Margin="0,0,10,0"/-->
-                    <Button x:Name="btnLicense" Content="[L] License" Style="{StaticResource SecondaryButtonStyle}" Click="BtnLicense_Click"/>
+                    <Button x:Name="btnSelectFolder" Style="{StaticResource PrimaryButtonStyle}" Click="BtnSelectFolder_Click" Margin="0,0,10,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" VerticalAlignment="Center"/>
+                            <TextBlock Text="Select Folder" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="btnRefresh" Style="{StaticResource SecondaryButtonStyle}" Click="BtnRefresh_Click" Margin="0,0,10,0" IsEnabled="False">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" VerticalAlignment="Center"/>
+                            <TextBlock Text="Refresh" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="btnExport" Style="{StaticResource SecondaryButtonStyle}" Click="BtnExport_Click" Margin="0,0,10,0" IsEnabled="False">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE78C;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" VerticalAlignment="Center"/>
+                            <TextBlock Text="Export" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="btnLicense" Style="{StaticResource SecondaryButtonStyle}" Click="BtnLicense_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8D7;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" VerticalAlignment="Center"/>
+                            <TextBlock Text="License" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
@@ -255,9 +285,9 @@
                 </Grid.ColumnDefinitions>
                 
                 <!-- Navigation Buttons -->
-                <Button x:Name="btnBack" Content="&lt;" Style="{StaticResource NavButtonStyle}" Click="BtnBack_Click" IsEnabled="False" FontSize="16" ToolTip="Back (Alt+Left)" FontWeight="Bold"/>
-                <Button x:Name="btnForward" Content="&gt;" Style="{StaticResource NavButtonStyle}" Click="BtnForward_Click" IsEnabled="False" FontSize="16" Margin="5,0,0,0" Grid.Column="1" ToolTip="Forward (Alt+Right)" FontWeight="Bold"/>
-                <Button x:Name="btnUp" Content="^" Style="{StaticResource NavButtonStyle}" Click="BtnUp_Click" IsEnabled="False" FontSize="16" Margin="5,0,15,0" Grid.Column="2" ToolTip="Up (Alt+Up)" FontWeight="Bold"/>
+                <Button x:Name="btnBack" Content="&#xE72B;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" Style="{StaticResource NavButtonStyle}" Click="BtnBack_Click" IsEnabled="False" FontSize="16" ToolTip="Back (Alt+Left)" FontWeight="Bold"/>
+                <Button x:Name="btnForward" Content="&#xE72A;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" Style="{StaticResource NavButtonStyle}" Click="BtnForward_Click" IsEnabled="False" FontSize="16" Margin="5,0,0,0" Grid.Column="1" ToolTip="Forward (Alt+Right)" FontWeight="Bold"/>
+                <Button x:Name="btnUp" Content="&#xE110;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" Style="{StaticResource NavButtonStyle}" Click="BtnUp_Click" IsEnabled="False" FontSize="16" Margin="5,0,15,0" Grid.Column="2" ToolTip="Up (Alt+Up)" FontWeight="Bold"/>
                 
                 <!-- Breadcrumb Path -->
                 <ScrollViewer Grid.Column="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
@@ -329,7 +359,11 @@
                           HeadersVisibility="Column"
                           CanUserResizeRows="False"
                           CanUserSortColumns="True"
-                          FontSize="13">
+                          FontSize="13"
+                          VirtualizingStackPanel.IsVirtualizing="True"
+                          VirtualizingStackPanel.VirtualizationMode="Recycling"
+                          EnableRowVirtualization="True"
+                          RowHeight="32">
                     
                     <!-- Context Menu -->
                     <DataGrid.ContextMenu>
@@ -394,9 +428,9 @@
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding Icon}" 
+                                               FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface"
                                                Foreground="{Binding IconColor}" 
-                                               FontWeight="Bold" 
-                                               FontSize="11" 
+                                               FontSize="14" 
                                                VerticalAlignment="Center"
                                                HorizontalAlignment="Center"/>
                                 </DataTemplate>

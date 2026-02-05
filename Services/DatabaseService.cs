@@ -31,10 +31,15 @@ namespace FluxDB.Services
             using (var cmd = new SQLiteCommand(sql, _connection)) { cmd.ExecuteNonQuery(); }
         }
 
-        public int UpsertFile(FileEntry f)
+        public SQLiteTransaction BeginTransaction()
+        {
+            return _connection.BeginTransaction();
+        }
+
+        public int UpsertFile(FileEntry f, SQLiteTransaction transaction = null)
         {
             var sql = "INSERT INTO files (path,name,extension,size,created_at,modified_at,deleted,last_indexed_at) VALUES (@p,@n,@e,@s,@c,@m,@d,@l) ON CONFLICT(path) DO UPDATE SET name=@n,extension=@e,size=@s,modified_at=@m,deleted=@d,last_indexed_at=@l RETURNING id";
-            using (var cmd = new SQLiteCommand(sql, _connection))
+            using (var cmd = new SQLiteCommand(sql, _connection, transaction))
             {
                 cmd.Parameters.AddWithValue("@p", f.Path);
                 cmd.Parameters.AddWithValue("@n", f.Name);
@@ -52,7 +57,15 @@ namespace FluxDB.Services
         public List<FileEntry> GetAllFiles(bool includeDeleted = false)
         {
             var files = new List<FileEntry>();
-            var sql = includeDeleted ? "SELECT * FROM files" : "SELECT * FROM files WHERE deleted=0";
+            var sql = @"
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, ', ') as tags_text
+                FROM files f
+                LEFT JOIN notes n ON f.id = n.file_id
+                LEFT JOIN file_tags ft ON f.id = ft.file_id
+                LEFT JOIN tags t ON ft.tag_id = t.id
+                WHERE " + (includeDeleted ? "1=1" : "f.deleted=0") + @"
+                GROUP BY f.id";
+
             using (var cmd = new SQLiteCommand(sql, _connection))
             using (var r = cmd.ExecuteReader())
             {
@@ -68,11 +81,18 @@ namespace FluxDB.Services
                         CreatedAt = DateTime.Parse(r.GetString(5)),
                         ModifiedAt = DateTime.Parse(r.GetString(6)),
                         Deleted = r.GetInt32(7) == 1,
-                        LastIndexedAt = DateTime.Parse(r.GetString(8))
+                        LastIndexedAt = DateTime.Parse(r.GetString(8)),
+                        Note = r.IsDBNull(9) ? "" : r.GetString(9),
+                        TagsText = r.IsDBNull(10) ? "" : r.GetString(10)
                     };
-                    f.Tags = GetTagsForFile(f.Id);
-                    f.TagsText = string.Join(", ", f.Tags);
-                    f.Note = GetNoteForFile(f.Id);
+                    if (!string.IsNullOrEmpty(f.TagsText))
+                    {
+                        f.Tags = new List<string>(f.TagsText.Split(new[] { ", " }, StringSplitOptions.None));
+                    }
+                    else
+                    {
+                        f.Tags = new List<string>();
+                    }
                     files.Add(f);
                 }
             }
@@ -83,7 +103,16 @@ namespace FluxDB.Services
         {
             if (string.IsNullOrWhiteSpace(query)) return GetAllFiles();
             var files = new List<FileEntry>();
-            var sql = "SELECT DISTINCT f.* FROM files f LEFT JOIN file_tags ft ON f.id=ft.file_id LEFT JOIN tags t ON ft.tag_id=t.id LEFT JOIN notes n ON f.id=n.file_id WHERE f.deleted=0 AND (f.name LIKE @q OR f.path LIKE @q OR t.name LIKE @q OR n.note LIKE @q)";
+            var sql = @"
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, ', ') as tags_text
+                FROM files f
+                LEFT JOIN notes n ON f.id = n.file_id
+                LEFT JOIN file_tags ft ON f.id = ft.file_id
+                LEFT JOIN tags t ON ft.tag_id = t.id
+                WHERE f.deleted=0 
+                GROUP BY f.id
+                HAVING f.name LIKE @q OR f.path LIKE @q OR tags_text LIKE @q OR n.note LIKE @q";
+
             using (var cmd = new SQLiteCommand(sql, _connection))
             {
                 cmd.Parameters.AddWithValue("@q", "%" + query + "%");
@@ -101,11 +130,18 @@ namespace FluxDB.Services
                             CreatedAt = DateTime.Parse(r.GetString(5)),
                             ModifiedAt = DateTime.Parse(r.GetString(6)),
                             Deleted = r.GetInt32(7) == 1,
-                            LastIndexedAt = DateTime.Parse(r.GetString(8))
+                            LastIndexedAt = DateTime.Parse(r.GetString(8)),
+                            Note = r.IsDBNull(9) ? "" : r.GetString(9),
+                            TagsText = r.IsDBNull(10) ? "" : r.GetString(10)
                         };
-                        f.Tags = GetTagsForFile(f.Id);
-                        f.TagsText = string.Join(", ", f.Tags);
-                        f.Note = GetNoteForFile(f.Id);
+                        if (!string.IsNullOrEmpty(f.TagsText))
+                        {
+                            f.Tags = new List<string>(f.TagsText.Split(new[] { ", " }, StringSplitOptions.None));
+                        }
+                        else
+                        {
+                            f.Tags = new List<string>();
+                        }
                         files.Add(f);
                     }
                 }
@@ -116,7 +152,15 @@ namespace FluxDB.Services
         public List<FileEntry> SearchByTag(string tagName)
         {
             var files = new List<FileEntry>();
-            var sql = "SELECT f.* FROM files f INNER JOIN file_tags ft ON f.id=ft.file_id INNER JOIN tags tg ON ft.tag_id=tg.id WHERE f.deleted=0 AND tg.name LIKE @t";
+            var sql = @"
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, ', ') as tags_text
+                FROM files f
+                LEFT JOIN notes n ON f.id = n.file_id
+                INNER JOIN file_tags ft ON f.id = ft.file_id
+                INNER JOIN tags t ON ft.tag_id = t.id
+                WHERE f.deleted = 0 AND t.name LIKE @t
+                GROUP BY f.id";
+
             using (var cmd = new SQLiteCommand(sql, _connection))
             {
                 cmd.Parameters.AddWithValue("@t", "%" + tagName + "%");
@@ -134,11 +178,18 @@ namespace FluxDB.Services
                             CreatedAt = DateTime.Parse(r.GetString(5)),
                             ModifiedAt = DateTime.Parse(r.GetString(6)),
                             Deleted = r.GetInt32(7) == 1,
-                            LastIndexedAt = DateTime.Parse(r.GetString(8))
+                            LastIndexedAt = DateTime.Parse(r.GetString(8)),
+                            Note = r.IsDBNull(9) ? "" : r.GetString(9),
+                            TagsText = r.IsDBNull(10) ? "" : r.GetString(10)
                         };
-                        f.Tags = GetTagsForFile(f.Id);
-                        f.TagsText = string.Join(", ", f.Tags);
-                        f.Note = GetNoteForFile(f.Id);
+                        if (!string.IsNullOrEmpty(f.TagsText))
+                        {
+                            f.Tags = new List<string>(f.TagsText.Split(new[] { ", " }, StringSplitOptions.None));
+                        }
+                        else
+                        {
+                            f.Tags = new List<string>();
+                        }
                         files.Add(f);
                     }
                 }
@@ -229,16 +280,38 @@ namespace FluxDB.Services
 
         public void MarkDeletedFiles(HashSet<string> existingPaths)
         {
-            foreach (var f in GetAllFiles(true))
+            using (var transaction = _connection.BeginTransaction())
             {
-                if (!existingPaths.Contains(f.Path))
+                var sql = "SELECT id, path FROM files WHERE deleted=0";
+                var toDelete = new List<int>();
+
+                using (var cmd = new SQLiteCommand(sql, _connection, transaction))
+                using (var r = cmd.ExecuteReader())
                 {
-                    using (var cmd = new SQLiteCommand("UPDATE files SET deleted=1 WHERE id=@id", _connection))
+                    while (r.Read())
                     {
-                        cmd.Parameters.AddWithValue("@id", f.Id);
-                        cmd.ExecuteNonQuery();
+                        var id = r.GetInt32(0);
+                        var path = r.GetString(1);
+                        if (!existingPaths.Contains(path))
+                        {
+                            toDelete.Add(id);
+                        }
                     }
                 }
+
+                if (toDelete.Count > 0)
+                {
+                    using (var cmd = new SQLiteCommand("UPDATE files SET deleted=1 WHERE id=@id", _connection, transaction))
+                    {
+                        var param = cmd.Parameters.Add("@id", System.Data.DbType.Int32);
+                        foreach (var id in toDelete)
+                        {
+                            param.Value = id;
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                }
+                transaction.Commit();
             }
         }
 

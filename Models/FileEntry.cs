@@ -113,45 +113,45 @@ namespace FluxDB.Models
         {
             get
             {
-                if (_isFolder) return "[D]";
+                if (_isFolder) return "\uE8B7"; // Folder
                 
                 var ext = (_extension ?? "").ToLower();
                 
                 // Images
                 if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".bmp" || ext == ".webp" || ext == ".ico")
-                    return "[I]";
+                    return "\uEB9F"; // Photo
                 
                 // Audio
                 if (ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".aac" || ext == ".ogg" || ext == ".wma" || ext == ".m4a")
-                    return "[A]";
+                    return "\uE189"; // Audio
                 
                 // Video
                 if (ext == ".mp4" || ext == ".avi" || ext == ".mkv" || ext == ".mov" || ext == ".wmv" || ext == ".flv" || ext == ".webm")
-                    return "[V]";
+                    return "\uE116"; // Video
                 
                 // Documents
                 if (ext == ".pdf")
-                    return "[P]";
+                    return "\uE162"; // PDF-like icon
                 if (ext == ".doc" || ext == ".docx" || ext == ".rtf" || ext == ".odt" || ext == ".txt" || ext == ".md")
-                    return "[T]";
+                    return "\uE132"; // Document
                 if (ext == ".xls" || ext == ".xlsx" || ext == ".csv" || ext == ".ods")
-                    return "[X]";
+                    return "\uE1D2"; // Spreadsheet
                 
                 // Archives
                 if (ext == ".zip" || ext == ".rar" || ext == ".7z" || ext == ".tar" || ext == ".gz")
-                    return "[Z]";
+                    return "\uF012"; // Zip
                 
                 // Executables
                 if (ext == ".exe" || ext == ".msi")
-                    return "[E]";
+                    return "\uE71D"; // Executable
                 
                 // Code files
                 if (ext == ".cs" || ext == ".js" || ext == ".ts" || ext == ".py" || ext == ".java" || ext == ".cpp" || ext == ".c" || ext == ".h" ||
                     ext == ".html" || ext == ".css" || ext == ".xaml" || ext == ".xml" || ext == ".json" || ext == ".sql" || ext == ".php")
-                    return "[C]";
+                    return "\uE943"; // Code
                 
                 // Default
-                return "[F]";
+                return "\uE160"; // Generic File
             }
         }
 

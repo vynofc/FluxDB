@@ -52,50 +52,70 @@ namespace FluxDB.Services
 
             // Index files
             int processed = 0;
-            foreach (var filePath in files)
+            const int BatchSize = 1000;
+            var currentTransaction = _database.BeginTransaction();
+            
+            try
             {
-                if (cancellationToken.IsCancellationRequested)
+                foreach (var filePath in files)
                 {
-                    result.Cancelled = true;
-                    break;
-                }
-
-                try
-                {
-                    var fileInfo = new FileInfo(filePath);
-                    var fileEntry = new FileEntry
+                    if (cancellationToken.IsCancellationRequested)
                     {
-                        Path = filePath,
-                        Name = fileInfo.Name,
-                        Extension = fileInfo.Extension,
-                        Size = fileInfo.Length,
-                        CreatedAt = fileInfo.CreationTime,
-                        ModifiedAt = fileInfo.LastWriteTime,
-                        Deleted = false,
-                        LastIndexedAt = DateTime.Now
-                    };
+                        result.Cancelled = true;
+                        break;
+                    }
 
-                    _database.UpsertFile(fileEntry);
-                    existingPaths.Add(filePath);
-                    result.FilesIndexed++;
-                }
-                catch (Exception ex)
-                {
-                    result.Errors.Add($"{filePath}: {ex.Message}");
-                }
-
-                processed++;
-                if (processed % 100 == 0 || processed == files.Count)
-                {
-                    var progress = (double)processed / files.Count * 100;
-                    ProgressChanged?.Invoke(this, new IndexProgressEventArgs
+                    try
                     {
-                        Current = processed,
-                        Total = files.Count,
-                        Percentage = progress,
-                        CurrentFile = filePath
-                    });
+                        var fileInfo = new FileInfo(filePath);
+                        var fileEntry = new FileEntry
+                        {
+                            Path = filePath,
+                            Name = fileInfo.Name,
+                            Extension = fileInfo.Extension,
+                            Size = fileInfo.Length,
+                            CreatedAt = fileInfo.CreationTime,
+                            ModifiedAt = fileInfo.LastWriteTime,
+                            Deleted = false,
+                            LastIndexedAt = DateTime.Now
+                        };
+
+                        _database.UpsertFile(fileEntry, currentTransaction);
+                        existingPaths.Add(filePath);
+                        result.FilesIndexed++;
+                    }
+                    catch (Exception ex)
+                    {
+                        result.Errors.Add($"{filePath}: {ex.Message}");
+                    }
+
+                    processed++;
+                    
+                    // Batch commit for performance and stability
+                    if (processed % BatchSize == 0)
+                    {
+                        currentTransaction.Commit();
+                        currentTransaction.Dispose();
+                        currentTransaction = _database.BeginTransaction();
+                    }
+
+                    if (processed % 100 == 0 || processed == files.Count)
+                    {
+                        var progress = (double)processed / files.Count * 100;
+                        ProgressChanged?.Invoke(this, new IndexProgressEventArgs
+                        {
+                            Current = processed,
+                            Total = files.Count,
+                            Percentage = progress,
+                            CurrentFile = filePath
+                        });
+                    }
                 }
+                currentTransaction.Commit();
+            }
+            finally
+            {
+                currentTransaction.Dispose();
             }
 
             // Mark deleted files
@@ -116,13 +136,13 @@ namespace FluxDB.Services
         {
             try
             {
-                foreach (var file in Directory.GetFiles(path))
+                foreach (var file in Directory.EnumerateFiles(path))
                 {
                     if (cancellationToken.IsCancellationRequested) return;
                     files.Add(file);
                 }
 
-                foreach (var dir in Directory.GetDirectories(path))
+                foreach (var dir in Directory.EnumerateDirectories(path))
                 {
                     if (cancellationToken.IsCancellationRequested) return;
                     
@@ -130,20 +150,11 @@ namespace FluxDB.Services
                     {
                         CollectFiles(dir, files, cancellationToken);
                     }
-                    catch (UnauthorizedAccessException)
-                    {
-                        // Skip folders we can't access
-                    }
-                    catch (DirectoryNotFoundException)
-                    {
-                        // Skip folders that don't exist anymore
-                    }
+                    catch (UnauthorizedAccessException) { }
+                    catch (DirectoryNotFoundException) { }
                 }
             }
-            catch (UnauthorizedAccessException)
-            {
-                // Skip folders we can't access
-            }
+            catch (UnauthorizedAccessException) { }
         }
     }
 

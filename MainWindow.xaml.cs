@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -639,15 +640,30 @@ namespace FluxDB
             {
                 try
                 {
-                    using (var reader = new StreamReader(file.Path))
+                    string content;
+                    using (var fs = new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     {
-                        var content = reader.ReadToEnd();
-                        if (content.Length > 5000)
+                        using (var reader = new StreamReader(fs, Encoding.UTF8, true))
                         {
-                            content = content.Substring(0, 5000) + "\n\n... (truncated)";
+                            content = reader.ReadToEnd();
+                            
+                            // If it looks like it's actually ANSI (contains replacement chars and we didn't find a BOM)
+                            if (reader.CurrentEncoding == Encoding.UTF8 && content.Contains("\ufffd"))
+                            {
+                                fs.Position = 0;
+                                using (var readerAnsi = new StreamReader(fs, Encoding.Default))
+                                {
+                                    content = readerAnsi.ReadToEnd();
+                                }
+                            }
                         }
-                        txtPreview.Text = content;
                     }
+
+                    if (content.Length > 5000)
+                    {
+                        content = content.Substring(0, 5000) + "\n\n... (truncated)";
+                    }
+                    txtPreview.Text = content;
                     txtPreviewScroll.Visibility = Visibility.Visible;
                 }
                 catch (Exception)
@@ -1502,15 +1518,11 @@ namespace FluxDB
             }
 
             _isSearchMode = true;
-            List<FileEntry> results;
-
-            // Always search by tag. Allow queries starting with '#' or plain tag names.
-            var tagQuery = query.StartsWith("#") ? query.Substring(1) : query;
-            results = _databaseService.SearchByTag(tagQuery);
+            List<FileEntry> results = _databaseService.SearchFiles(query);
 
             dgFiles.ItemsSource = results.Where(MatchesFilter).ToList();
             txtFileCount.Text = $"{results.Count} found";
-            txtStatus.Text = $"Search tags: {query}";
+            txtStatus.Text = $"Search results for: {query}";
         }
 
         private void DgFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1522,11 +1534,19 @@ namespace FluxDB
 
         private void UpdateDetailsPanel()
         {
-            if (_selectedFile == null || _selectedFile.IsFolder)
+            if (_selectedFile == null)
             {
                 txtNoSelection.Visibility = Visibility.Visible;
                 pnlFileDetails.Visibility = Visibility.Collapsed;
-                txtNoSelection.Text = _selectedFile?.IsFolder == true ? "Folder selected" : "No file selected";
+                txtNoSelection.Text = "No file selected";
+                return;
+            }
+
+            if (_selectedFile.IsFolder)
+            {
+                txtNoSelection.Visibility = Visibility.Visible;
+                pnlFileDetails.Visibility = Visibility.Collapsed;
+                txtNoSelection.Text = $"Folder: {_selectedFile.Name}";
                 return;
             }
 
@@ -1538,7 +1558,7 @@ namespace FluxDB
             txtFileSize.Text = _selectedFile.SizeDisplay;
             txtFileCreated.Text = _selectedFile.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
             txtFileModified.Text = _selectedFile.ModifiedAt.ToString("yyyy-MM-dd HH:mm:ss");
-            txtTags.Text = string.Join(", ", _selectedFile.Tags);
+            txtTags.Text = _selectedFile.TagsText ?? "";
             txtNotes.Text = _selectedFile.Note ?? "";
         }
 
@@ -1558,7 +1578,6 @@ namespace FluxDB
                 _selectedFile.TagsText = string.Join(", ", tags);
                 _selectedFile.Note = txtNotes.Text;
 
-                dgFiles.Items.Refresh();
                 txtStatus.Text = "Saved";
             }
             catch (Exception ex)
