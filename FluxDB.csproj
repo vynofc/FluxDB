@@ -150,6 +150,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="README.md" />
     <Resource Include="FluxDB-icon.ico" />
     <Resource Include="FluxDB-icon.png" />
     <Content Include=".gitignore" />
