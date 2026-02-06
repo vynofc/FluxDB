@@ -81,21 +81,37 @@ namespace FluxDB
         {
             try
             {
-                txtMessage.Text = "Checking for updates...";
-                LoggingService.Log("Startup: Checking for updates");
-                var ok = await CheckForUpdatesAsync();
-                if (!ok)
+                // 1. Check for updates
+                try
                 {
-                    // Installer was started (or update process handled); exit app now.
-                    Application.Current.Shutdown();
-                    return;
+                    txtMessage.Text = "Checking for updates...";
+                    LoggingService.Log("Startup: Checking for updates");
+                    var ok = await CheckForUpdatesAsync();
+                    if (!ok)
+                    {
+                        LoggingService.Log("Startup: Installer started, shutting down app");
+                        Application.Current.Shutdown();
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LoggingService.Log($"Update check failed: {ex.Message}");
                 }
 
-                // Continue on UI thread
-                txtMessage.Text = "Checking license...";
-                await EnsureFreeLicenseAsync();
+                // 2. License check
+                try
+                {
+                    txtMessage.Text = "Checking license...";
+                    LoggingService.Log("Startup: Checking license");
+                    await EnsureFreeLicenseAsync();
+                }
+                catch (Exception ex)
+                {
+                    LoggingService.Log($"License check failed: {ex.Message}");
+                }
 
-                // After ensuring license, attempt to upload indexes while still in splash
+                // 3. Upload indexes
                 try
                 {
                     txtMessage.Text = "Uploading indexes...";
@@ -119,13 +135,14 @@ namespace FluxDB
                 txtMessage.Text = "Starting application...";
                 await Task.Delay(250);
 
-                // Show main window on UI thread
+                // 4. Show main window
                 var main = new MainWindow();
                 main.Show();
                 Close();
             }
             catch (Exception ex)
             {
+                LoggingService.Log($"Startup CRITICAL failure: {ex.Message}");
                 MessageBox.Show("Startup failed: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 Dispatcher.Invoke(() => Application.Current.Shutdown());
             }

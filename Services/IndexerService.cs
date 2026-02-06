@@ -94,8 +94,18 @@ namespace FluxDB.Services
                     // Batch commit for performance and stability
                     if (processed % BatchSize == 0)
                     {
-                        currentTransaction.Commit();
-                        currentTransaction.Dispose();
+                        try
+                        {
+                            currentTransaction.Commit();
+                        }
+                        catch
+                        {
+                            currentTransaction.Rollback();
+                        }
+                        finally
+                        {
+                            currentTransaction.Dispose();
+                        }
                         currentTransaction = _database.BeginTransaction();
                     }
 
@@ -111,11 +121,22 @@ namespace FluxDB.Services
                         });
                     }
                 }
-                currentTransaction.Commit();
+
+                if (!result.Cancelled)
+                {
+                    try
+                    {
+                        currentTransaction.Commit();
+                    }
+                    catch
+                    {
+                        currentTransaction.Rollback();
+                    }
+                }
             }
             finally
             {
-                currentTransaction.Dispose();
+                try { currentTransaction.Dispose(); } catch { }
             }
 
             // Mark deleted files

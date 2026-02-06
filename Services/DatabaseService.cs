@@ -71,32 +71,37 @@ namespace FluxDB.Services
             {
                 while (r.Read())
                 {
-                    var f = new FileEntry
-                    {
-                        Id = r.GetInt32(0),
-                        Path = r.GetString(1),
-                        Name = r.GetString(2),
-                        Extension = r.IsDBNull(3) ? "" : r.GetString(3),
-                        Size = r.GetInt64(4),
-                        CreatedAt = DateTime.Parse(r.GetString(5)),
-                        ModifiedAt = DateTime.Parse(r.GetString(6)),
-                        Deleted = r.GetInt32(7) == 1,
-                        LastIndexedAt = DateTime.Parse(r.GetString(8)),
-                        Note = r.IsDBNull(9) ? "" : r.GetString(9),
-                        TagsText = r.IsDBNull(10) ? "" : r.GetString(10)
-                    };
-                    if (!string.IsNullOrEmpty(f.TagsText))
-                    {
-                        f.Tags = new List<string>(f.TagsText.Split(new[] { ", " }, StringSplitOptions.None));
-                    }
-                    else
-                    {
-                        f.Tags = new List<string>();
-                    }
-                    files.Add(f);
+                    files.Add(MapFileEntry(r));
                 }
             }
             return files;
+        }
+
+        private FileEntry MapFileEntry(SQLiteDataReader r)
+        {
+            var f = new FileEntry
+            {
+                Id = r.GetInt32(0),
+                Path = r.GetString(1),
+                Name = r.GetString(2),
+                Extension = r.IsDBNull(3) ? "" : r.GetString(3),
+                Size = r.IsDBNull(4) ? 0 : r.GetInt64(4),
+                CreatedAt = r.IsDBNull(5) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(5), out var c) ? c : DateTime.MinValue),
+                ModifiedAt = r.IsDBNull(6) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(6), out var m) ? m : DateTime.MinValue),
+                Deleted = r.GetInt32(7) == 1,
+                LastIndexedAt = r.IsDBNull(8) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(8), out var l) ? l : DateTime.MinValue),
+                Note = r.IsDBNull(9) ? "" : r.GetString(9),
+                TagsText = r.IsDBNull(10) ? "" : r.GetString(10)
+            };
+            if (!string.IsNullOrEmpty(f.TagsText))
+            {
+                f.Tags = new List<string>(f.TagsText.Split(new[] { ", " }, StringSplitOptions.None));
+            }
+            else
+            {
+                f.Tags = new List<string>();
+            }
+            return f;
         }
 
         public List<FileEntry> SearchFiles(string query)
@@ -120,29 +125,7 @@ namespace FluxDB.Services
                 {
                     while (r.Read())
                     {
-                        var f = new FileEntry
-                        {
-                            Id = r.GetInt32(0),
-                            Path = r.GetString(1),
-                            Name = r.GetString(2),
-                            Extension = r.IsDBNull(3) ? "" : r.GetString(3),
-                            Size = r.GetInt64(4),
-                            CreatedAt = DateTime.Parse(r.GetString(5)),
-                            ModifiedAt = DateTime.Parse(r.GetString(6)),
-                            Deleted = r.GetInt32(7) == 1,
-                            LastIndexedAt = DateTime.Parse(r.GetString(8)),
-                            Note = r.IsDBNull(9) ? "" : r.GetString(9),
-                            TagsText = r.IsDBNull(10) ? "" : r.GetString(10)
-                        };
-                        if (!string.IsNullOrEmpty(f.TagsText))
-                        {
-                            f.Tags = new List<string>(f.TagsText.Split(new[] { ", " }, StringSplitOptions.None));
-                        }
-                        else
-                        {
-                            f.Tags = new List<string>();
-                        }
-                        files.Add(f);
+                        files.Add(MapFileEntry(r));
                     }
                 }
             }
@@ -168,29 +151,7 @@ namespace FluxDB.Services
                 {
                     while (r.Read())
                     {
-                        var f = new FileEntry
-                        {
-                            Id = r.GetInt32(0),
-                            Path = r.GetString(1),
-                            Name = r.GetString(2),
-                            Extension = r.IsDBNull(3) ? "" : r.GetString(3),
-                            Size = r.GetInt64(4),
-                            CreatedAt = DateTime.Parse(r.GetString(5)),
-                            ModifiedAt = DateTime.Parse(r.GetString(6)),
-                            Deleted = r.GetInt32(7) == 1,
-                            LastIndexedAt = DateTime.Parse(r.GetString(8)),
-                            Note = r.IsDBNull(9) ? "" : r.GetString(9),
-                            TagsText = r.IsDBNull(10) ? "" : r.GetString(10)
-                        };
-                        if (!string.IsNullOrEmpty(f.TagsText))
-                        {
-                            f.Tags = new List<string>(f.TagsText.Split(new[] { ", " }, StringSplitOptions.None));
-                        }
-                        else
-                        {
-                            f.Tags = new List<string>();
-                        }
-                        files.Add(f);
+                        files.Add(MapFileEntry(r));
                     }
                 }
             }

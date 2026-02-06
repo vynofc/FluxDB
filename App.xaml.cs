@@ -32,31 +32,55 @@ namespace FluxDB
                 var localFile = System.IO.Path.Combine(exeDir ?? "", "version.txt");
                 if (System.IO.File.Exists(localFile))
                 {
-                    var ver = System.IO.File.ReadAllText(localFile).Trim();
-                    if (!string.IsNullOrEmpty(ver) && CompareVersionsInternal(ver, maxVer) > 0) maxVer = ver;
+                    try
+                    {
+                        var ver = System.IO.File.ReadAllText(localFile).Trim();
+                        if (!string.IsNullOrEmpty(ver) && CompareVersionsInternal(ver, maxVer) > 0) maxVer = ver;
+                    }
+                    catch (Exception ex)
+                    {
+                        FluxDB.Services.LoggingService.Log($"Error reading local version.txt: {ex.Message}");
+                    }
                 }
 
                 // 2. Try central version.txt
                 var centralFile = "C:\\NSCE\\FluxDB\\version.txt";
                 if (System.IO.File.Exists(centralFile))
                 {
-                    var ver = System.IO.File.ReadAllText(centralFile).Trim();
-                    if (!string.IsNullOrEmpty(ver) && CompareVersionsInternal(ver, maxVer) > 0) maxVer = ver;
+                    try
+                    {
+                        var ver = System.IO.File.ReadAllText(centralFile).Trim();
+                        if (!string.IsNullOrEmpty(ver) && CompareVersionsInternal(ver, maxVer) > 0) maxVer = ver;
+                    }
+                    catch (Exception ex)
+                    {
+                        FluxDB.Services.LoggingService.Log($"Error reading central version.txt: {ex.Message}");
+                    }
                 }
 
                 // 3. Try highest version zip in C:\NSCE\FluxDB
                 var centralDir = "C:\\NSCE\\FluxDB";
                 if (System.IO.Directory.Exists(centralDir))
                 {
-                    var zips = System.IO.Directory.GetFiles(centralDir, "*.zip");
-                    foreach (var zip in zips)
+                    try
                     {
-                        var name = System.IO.Path.GetFileNameWithoutExtension(zip);
-                        if (!string.IsNullOrEmpty(name) && CompareVersionsInternal(name, maxVer) > 0) maxVer = name;
+                        var zips = System.IO.Directory.GetFiles(centralDir, "*.zip");
+                        foreach (var zip in zips)
+                        {
+                            var name = System.IO.Path.GetFileNameWithoutExtension(zip);
+                            if (!string.IsNullOrEmpty(name) && CompareVersionsInternal(name, maxVer) > 0) maxVer = name;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        FluxDB.Services.LoggingService.Log($"Error scanning central ZIPs: {ex.Message}");
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                FluxDB.Services.LoggingService.Log($"Error in GetLocalVersion: {ex.Message}");
+            }
 
             // 4. Fallback to Assembly
             try
@@ -66,7 +90,10 @@ namespace FluxDB
                 var assVer = inf?.InformationalVersion ?? ass.GetName().Version.ToString();
                 if (CompareVersionsInternal(assVer, maxVer) > 0) maxVer = assVer;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                FluxDB.Services.LoggingService.Log($"Error reading Assembly version: {ex.Message}");
+            }
 
             return maxVer;
         }

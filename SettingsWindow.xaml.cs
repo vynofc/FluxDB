@@ -30,8 +30,6 @@ namespace FluxDB
         private void LoadSettings()
         {
             txtCurrentVersion.Text = App.GetLocalVersion();
-            cmbTheme.SelectedIndex = Settings.Theme == "Light" ? 1 : 0;
-            txtPreviewScale.Text = Settings.PreviewScale.ToString("0.0");
         }
 
         private void LoadLicenseInfo()
@@ -120,14 +118,6 @@ namespace FluxDB
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
-            var themeItem = cmbTheme.SelectedItem as ComboBoxItem;
-            Settings.Theme = themeItem?.Content?.ToString() ?? "Dark";
-
-            if (double.TryParse(txtPreviewScale.Text, out var s))
-            {
-                Settings.PreviewScale = Math.Max(0.3, Math.Min(3.0, s));
-            }
-
             DialogResult = true;
             Close();
         }
