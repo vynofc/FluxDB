@@ -97,6 +97,15 @@
                             <ColumnDefinition Width="120"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
+                        <TextBlock Text="Current Version:" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" x:Name="txtCurrentVersion" Text="0.0.0" VerticalAlignment="Center" FontWeight="Bold"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
                         <TextBlock Text="Theme:" VerticalAlignment="Center"/>
                         <ComboBox Grid.Column="1" x:Name="cmbTheme" Width="200" HorizontalAlignment="Left" Background="{StaticResource SecondaryBackgroundBrush}" Foreground="{StaticResource ForegroundBrush}">
                             <ComboBoxItem Content="Dark"/>

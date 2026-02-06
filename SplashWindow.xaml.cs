@@ -131,54 +131,42 @@ namespace FluxDB
             }
         }
 
-        private int CompareVersionToAssembly(string remoteRaw, Version assemblyVer)
+        private string NormalizeVersion(string s)
         {
-            string Normalize(string s)
+            if (string.IsNullOrWhiteSpace(s)) return "";
+            s = s.Trim();
+            if (s.Contains("!")) s = s.Split('!')[0].Trim();
+            if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
+            return s.Trim();
+        }
+
+        private int CompareVersions(string v1, string v2)
+        {
+            var s1 = NormalizeVersion(v1);
+            var s2 = NormalizeVersion(v2);
+
+            if (s1 == s2) return 0;
+
+            var p1 = s1.Split('-');
+            var p2 = s2.Split('-');
+
+            if (Version.TryParse(p1[0], out Version ver1) && Version.TryParse(p2[0], out Version ver2))
             {
-                if (string.IsNullOrWhiteSpace(s)) return "";
-                s = s.Trim();
-                // Strip labels starting with '!' (e.g. v0.1.5!beta -> v0.1.5)
-                if (s.Contains("!")) s = s.Split('!')[0].Trim();
-                if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
-                return s;
+                int cmp = ver1.CompareTo(ver2);
+                if (cmp != 0) return cmp;
             }
 
-            var a = Normalize(remoteRaw);
-            var aParts = a.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+            // Base version same, check suffixes
+            bool hasSuffix1 = p1.Length > 1;
+            bool hasSuffix2 = p2.Length > 1;
 
-            // assemblyVer may be null, but normally not
-            var bMajor = assemblyVer?.Major ?? 0;
-            var bMinor = assemblyVer?.Minor ?? 0;
-            var bBuild = assemblyVer?.Build >= 0 ? assemblyVer.Build : 0;
-            var bRev = assemblyVer?.Revision >= 0 ? assemblyVer.Revision : 0;
+            if (!hasSuffix1 && hasSuffix2) return 1;  // Release > Beta
+            if (hasSuffix1 && !hasSuffix2) return -1; // Beta < Release
 
-            var max = Math.Max(aParts.Length, 4);
-
-            for (int i = 0; i < max; i++)
+            if (hasSuffix1 && hasSuffix2)
             {
-                int ai = 0;
-                if (i < aParts.Length)
-                {
-                    string part = aParts[i];
-                    // Handle version suffixes like -beta1 by taking only the numeric part (e.g. "4-beta1" -> "4")
-                    if (part.Contains("-"))
-                    {
-                        part = part.Split('-')[0];
-                    }
-                    int.TryParse(part, out ai);
-                }
-
-                int bi = 0;
-                switch (i)
-                {
-                    case 0: bi = bMajor; break;
-                    case 1: bi = bMinor; break;
-                    case 2: bi = bBuild; break;
-                    case 3: bi = bRev; break;
-                }
-
-                if (ai < bi) return -1;
-                if (ai > bi) return 1;
+                // Simple string compare for beta suffixes (beta1 < beta2)
+                return string.Compare(p1[1], p2[1], StringComparison.OrdinalIgnoreCase);
             }
 
             return 0;
@@ -192,10 +180,13 @@ namespace FluxDB
                 bool skipUpdate = args.Any(a => a.Trim().Equals("--noupdate", StringComparison.OrdinalIgnoreCase));
                 App.IsUpdateSkipped = skipUpdate;
 
-                var exePath = Assembly.GetExecutingAssembly().Location;
-                var exeDir = Path.GetDirectoryName(exePath) ?? ".";
-                var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
+                var localVersionStr = App.GetLocalVersion();
+                bool isLocalBeta = localVersionStr.Contains("-");
 
+                var assembly = Assembly.GetExecutingAssembly();
+                var exePath = assembly.Location;
+                var exeDir = Path.GetDirectoryName(exePath) ?? ".";
+                
                 using (var http = new HttpClient())
                 {
                     http.Timeout = TimeSpan.FromSeconds(10);
@@ -211,123 +202,96 @@ namespace FluxDB
                     }
 
                     if (string.IsNullOrEmpty(remoteVersionText))
-                        return true; // cannot check, continue
+                        return true;
 
                     var parts = remoteVersionText.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-                    string newestRemoteRelease = null;
-                    Version maxVersion = null;
+                    string newestStableRaw = null;
+                    string newestOverallRaw = null;
 
                     foreach (var part in parts)
                     {
                         var raw = part.Trim();
-                        // Skip beta versions
-                        if (raw.IndexOf("beta", StringComparison.OrdinalIgnoreCase) >= 0)
-                            continue;
+                        bool isRemoteBeta = raw.Contains("!beta");
 
-                        // Strip installer labels starting with '!'
-                        var cleanVersion = raw;
-                        if (cleanVersion.Contains("!"))
+                        if (newestOverallRaw == null || CompareVersions(raw, newestOverallRaw) > 0)
+                            newestOverallRaw = raw;
+
+                        if (!isRemoteBeta)
                         {
-                            cleanVersion = cleanVersion.Split('!')[0].Trim();
-                        }
-
-                        // Parse version for comparison
-                        if (cleanVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
-                            cleanVersion = cleanVersion.Substring(1);
-
-                        if (Version.TryParse(cleanVersion, out Version parsedVersion))
-                        {
-                            if (maxVersion == null || parsedVersion > maxVersion)
-                            {
-                                maxVersion = parsedVersion;
-                                newestRemoteRelease = raw; // Keep original raw string (with labels if any) for update path
-                            }
+                            if (newestStableRaw == null || CompareVersions(raw, newestStableRaw) > 0)
+                                newestStableRaw = raw;
                         }
                     }
 
-                    if (string.IsNullOrEmpty(newestRemoteRelease))
-                        return true;
+                    LoggingService.Log($"Update check: Stable={newestStableRaw}, Overall={newestOverallRaw}, Local={localVersionStr}");
 
-                    // Strip '!' labels from newestRemoteRelease for semantic comparison if not already handled
-                    var finalRemoteRaw = newestRemoteRelease;
-                    if (finalRemoteRaw.Contains("!"))
+                    string targetUpdateRaw = null;
+
+                    // Logic:
+                    // 1. If a newer Stable is available -> Force Update to newest Stable
+                    if (newestStableRaw != null && CompareVersions(newestStableRaw, localVersionStr) > 0)
                     {
-                        finalRemoteRaw = finalRemoteRaw.Split('!')[0].Trim();
+                        targetUpdateRaw = newestStableRaw;
+                    }
+                    // 2. If a newer Overall (Beta) is available
+                    else if (newestOverallRaw != null && CompareVersions(newestOverallRaw, localVersionStr) > 0)
+                    {
+                        if (isLocalBeta)
+                        {
+                            // If we are already on a beta, force update to newest available (next beta or release)
+                            targetUpdateRaw = newestOverallRaw;
+                        }
+                        else
+                        {
+                            // We are on Stable, and there is only a newer Beta available -> Optional
+                            App.IsBetaUpdateAvailable = true;
+                            App.AvailableBetaVersion = NormalizeVersion(newestOverallRaw);
+                            return true;
+                        }
                     }
 
-                    // Compare semantic versions
-                    var cmp = CompareVersionToAssembly(finalRemoteRaw, assemblyVersion);
-                    LoggingService.Log($"Update check: Remote={finalRemoteRaw}, Local={assemblyVersion}, Result={cmp}");
-                    if (cmp <= 0)
+                    if (targetUpdateRaw == null)
                     {
-                        // up-to-date
+                        // Up to date
                         return true;
                     }
 
-                    // New version available
+                    // New version available for force update
+                    var finalRemoteRaw = NormalizeVersion(targetUpdateRaw);
                     App.IsUpdateAvailable = true;
                     App.AvailableVersion = finalRemoteRaw;
 
                     if (skipUpdate)
                     {
                         LoggingService.Log("Update available but --noupdate flag is set. Skipping installer.");
-                        return true; // Continue app startup
+                        return true;
                     }
 
-                    // expected zip name MUST match exactly the remote string (without .zip)
-                    var zipName = $"{finalRemoteRaw}.zip";
+                    // Zip name should match what's in version.txt (without !beta suffix)
+                    var zipName = targetUpdateRaw.Split('!')[0].Trim() + ".zip";
                     var zipPath = Path.Combine("C:\\NSCE\\FluxDB", zipName);
-
-                    // If the expected zip is missing, attempt to run installer (from that folder) or download it
                     LoggingService.Log($"Expected zip path: {zipPath} exists={File.Exists(zipPath)}");
-                    if (!File.Exists(zipPath))
+
+                    // Start installer
+                    var installerInFolder = Path.Combine("C:\\NSCE\\FluxDB", "FluxDB-Installer.exe");
+                    if (File.Exists(installerInFolder))
                     {
-                        // If there is an installer in that folder, prefer starting it from there
-                        var installerInFolder = Path.Combine("C:\\NSCE\\FluxDB", "FluxDB-Installer.exe");
-                        if (File.Exists(installerInFolder))
+                        var startInfo = new ProcessStartInfo(installerInFolder)
                         {
-                            var startInfo = new ProcessStartInfo(installerInFolder)
-                            {
-                                WorkingDirectory = Path.GetDirectoryName(installerInFolder),
-                                UseShellExecute = true
-                            };
-                            Process.Start(startInfo);
-                            return false; // exit app after starting installer
-                        }
-
-                        LoggingService.Log("Downloading installer as fallback");
-                        // Otherwise download and run installer
-                        return await DownloadAndRunInstallerAsync(exeDir).ConfigureAwait(false);
+                            WorkingDirectory = Path.GetDirectoryName(installerInFolder),
+                            UseShellExecute = true
+                        };
+                        Process.Start(startInfo);
+                        return false; 
                     }
 
-                    if (File.Exists(zipPath))
-                    {
-                        // If there is an installer in that folder, prefer starting it from there
-                        var installerInFolder = Path.Combine("C:\\NSCE\\FluxDB", "FluxDB-Installer.exe");
-                        if (File.Exists(installerInFolder))
-                        {
-                            var startInfo = new ProcessStartInfo(installerInFolder)
-                            {
-                                WorkingDirectory = Path.GetDirectoryName(installerInFolder),
-                                UseShellExecute = true
-                            };
-                            Process.Start(startInfo);
-                            return false; // exit app after starting installer
-                        }
-
-                        // Otherwise fall back to running any installer next to the exe (existing behavior)
-                        return await RunInstallerAsync(exeDir).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        // Download installer executable and run
-                        return await DownloadAndRunInstallerAsync(exeDir).ConfigureAwait(false);
-                    }
+                    return await RunInstallerAsync(exeDir).ConfigureAwait(false);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                return true; // on error, continue startup
+                LoggingService.Log($"Update check error: {ex.Message}");
+                return true;
             }
         }
 

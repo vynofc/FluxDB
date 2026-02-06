@@ -29,6 +29,7 @@ namespace FluxDB
 
         private void LoadSettings()
         {
+            txtCurrentVersion.Text = App.GetLocalVersion();
             cmbTheme.SelectedIndex = Settings.Theme == "Light" ? 1 : 0;
             txtPreviewScale.Text = Settings.PreviewScale.ToString("0.0");
         }
@@ -48,6 +49,12 @@ namespace FluxDB
                 txtUpdateStatus.Foreground = Brushes.Orange;
                 btnDownloadUpdate.Visibility = Visibility.Visible;
             }
+            else if (App.IsBetaUpdateAvailable)
+            {
+                txtUpdateStatus.Text = $"Beta available: {App.AvailableBetaVersion}";
+                txtUpdateStatus.Foreground = Brushes.Cyan;
+                btnDownloadUpdate.Visibility = Visibility.Visible;
+            }
             else
             {
                 txtUpdateStatus.Text = "Your version is up to date.";
@@ -58,6 +65,11 @@ namespace FluxDB
             if (App.IsUpdateSkipped)
             {
                 txtUpdateDetails.Text = "Program started with --noupdate. Auto-update was skipped.";
+                txtUpdateDetails.Visibility = Visibility.Visible;
+            }
+            else if (App.IsBetaUpdateAvailable && !App.IsUpdateAvailable)
+            {
+                txtUpdateDetails.Text = "A newer beta version is available for testing.";
                 txtUpdateDetails.Visibility = Visibility.Visible;
             }
             else
