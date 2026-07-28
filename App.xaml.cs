@@ -35,7 +35,7 @@ namespace FluxDB
                     try
                     {
                         var ver = System.IO.File.ReadAllText(localFile).Trim();
-                        if (!string.IsNullOrEmpty(ver) && CompareVersionsInternal(ver, maxVer) > 0) maxVer = ver;
+                        if (!string.IsNullOrEmpty(ver) && VersionHelper.CompareVersions(ver, maxVer) > 0) maxVer = ver;
                     }
                     catch (Exception ex)
                     {
@@ -44,13 +44,14 @@ namespace FluxDB
                 }
 
                 // 2. Try central version.txt
-                var centralFile = "C:\\NSCE\\FluxDB\\version.txt";
+                var centralDir = Environment.GetEnvironmentVariable("FLUXDB_CENTRAL_DIR") ?? "C:\\NSCE\\FluxDB";
+                var centralFile = System.IO.Path.Combine(centralDir, "version.txt");
                 if (System.IO.File.Exists(centralFile))
                 {
                     try
                     {
                         var ver = System.IO.File.ReadAllText(centralFile).Trim();
-                        if (!string.IsNullOrEmpty(ver) && CompareVersionsInternal(ver, maxVer) > 0) maxVer = ver;
+                        if (!string.IsNullOrEmpty(ver) && VersionHelper.CompareVersions(ver, maxVer) > 0) maxVer = ver;
                     }
                     catch (Exception ex)
                     {
@@ -58,8 +59,7 @@ namespace FluxDB
                     }
                 }
 
-                // 3. Try highest version zip in C:\NSCE\FluxDB
-                var centralDir = "C:\\NSCE\\FluxDB";
+                // 3. Try highest version zip in FLUXDB_CENTRAL_DIR
                 if (System.IO.Directory.Exists(centralDir))
                 {
                     try
@@ -68,7 +68,7 @@ namespace FluxDB
                         foreach (var zip in zips)
                         {
                             var name = System.IO.Path.GetFileNameWithoutExtension(zip);
-                            if (!string.IsNullOrEmpty(name) && CompareVersionsInternal(name, maxVer) > 0) maxVer = name;
+                            if (!string.IsNullOrEmpty(name) && VersionHelper.CompareVersions(name, maxVer) > 0) maxVer = name;
                         }
                     }
                     catch (Exception ex)
@@ -88,7 +88,7 @@ namespace FluxDB
                 var ass = System.Reflection.Assembly.GetExecutingAssembly();
                 var inf = (System.Reflection.AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(ass, typeof(System.Reflection.AssemblyInformationalVersionAttribute));
                 var assVer = inf?.InformationalVersion ?? ass.GetName().Version.ToString();
-                if (CompareVersionsInternal(assVer, maxVer) > 0) maxVer = assVer;
+                if (VersionHelper.CompareVersions(assVer, maxVer) > 0) maxVer = assVer;
             }
             catch (Exception ex)
             {
@@ -96,45 +96,6 @@ namespace FluxDB
             }
 
             return maxVer;
-        }
-
-        private static string NormalizeVersionInternal(string s)
-        {
-            if (string.IsNullOrWhiteSpace(s)) return "";
-            s = s.Trim();
-            if (s.Contains("!")) s = s.Split('!')[0].Trim();
-            if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
-            return s.Trim();
-        }
-
-        private static int CompareVersionsInternal(string v1, string v2)
-        {
-            var s1 = NormalizeVersionInternal(v1);
-            var s2 = NormalizeVersionInternal(v2);
-
-            if (s1 == s2) return 0;
-
-            var p1 = s1.Split('-');
-            var p2 = s2.Split('-');
-
-            if (Version.TryParse(p1[0], out Version ver1) && Version.TryParse(p2[0], out Version ver2))
-            {
-                int cmp = ver1.CompareTo(ver2);
-                if (cmp != 0) return cmp;
-            }
-
-            bool hasSuffix1 = p1.Length > 1;
-            bool hasSuffix2 = p2.Length > 1;
-
-            if (!hasSuffix1 && hasSuffix2) return 1;
-            if (hasSuffix1 && !hasSuffix2) return -1;
-
-            if (hasSuffix1 && hasSuffix2)
-            {
-                return string.Compare(p1[1], p2[1], StringComparison.OrdinalIgnoreCase);
-            }
-
-            return 0;
         }
     }
 }

@@ -14,17 +14,10 @@ namespace FluxDB
     public partial class SplashWindow : Window
     {
         private readonly SettingsService _settingsService = new SettingsService();
-        private readonly LicenseService _licenseService;
 
         public SplashWindow()
         {
             InitializeComponent();
-            _licenseService = new LicenseService(_settingsService);
-            // Update splash message when upload reports status
-            _licenseService.UploadStatusChanged += (msg) =>
-            {
-                try { Dispatcher.Invoke(() => txtMessage.Text = msg); } catch { }
-            };
             Loaded += SplashWindow_Loaded;
             btnCancel.Click += (s, e) => { Application.Current.Shutdown(); };
 
@@ -82,54 +75,29 @@ namespace FluxDB
             try
             {
                 // 1. Check for updates
-                try
+                var settings = _settingsService.Load();
+                if (settings.AutoUpdateCheck)
                 {
-                    txtMessage.Text = "Checking for updates...";
-                    LoggingService.Log("Startup: Checking for updates");
-                    var ok = await CheckForUpdatesAsync();
-                    if (!ok)
+                    try
                     {
-                        LoggingService.Log("Startup: Installer started, shutting down app");
-                        Application.Current.Shutdown();
-                        return;
+                        txtMessage.Text = "Checking for updates...";
+                        LoggingService.Log("Startup: Checking for updates");
+                        var ok = await CheckForUpdatesAsync();
+                        if (!ok)
+                        {
+                            LoggingService.Log("Startup: Installer started, shutting down app");
+                            Application.Current.Shutdown();
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LoggingService.Log($"Update check failed: {ex.Message}");
                     }
                 }
-                catch (Exception ex)
+                else
                 {
-                    LoggingService.Log($"Update check failed: {ex.Message}");
-                }
-
-                // 2. License check
-                try
-                {
-                    txtMessage.Text = "Checking license...";
-                    LoggingService.Log("Startup: Checking license");
-                    await EnsureFreeLicenseAsync();
-                }
-                catch (Exception ex)
-                {
-                    LoggingService.Log($"License check failed: {ex.Message}");
-                }
-
-                // 3. Upload indexes
-                try
-                {
-                    txtMessage.Text = "Uploading indexes...";
-                    var settings = _settingsService.Load();
-                    if (!string.IsNullOrEmpty(settings.LicenseKey))
-                    {
-                        LoggingService.Log("Startup: Triggering upload of indexes from splash");
-                        await _licenseService.UploadAllIndexesNowAsync(settings.LicenseKey);
-                        LoggingService.Log("Startup: Upload routine finished");
-                    }
-                    else
-                    {
-                        LoggingService.Log("Startup: No license key, skipping upload");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LoggingService.Log($"Startup upload failed: {ex.Message}");
+                    LoggingService.Log("Startup: AutoUpdateCheck disabled, skipping update check");
                 }
 
                 txtMessage.Text = "Starting application...";
@@ -150,43 +118,12 @@ namespace FluxDB
 
         private string NormalizeVersion(string s)
         {
-            if (string.IsNullOrWhiteSpace(s)) return "";
-            s = s.Trim();
-            if (s.Contains("!")) s = s.Split('!')[0].Trim();
-            if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
-            return s.Trim();
+            return VersionHelper.NormalizeVersion(s);
         }
 
         private int CompareVersions(string v1, string v2)
         {
-            var s1 = NormalizeVersion(v1);
-            var s2 = NormalizeVersion(v2);
-
-            if (s1 == s2) return 0;
-
-            var p1 = s1.Split('-');
-            var p2 = s2.Split('-');
-
-            if (Version.TryParse(p1[0], out Version ver1) && Version.TryParse(p2[0], out Version ver2))
-            {
-                int cmp = ver1.CompareTo(ver2);
-                if (cmp != 0) return cmp;
-            }
-
-            // Base version same, check suffixes
-            bool hasSuffix1 = p1.Length > 1;
-            bool hasSuffix2 = p2.Length > 1;
-
-            if (!hasSuffix1 && hasSuffix2) return 1;  // Release > Beta
-            if (hasSuffix1 && !hasSuffix2) return -1; // Beta < Release
-
-            if (hasSuffix1 && hasSuffix2)
-            {
-                // Simple string compare for beta suffixes (beta1 < beta2)
-                return string.Compare(p1[1], p2[1], StringComparison.OrdinalIgnoreCase);
-            }
-
-            return 0;
+            return VersionHelper.CompareVersions(v1, v2);
         }
 
         private async Task<bool> CheckForUpdatesAsync()
@@ -367,65 +304,6 @@ namespace FluxDB
             {
                 return true;
             }
-        }
-
-        private async Task EnsureFreeLicenseAsync()
-        {
-            try
-            {
-                var settings = _settingsService.Load();
-                if (!string.IsNullOrEmpty(settings.LicenseKey))
-                    return; // already has license
-
-                // request free license from API
-                var deviceId = _licenseService.GetDeviceId();
-                var appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
-
-                var payload = new { deviceId = deviceId, appVersion = appVersion };
-                var json = Newtonsoft.Json.JsonConvert.SerializeObject(payload);
-
-                using (var http = new HttpClient())
-                {
-                    http.Timeout = TimeSpan.FromSeconds(10);
-                    var url = "https://fluxdb.nsce.fr/api/license/free";
-                    HttpResponseMessage resp = null;
-                    try
-                    {
-                        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-                        resp = await http.PostAsync(url, content).ConfigureAwait(false);
-                    }
-                    catch { }
-
-                    if (resp == null) return;
-                    if (!resp.IsSuccessStatusCode) return;
-
-                    var respJson = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    try
-                    {
-                        var j = Newtonsoft.Json.Linq.JObject.Parse(respJson);
-                        var ok = j.Value<bool?>("ok") ?? false;
-                        if (!ok) return;
-                        var license = j["license"];
-                        if (license == null) return;
-                        var key = license.Value<string>("key");
-
-                        if (!string.IsNullOrEmpty(key))
-                        {
-                            settings.LicenseKey = key;
-                            settings.LicenseValid = true;
-                            settings.LicenseExpiresAt = license.Value<DateTime?>("expiresAt");
-                            settings.LastLicenseCheck = DateTime.Now;
-                            // Mark as auto-generated so manual activations can override later
-                            settings.IsAutoGeneratedFreeLicense = true;
-                            _settingsService.Save(settings);
-
-                            LoggingService.Log($"Saved free license: {key}");
-                        }
-                    }
-                    catch { }
-                }
-            }
-            catch { }
         }
     }
 }

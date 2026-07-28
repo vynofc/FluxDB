@@ -33,7 +33,6 @@ namespace FluxDB.Services
                 Version = "1.0",
                 ExportedAt = DateTime.Now,
                 RootFolder = rootFolder,
-                DeviceId = GetDeviceId(),
                 TotalFiles = files.Count
             };
 
@@ -86,12 +85,6 @@ namespace FluxDB.Services
         public string GetDefaultExportPath()
         {
             return Path.Combine(_settings.GetAppDataDirectory(), "index.json");
-        }
-
-        private string GetDeviceId()
-        {
-            var settings = _settings.Load();
-            return settings.DeviceId ?? "unknown";
         }
     }
 }

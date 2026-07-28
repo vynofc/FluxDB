@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -94,18 +95,8 @@ namespace FluxDB.Services
                     // Batch commit for performance and stability
                     if (processed % BatchSize == 0)
                     {
-                        try
-                        {
-                            currentTransaction.Commit();
-                        }
-                        catch
-                        {
-                            currentTransaction.Rollback();
-                        }
-                        finally
-                        {
-                            currentTransaction.Dispose();
-                        }
+                        CommitBatchWithRetry(currentTransaction);
+                        currentTransaction.Dispose();
                         currentTransaction = _database.BeginTransaction();
                     }
 
@@ -124,14 +115,11 @@ namespace FluxDB.Services
 
                 if (!result.Cancelled)
                 {
-                    try
-                    {
-                        currentTransaction.Commit();
-                    }
-                    catch
-                    {
-                        currentTransaction.Rollback();
-                    }
+                    CommitBatchWithRetry(currentTransaction);
+                }
+                else
+                {
+                    try { currentTransaction.Rollback(); } catch { }
                 }
             }
             finally
@@ -151,6 +139,33 @@ namespace FluxDB.Services
             StatusChanged?.Invoke(this, result.Cancelled ? "Cancelled" : "Indexing complete!");
 
             return result;
+        }
+
+        private void CommitBatchWithRetry(SQLiteTransaction transaction)
+        {
+            const int maxRetries = 3;
+            int delayMs = 100;
+            for (int attempt = 0; attempt < maxRetries; attempt++)
+            {
+                try
+                {
+                    transaction.Commit();
+                    return;
+                }
+                catch
+                {
+                    if (attempt < maxRetries - 1)
+                    {
+                        Thread.Sleep(delayMs);
+                        delayMs *= 2;
+                    }
+                    else
+                    {
+                        try { transaction.Rollback(); } catch { }
+                        throw;
+                    }
+                }
+            }
         }
 
         private void CollectFiles(string path, List<string> files, CancellationToken cancellationToken)

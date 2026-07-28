@@ -74,9 +74,6 @@
     <Compile Include="SplashWindow.xaml.cs">
       <DependentUpon>SplashWindow.xaml</DependentUpon>
     </Compile>
-    <Page Include="FluxDB\RenameDialog.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
     <Page Include="LogViewer.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -95,9 +92,6 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="FluxDB\RenameDialog.xaml.cs">
-      <DependentUpon>RenameDialog.xaml</DependentUpon>
-    </Compile>
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
@@ -105,13 +99,12 @@
     <Compile Include="Models\AppSettings.cs" />
     <Compile Include="Models\FileEntry.cs" />
     <Compile Include="Models\IndexExport.cs" />
-    <Compile Include="Models\LicenseInfo.cs" />
     <Compile Include="Models\Tag.cs" />
     <Compile Include="Services\DatabaseService.cs" />
     <Compile Include="Services\ExportService.cs" />
     <Compile Include="Services\IndexerService.cs" />
-    <Compile Include="Services\LicenseService.cs" />
     <Compile Include="Services\SettingsService.cs" />
+    <Compile Include="VersionHelper.cs" />
     <Page Include="RefreshDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>

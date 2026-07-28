@@ -28,7 +28,6 @@ namespace FluxDB
         private SettingsService _settingsService;
         private DatabaseService _databaseService;
         private IndexerService _indexerService;
-        private LicenseService _licenseService;
         private ExportService _exportService;
         
         private CancellationTokenSource _indexCancellation;
@@ -78,14 +77,6 @@ namespace FluxDB
         private void InitializeServices()
         {
             _settingsService = new SettingsService();
-            _licenseService = new LicenseService(_settingsService);
-            _licenseService.UploadStatusChanged += (msg) =>
-            {
-                Dispatcher.Invoke(() =>
-                {
-                    txtStatus.Text = msg;
-                });
-            };
             _databaseService = null;
             _indexerService = null;
             _exportService = null;
@@ -101,20 +92,10 @@ namespace FluxDB
             _indexerService.ProgressChanged += IndexerService_ProgressChanged;
             _indexerService.StatusChanged += IndexerService_StatusChanged;
 
-            // Inform license service about export service so it can upload indexes
-            _licenseService?.SetExportService(_exportService);
-
-            // Make sure this folder is recorded as recent / last root so uploads include it
+            // Make sure this folder is recorded as recent / last root
             try
             {
                 _settingsService.AddRecentFolder(folderPath);
-            }
-            catch { }
-
-            // Trigger upload check now (if a valid license is stored and upload feature is allowed)
-            try
-            {
-                _licenseService?.TriggerUploadIfAllowed();
             }
             catch { }
         }
@@ -154,8 +135,6 @@ namespace FluxDB
             {
                 txtStatus.Text = "Ready - Select a folder or drag & drop to start";
             }
-
-            UpdateLicenseStatus();
         }
 
         #region Keyboard Shortcuts
@@ -326,6 +305,10 @@ namespace FluxDB
                 {
                     if (item.IsFolder && Directory.Exists(item.Path))
                     {
+                        if (_databaseService != null && item.Id > 0)
+                        {
+                            _databaseService.MarkPathAsDeleted(item.Path);
+                        }
                         Directory.Delete(item.Path, true);
                         deletedCount++;
                     }
@@ -373,6 +356,10 @@ namespace FluxDB
                     if (selected.IsFolder)
                     {
                         Directory.Move(selected.Path, newPath);
+                        if (_databaseService != null)
+                        {
+                            _databaseService.UpdateFolderPath(selected.Path, newPath);
+                        }
                     }
                     else
                     {
@@ -958,7 +945,7 @@ namespace FluxDB
                                 copiedCount++;
                             }
 
-                            Dispatcher.Invoke(() => AddFileToIndex(targetPath));
+                            Dispatcher.BeginInvoke(new Action(() => AddFileToIndex(targetPath)));
                         }
                         else if (Directory.Exists(sourcePath))
                         {
@@ -977,7 +964,7 @@ namespace FluxDB
                                 copiedCount++;
                             }
 
-                            Dispatcher.Invoke(() => AddFolderToIndex(targetPath));
+                            Dispatcher.BeginInvoke(new Action(() => AddFolderToIndex(targetPath)));
                         }
                     }
                     catch (Exception ex)
@@ -1032,9 +1019,30 @@ namespace FluxDB
             try
             {
                 var files = Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories);
-                foreach (var file in files)
+                using (var transaction = _databaseService.BeginTransaction())
                 {
-                    AddFileToIndex(file);
+                    foreach (var file in files)
+                    {
+                        try
+                        {
+                            var fileInfo = new FileInfo(file);
+                            var entry = new FileEntry
+                            {
+                                Path = file,
+                                Name = fileInfo.Name,
+                                Extension = fileInfo.Extension,
+                                Size = fileInfo.Length,
+                                CreatedAt = fileInfo.CreationTime,
+                                ModifiedAt = fileInfo.LastWriteTime
+                            };
+                            _databaseService.UpsertFile(entry, transaction);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Error adding file to index: {ex.Message}");
+                        }
+                    }
+                    transaction.Commit();
                 }
             }
             catch (Exception ex)
@@ -1348,39 +1356,6 @@ namespace FluxDB
                               Directory.GetParent(_currentViewFolder)?.FullName != null;
         }
 
-        private async void UpdateLicenseStatus()
-        {
-            var storedKey = _licenseService.GetStoredLicenseKey();
-            if (!string.IsNullOrEmpty(storedKey))
-            {
-                var license = await _licenseService.CheckLicenseAsync(storedKey);
-                UpdateLicenseUI(license);
-                // If license allows uploads, start upload process
-                _licenseService.TriggerUploadIfAllowed();
-            }
-            else
-            {
-                licenseIndicator.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ff9800"));
-                txtLicenseStatus.Text = "No License";
-            }
-        }
-
-        private void UpdateLicenseUI(LicenseInfo license)
-        {
-            if (license.Valid)
-            {
-                licenseIndicator.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4caf50"));
-                txtLicenseStatus.Text = license.ExpiresAt.HasValue 
-                    ? $"Licensed until {license.ExpiresAt.Value:yyyy-MM-dd}" 
-                    : "Licensed";
-            }
-            else
-            {
-                licenseIndicator.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#f44336"));
-                txtLicenseStatus.Text = string.IsNullOrEmpty(license.ErrorMessage) ? "Invalid License" : license.ErrorMessage;
-            }
-        }
-
         #region Navigation Event Handlers
 
         private void BtnBack_Click(object sender, RoutedEventArgs e)
@@ -1477,13 +1452,11 @@ namespace FluxDB
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
         {
             var settings = _settingsService.Load();
-            var settingsWindow = new SettingsWindow(settings, _licenseService, _exportService, _currentRootFolder);
+            var settingsWindow = new SettingsWindow(settings, _exportService, _currentRootFolder);
             settingsWindow.Owner = this;
             if (settingsWindow.ShowDialog() == true)
             {
                 _settingsService.Save(settingsWindow.Settings);
-                // Apply theme or other settings if needed
-                UpdateLicenseStatus();
             }
         }
 
@@ -1523,7 +1496,7 @@ namespace FluxDB
             }
 
             _isSearchMode = true;
-            List<FileEntry> results = _databaseService.SearchFiles(query);
+            List<FileEntry> results = _databaseService.SearchFiles(query, _currentViewFolder ?? _currentRootFolder);
 
             dgFiles.ItemsSource = results.Where(MatchesFilter).ToList();
             txtFileCount.Text = $"{results.Count} found";
@@ -1727,7 +1700,7 @@ namespace FluxDB
         {
             if (_indexerService == null || _databaseService == null)
             {
-                InitializeDatabaseForFolder(folder);
+                InitializeDatabaseForFolder(_currentRootFolder ?? folder);
             }
 
             var cts = new CancellationTokenSource();

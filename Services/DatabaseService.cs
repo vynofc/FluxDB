@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Data.SQLite;
 using System.IO;
 using FluxDB.Models;
@@ -28,7 +29,14 @@ namespace FluxDB.Services
                 CREATE TABLE IF NOT EXISTS file_tags (file_id INTEGER, tag_id INTEGER, PRIMARY KEY (file_id, tag_id));
                 CREATE TABLE IF NOT EXISTS notes (file_id INTEGER PRIMARY KEY, note TEXT);
             ";
-            using (var cmd = new SQLiteCommand(sql, _connection)) { cmd.ExecuteNonQuery(); }
+            using (var transaction = _connection.BeginTransaction())
+            {
+                using (var cmd = new SQLiteCommand(sql, _connection, transaction))
+                {
+                    cmd.ExecuteNonQuery();
+                }
+                transaction.Commit();
+            }
         }
 
         public SQLiteTransaction BeginTransaction()
@@ -58,20 +66,23 @@ namespace FluxDB.Services
         {
             var files = new List<FileEntry>();
             var sql = @"
-                SELECT f.*, n.note, GROUP_CONCAT(t.name, ', ') as tags_text
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
                 FROM files f
                 LEFT JOIN notes n ON f.id = n.file_id
                 LEFT JOIN file_tags ft ON f.id = ft.file_id
                 LEFT JOIN tags t ON ft.tag_id = t.id
-                WHERE " + (includeDeleted ? "1=1" : "f.deleted=0") + @"
+                WHERE (f.deleted = 0 OR @includeDeleted = 1)
                 GROUP BY f.id";
 
             using (var cmd = new SQLiteCommand(sql, _connection))
-            using (var r = cmd.ExecuteReader())
             {
-                while (r.Read())
+                cmd.Parameters.AddWithValue("@includeDeleted", includeDeleted ? 1 : 0);
+                using (var r = cmd.ExecuteReader())
                 {
-                    files.Add(MapFileEntry(r));
+                    while (r.Read())
+                    {
+                        files.Add(MapFileEntry(r));
+                    }
                 }
             }
             return files;
@@ -95,7 +106,7 @@ namespace FluxDB.Services
             };
             if (!string.IsNullOrEmpty(f.TagsText))
             {
-                f.Tags = new List<string>(f.TagsText.Split(new[] { ", " }, StringSplitOptions.None));
+                f.Tags = new List<string>(f.TagsText.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries));
             }
             else
             {
@@ -109,7 +120,7 @@ namespace FluxDB.Services
             if (string.IsNullOrWhiteSpace(query)) return GetAllFiles();
             var files = new List<FileEntry>();
             var sql = @"
-                SELECT f.*, n.note, GROUP_CONCAT(t.name, ', ') as tags_text
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
                 FROM files f
                 LEFT JOIN notes n ON f.id = n.file_id
                 LEFT JOIN file_tags ft ON f.id = ft.file_id
@@ -136,7 +147,7 @@ namespace FluxDB.Services
         {
             var files = new List<FileEntry>();
             var sql = @"
-                SELECT f.*, n.note, GROUP_CONCAT(t.name, ', ') as tags_text
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
                 FROM files f
                 LEFT JOIN notes n ON f.id = n.file_id
                 INNER JOIN file_tags ft ON f.id = ft.file_id
@@ -291,6 +302,72 @@ namespace FluxDB.Services
                 cmd.Parameters.AddWithValue("@id", fileId);
                 cmd.ExecuteNonQuery();
             }
+        }
+
+        public void MarkPathAsDeleted(string folderPath)
+        {
+            var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
+            using (var cmd = new SQLiteCommand("UPDATE files SET deleted=1 WHERE path=@path OR path LIKE @prefix", _connection))
+            {
+                cmd.Parameters.AddWithValue("@path", folderPath);
+                cmd.Parameters.AddWithValue("@prefix", prefix + "%");
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public void UpdateFolderPath(string oldPath, string newPath)
+        {
+            var oldPrefix = oldPath.EndsWith("\\") ? oldPath : oldPath + "\\";
+            var newPrefix = newPath.EndsWith("\\") ? newPath : newPath + "\\";
+            using (var transaction = _connection.BeginTransaction())
+            {
+                using (var cmd = new SQLiteCommand(
+                    @"UPDATE files SET path = @newPrefix || SUBSTR(path, @oldLen + 1), 
+                      name = CASE WHEN path = @oldPath THEN @newName ELSE name END
+                      WHERE path = @oldPath OR path LIKE @oldPrefix",
+                    _connection, transaction))
+                {
+                    cmd.Parameters.AddWithValue("@oldPath", oldPath);
+                    cmd.Parameters.AddWithValue("@newPrefix", newPrefix);
+                    cmd.Parameters.AddWithValue("@oldLen", oldPrefix.Length);
+                    cmd.Parameters.AddWithValue("@oldPrefix", oldPrefix + "%");
+                    cmd.Parameters.AddWithValue("@newName", Path.GetFileName(newPath));
+                    cmd.ExecuteNonQuery();
+                }
+                transaction.Commit();
+            }
+        }
+
+        public List<FileEntry> SearchFiles(string query, string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+                return GetAllFiles().Where(f => f.Path.StartsWith(folderPath, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            var files = new List<FileEntry>();
+            var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
+            var sql = @"
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
+                FROM files f
+                LEFT JOIN notes n ON f.id = n.file_id
+                LEFT JOIN file_tags ft ON f.id = ft.file_id
+                LEFT JOIN tags t ON ft.tag_id = t.id
+                WHERE f.deleted=0 AND f.path LIKE @folderPrefix
+                GROUP BY f.id
+                HAVING f.name LIKE @q OR f.path LIKE @q OR tags_text LIKE @q OR n.note LIKE @q";
+
+            using (var cmd = new SQLiteCommand(sql, _connection))
+            {
+                cmd.Parameters.AddWithValue("@q", "%" + query + "%");
+                cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        files.Add(MapFileEntry(r));
+                    }
+                }
+            }
+            return files;
         }
 
         public void UpdateFilePathAndName(int fileId, string newPath, string newName)

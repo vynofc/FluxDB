@@ -58,30 +58,40 @@ namespace FluxDB.Services
 
         private static void ProcessWriteQueue(object state)
         {
-            while (true)
+            try
             {
-                string[] linesToWrite;
+                while (true)
+                {
+                    string[] linesToWrite;
+                    lock (_lock)
+                    {
+                        if (_writeQueue.Count == 0)
+                        {
+                            _isProcessingQueue = false;
+                            return;
+                        }
+                        linesToWrite = _writeQueue.ToArray();
+                        _writeQueue.Clear();
+                    }
+
+                    try
+                    {
+                        File.AppendAllLines(_logFilePath, linesToWrite, Encoding.UTF8);
+                    }
+                    catch
+                    {
+                        // swallow file write errors
+                    }
+                    
+                    Thread.Sleep(100); // Small delay to batch more logs
+                }
+            }
+            catch
+            {
                 lock (_lock)
                 {
-                    if (_writeQueue.Count == 0)
-                    {
-                        _isProcessingQueue = false;
-                        return;
-                    }
-                    linesToWrite = _writeQueue.ToArray();
-                    _writeQueue.Clear();
+                    _isProcessingQueue = false;
                 }
-
-                try
-                {
-                    File.AppendAllLines(_logFilePath, linesToWrite, Encoding.UTF8);
-                }
-                catch
-                {
-                    // swallow file write errors
-                }
-                
-                Thread.Sleep(100); // Small delay to batch more logs
             }
         }
 

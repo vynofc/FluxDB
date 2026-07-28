@@ -25,7 +25,6 @@ namespace FluxDB.Models
         public string Version { get; set; } = "1.0";
         public DateTime ExportedAt { get; set; }
         public string RootFolder { get; set; }
-        public string DeviceId { get; set; }
         public int TotalFiles { get; set; }
         public List<IndexExportItem> Files { get; set; } = new List<IndexExportItem>();
     }
