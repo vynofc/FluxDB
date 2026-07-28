@@ -2,13 +2,18 @@
 
 ## Project Overview
 
-FluxDB is a **WPF desktop application** (C# 7.3, .NET Framework 4.7.2) for Windows. It scans local folders, indexes file metadata into an embedded SQLite database, and provides a file manager with tagging, search, preview, and export capabilities.
+FluxDB consists of two components:
+
+1. **FluxDB** — a **WPF desktop application** (C# 7.3, .NET Framework 4.7.2) for Windows. It scans local folders, indexes file metadata into an embedded SQLite database, and provides a file manager with tagging, search, preview, and export capabilities.
+2. **FluxDB Installer** — a **Go-based TUI installer** (Go 1.22+) that downloads the latest FluxDB release from GitHub and extracts it to `%LOCALAPPDATA%\FluxDB`.
 
 **Key constraint**: Windows-only. Uses WPF, shell32.dll COM interop, and hardcoded `C:\NSCE\FluxDB` paths.
 
 ---
 
 ## Build & Run
+
+### FluxDB (WPF App)
 
 ```bash
 # Restore NuGet packages
@@ -23,21 +28,42 @@ msbuild FluxDB.sln /p:Configuration=Debug /p:Platform="Any CPU"
 
 Executable output: `bin/Release/FluxDB.exe` or `bin/Debug/FluxDB.exe`.
 
-CI runs on `windows-latest` via GitHub Actions (`.github/workflows/build.yml`). The release workflow (`release.yml`) builds Release and zips `bin\Release\*` plus `x64`/`x86` SQLite interop folders.
+### FluxDB Installer (Go)
+
+```bash
+# Windows
+cd Installer && build.bat
+
+# Cross-compile from Linux/macOS
+cd Installer && bash build.sh
+```
+
+Executable output: `Installer/bin/FluxDB-Installer.exe`.
 
 **No test suite exists** in this project.
 
 ---
 
+## CI / Workflows
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `build.yml` | Push/PR to `main` | Builds FluxDB.sln (MSBuild) on `windows-latest` |
+| `release.yml` | Release published | Builds FluxDB.sln + Installer (Go), packages both into `FluxDB.zip`, uploads zip + `FluxDB-Installer.exe` as release assets |
+
+---
+
 ## Architecture
 
-### Startup flow
+### FluxDB (WPF App)
+
+#### Startup flow
 
 1. `App.xaml` sets `StartupUri="SplashWindow.xaml"`
 2. `SplashWindow` checks for updates (HTTP GET `https://nsce-cdn.fun/FluxDB/version.txt`), then creates and shows `MainWindow`
 3. `MainWindow` constructor calls `InitializeServices()` → `LoadInitialData()`
 
-### Service layer
+#### Service layer
 
 | Service | Type | Responsibilities |
 |---|---|---|
@@ -47,7 +73,7 @@ CI runs on `windows-latest` via GitHub Actions (`.github/workflows/build.yml`). 
 | `ExportService` | instance | Converts DB contents to JSON (`IndexExport` model), writes to file or GZip stream. |
 | `LoggingService` | **static** | Thread-safe in-memory log buffer (2000 lines) + background file writer to `%LocalAppData%\FluxDB\logs.txt`. |
 
-### Models
+#### Models
 
 | Model | Notes |
 |---|---|
@@ -56,7 +82,7 @@ CI runs on `windows-latest` via GitHub Actions (`.github/workflows/build.yml`). 
 | `AppSettings` | JSON-serialized via Newtonsoft.Json. Contains `DeviceId`, `LastRootFolder`, `Theme`, `PreviewScale`, `AutoUpdateCheck`, `RecentFolders`, `FolderFilters`. |
 | `IndexExport` / `IndexExportItem` | Export format for JSON/GZip output. |
 
-### Database schema
+#### Database schema
 
 SQLite database file named `.fluxdb` lives in the root of the indexed folder:
 
@@ -65,13 +91,67 @@ SQLite database file named `.fluxdb` lives in the root of the indexed folder:
 - `file_tags` — `file_id`, `tag_id` (composite PK)
 - `notes` — `file_id` (PK), `note`
 
-### UI layer
+#### UI layer
 
 - `MainWindow` — primary file browser/search/tagging UI. Dark theme defined in XAML resources.
 - `SettingsWindow` — update check, auto-update toggle, export button.
 - `LogViewer` — reads `LoggingService.GetLogs()`.
 - `RefreshDialog` — modal with three options: rescan entire root, current view, or specific folder.
 - `SplashWindow` — transient startup window with update check.
+
+### FluxDB Installer (Go)
+
+#### Startup flow
+
+1. `main.go` parses CLI flags (`--tag`, `--path`, `--silent`)
+2. If `--silent`: runs `runSilent()` — plain text output, no TUI
+3. Otherwise: starts Bubble Tea TUI with `initialModel()`
+
+#### State machine
+
+```
+stateFetchingTag → stateDownloading → stateExtracting → stateDone
+     ↓                  ↓                  ↓              ↓
+  stateError        stateError         stateError     (Enter→Quit)
+```
+
+#### Source files
+
+| File | Responsibility |
+|---|---|
+| `main.go` | Entrypoint, CLI flag parsing, TUI/Silent dispatch |
+| `model.go` | Bubble Tea model, states, message types |
+| `update.go` | State machine (Update function) |
+| `view.go` | Rendering (TUI + silent view) |
+| `github.go` | GitHub API: fetch latest release tag, build download URL |
+| `download.go` | ZIP download from GitHub Releases to `%TEMP%` |
+| `extract.go` | ZIP extraction to `%LOCALAPPDATA%\FluxDB`, writes `version.txt`, cleans up temp file |
+| `silent.go` | Silent-mode logic (no Bubble Tea), `fetchTag`/`downloadSilent`/`extractSilent` helpers |
+| `styles.go` | Lipgloss styles (dark theme matching FluxDB) |
+
+#### CLI flags
+
+| Flag | Description |
+|---|---|
+| `--tag <version>` | Install specific version (skips GitHub API call) |
+| `--path <dir>` | Alternative install directory (default: `%LOCALAPPDATA%\FluxDB`) |
+| `--silent` | No TUI, text-only output (for CI/scripting) |
+
+#### Dependencies
+
+| Module | Purpose |
+|---|---|
+| `github.com/charmbracelet/bubbletea` | TUI framework |
+| `github.com/charmbracelet/bubbles` | Progress bar, spinner |
+| `github.com/charmbracelet/lipgloss` | Terminal styling |
+| `github.com/charmbracelet/log` | Structured logging |
+
+#### What the installer does NOT do
+
+- No autostart / Start Menu entries
+- No auto-update (FluxDB handles this via `SplashWindow`)
+- No uninstall (delete `%LOCALAPPDATA%\FluxDB` manually)
+- No admin rights needed (installs to `%LOCALAPPDATA%`)
 
 ---
 
@@ -194,11 +274,13 @@ Called whenever a new root folder is opened. It **disposes the old `DatabaseServ
 
 ### PLAN.md
 
-The `PLAN.md` file at the repo root documents known bugs and a planned refactoring. It is not a spec for new features — it's a bug tracker/audit. Many of the issues listed there have been partially addressed (e.g., `InitDb` now uses transactions, `GROUP_CONCAT` uses `\0` separator, `SearchFiles` accepts a `folderPath` parameter, `MarkPathAsDeleted` and `UpdateFolderPath` exist, `CommitBatchWithRetry` was added) but the file was not updated to reflect fixes.
+The `PLAN.md` file at the repo root documents the Installer design and known bugs/planned refactoring for the WPF app. It is not a spec for new features — it's a planning document. Many of the issues listed there have been partially addressed (e.g., `InitDb` now uses transactions, `GROUP_CONCAT` uses `\0` separator, `SearchFiles` accepts a `folderPath` parameter, `MarkPathAsDeleted` and `UpdateFolderPath` exist, `CommitBatchWithRetry` was added) but the file was not updated to reflect fixes.
 
 ---
 
 ## Conventions
+
+### FluxDB (C# / WPF)
 
 - **Namespace**: `FluxDB` for UI/root, `FluxDB.Models` for models, `FluxDB.Services` for services.
 - **Naming**: PascalCase for public, `_camelCase` for private fields. Controls use Hungarian-like prefixes (`txtSearch`, `btnRefresh`, `dgFiles`, `pnlProgress`). Event handlers follow the `ControlName_EventName` pattern (e.g., `BtnRefresh_Click`, `DgFiles_Sorting`).
@@ -206,4 +288,11 @@ The `PLAN.md` file at the repo root documents known bugs and a planned refactori
 - **German UI**: Some UI strings and comments are in German (the project is German-authored).
 - **No async/await in constructors**: Services are initialized synchronously; async work is fire-and-forget or triggered by UI events.
 - **XAML**: Dark theme with hardcoded color brushes. No resource dictionaries or theming abstraction.
-- **Code organization**: `MainWindow.xaml.cs` is ~1800+ lines and uses `#region` blocks for logical grouping (`Keyboard Shortcuts`, `Clipboard Operations`, `Context Menu`, `Filter`, `Preview`, `Sorting`, `Drag & Drop`, etc.). New features should follow this pattern.
+
+### Installer (Go)
+
+- **Package**: Single `main` package (no sub-packages).
+- **Naming**: Standard Go conventions (camelCase, PascalCase for exports).
+- **Error handling**: Errors propagated as Bubble Tea messages (`errMsg`), surfaced in TUI or stderr.
+- **German UI**: All user-facing strings are in German.
+- **Build**: `-ldflags="-s -w"` for stripped release binaries. Cross-compiled with `GOOS=windows GOARCH=amd64`.
