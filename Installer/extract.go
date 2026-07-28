@@ -25,7 +25,7 @@ func extractCmd(zipPath, customPath string) tea.Cmd {
 
 		reader, err := zip.OpenReader(zipPath)
 		if err != nil {
-			return errMsg{err: fmt.Errorf("ZIP öffnen fehlgeschlagen: %w", err)}
+			return errMsg{err: fmt.Errorf("ZIP oeffnen fehlgeschlagen: %w", err)}
 		}
 		defer reader.Close()
 
@@ -46,7 +46,7 @@ func extractCmd(zipPath, customPath string) tea.Cmd {
 
 		os.Remove(zipPath)
 
-		return extractCompleteMsg{}
+		return extractCompleteMsg{installDir: installDir}
 	}
 }
 
