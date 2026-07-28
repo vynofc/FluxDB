@@ -10,18 +10,45 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func createShortcutCmd(installDir string) tea.Cmd {
+func createShortcutsCmd(installDir string) tea.Cmd {
 	return func() tea.Msg {
-		desktopDir := filepath.Join(os.Getenv("USERPROFILE"), "Desktop")
-		shortcutPath := filepath.Join(desktopDir, "FluxDB.lnk")
-
 		exePath := findExe(installDir)
 		if exePath == "" {
 			return errMsg{err: fmt.Errorf("FluxDB.exe nicht gefunden in %s", installDir)}
 		}
 
-		if err := createWindowsShortcut(shortcutPath, exePath, installDir); err != nil {
-			return errMsg{err: fmt.Errorf("verknuepfung erstellen fehlgeschlagen: %w", err)}
+		exePath = strings.ReplaceAll(exePath, "/", "\\")
+		installDir = strings.ReplaceAll(installDir, "/", "\\")
+
+		psScript := fmt.Sprintf(
+			`$WshShell = New-Object -ComObject WScript.Shell
+
+$desktop = [Environment]::GetFolderPath("Desktop")
+$shortcut = $WshShell.CreateShortcut("$desktop\FluxDB.lnk")
+$shortcut.TargetPath = "%s"
+$shortcut.WorkingDirectory = "%s"
+$shortcut.Description = "FluxDB - File Manager"
+$shortcut.Save()
+
+$startMenu = [Environment]::GetFolderPath("Programs") + "\FluxDB"
+if (!(Test-Path $startMenu)) { New-Item -ItemType Directory -Path $startMenu -Force | Out-Null }
+$shortcut = $WshShell.CreateShortcut("$startMenu\FluxDB.lnk")
+$shortcut.TargetPath = "%s"
+$shortcut.WorkingDirectory = "%s"
+$shortcut.Description = "FluxDB - File Manager"
+$shortcut.Save()
+`, exePath, installDir, exePath, installDir)
+
+		tmpFile := filepath.Join(os.TempDir(), "fluxdb_shortcut.ps1")
+		if err := os.WriteFile(tmpFile, []byte(psScript), 0644); err != nil {
+			return errMsg{err: fmt.Errorf("powershell script schreiben fehlgeschlagen: %w", err)}
+		}
+		defer os.Remove(tmpFile)
+
+		cmd := exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", tmpFile)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return errMsg{err: fmt.Errorf("verknuepfung fehlgeschlagen: %w: %s", err, string(output))}
 		}
 
 		return shortcutCreatedMsg{}
@@ -38,33 +65,4 @@ func findExe(dir string) string {
 		return matches[0]
 	}
 	return ""
-}
-
-func createWindowsShortcut(shortcutPath, targetPath, workingDir string) error {
-	shortcutPath = strings.ReplaceAll(shortcutPath, "/", "\\")
-	targetPath = strings.ReplaceAll(targetPath, "/", "\\")
-	workingDir = strings.ReplaceAll(workingDir, "/", "\\")
-
-	vbsContent := fmt.Sprintf(
-		`Set WshShell = WScript.CreateObject("WScript.Shell")
-Set Shortcut = WshShell.CreateShortcut("%s")
-Shortcut.TargetPath = "%s"
-Shortcut.WorkingDirectory = "%s"
-Shortcut.Description = "FluxDB - File Manager"
-Shortcut.Save
-`, shortcutPath, targetPath, workingDir)
-
-	tmpFile := filepath.Join(os.TempDir(), "fluxdb_shortcut.vbs")
-	if err := os.WriteFile(tmpFile, []byte(vbsContent), 0644); err != nil {
-		return err
-	}
-	defer os.Remove(tmpFile)
-
-	cmd := exec.Command("cscript", "//Nologo", tmpFile)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%w: %s", err, string(output))
-	}
-
-	return nil
 }

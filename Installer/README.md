@@ -37,8 +37,11 @@ Ausgabe: `Installer/bin/FluxDB-Installer.exe`
 ## Verwendung
 
 ```bash
-# Interaktive Installation (TUI mit Versionsauswahl, Fortschritt, Log)
+# Einfache Installation (nimmt automatisch neueste Version, minimale Anzeige)
 FluxDB-Installer.exe
+
+# Detail-Modus (Versionsauswahl + ausführliches Log)
+FluxDB-Installer.exe --detail
 
 # Bestimmte Version installieren (überspringt Versionsauswahl)
 FluxDB-Installer.exe --tag v1.2.3
@@ -57,11 +60,31 @@ FluxDB-Installer.exe --silent --tag v1.2.3
 | `--tag <version>` | Bestimmte Version installieren (überspringt Versionsauswahl) |
 | `--path <dir>` | Alternatives Installationsverzeichnis (Standard: `%LOCALAPPDATA%\FluxDB`) |
 | `--silent` | Keine TUI, nur Text-Output |
+| `--detail` | Detailmodus: interaktive Versionsauswahl + ausführliches Log
 
 ## Ablauf
 
+### Standard-Modus (ohne --detail)
+
 ```
-Loading → Version wählen → Download → Entpacken → Verknüpfung? → Done
+Version ermitteln → Download → Entpacken → Shortcut? → Done
+     │                 │            │            │
+     ▼                 ▼            ▼            ▼
+GitHub API         Fortschritt    ZIP nach    Desktop-.lnk
+Latest Release     + Download    %LOCALAPPDATA%  (optional)
+                   in %TEMP%     \FluxDB
+```
+
+1. **Version ermitteln**: Holt den neuesten Release-Tag via GitHub API
+2. **Download**: Lädt `FluxDB.zip` nach `%TEMP%` mit Fortschrittsbalken
+3. **Entpacken**: Extrahiert nach `%LOCALAPPDATA%\FluxDB`, schreibt `version.txt`
+4. **Shortcut**: `huh`-Confirm fragt nach Desktop- und Startmenü-Verknüpfung
+5. **Done**: Erfolgsmeldung mit Installationspfad
+
+### Detail-Modus (mit --detail)
+
+```
+Loading → Version wählen → Download → Entpacken → Shortcut? → Done
    │           │               │            │            │
    ▼           ▼               ▼            ▼            ▼
 GitHub API  huh-Select    Fortschritt    ZIP nach    Desktop-.lnk
@@ -69,12 +92,7 @@ Releases    (alle Tags)   + Download    %LOCALAPPDATA%  (optional)
 abrufen                   in %TEMP%     \FluxDB
 ```
 
-1. **Loading**: Ruft alle Releases via `GET https://api.github.com/repos/vynofc/FluxDB/releases` ab
-2. **Version wählen**: Interaktives `huh`-Select-Menü mit allen verfügbaren Versionen (neueste zuerst)
-3. **Download**: Lädt `FluxDB.zip` von GitHub Releases nach `%TEMP%` mit Echtzeit-Fortschrittsbalken
-4. **Entpacken**: Extrahiert das ZIP nach `%LOCALAPPDATA%\FluxDB` und schreibt `version.txt`
-5. **Verknüpfung**: `huh`-Confirm fragt, ob eine Desktop-Verknüpfung erstellt werden soll
-6. **Done**: Erfolgsmeldung mit Installationspfad, Log-Viewport zeigt alle Details
+Zusätzlich: ausführlicher Log-Viewport mit allen API-Abfragen, Dateipfaden und Statusmeldungen.
 
 ## Abhängigkeiten
 
@@ -116,7 +134,14 @@ Mit `--tag` überspringt die Machine `stateSelectVersion` und beginnt direkt bei
 ## Scope-Abgrenzung
 
 Der Installer macht **nicht**:
-- Autostart / Startmenü-Einträge (nur Desktop-Verknüpfung)
 - Auto-Update (das macht FluxDB selbst via `SplashWindow`)
 - Deinstallation (`%LOCALAPPDATA%\FluxDB` löschen reicht)
 - Admin-Rechte (Installation nach `%LOCALAPPDATA%` benötigt keine Elevation)
+
+## Verknüpfungen
+
+Auf Wunsch erstellt der Installer:
+- **Desktop**: `FluxDB.lnk` auf dem Desktop
+- **Startmenü**: `FluxDB.lnk` unter `Start Menu\Programs\FluxDB\`
+
+Beide werden via VBScript (`cscript`) erstellt und zeigen auf die `FluxDB.exe` im Installationsverzeichnis.
