@@ -114,6 +114,84 @@ When renaming or deleting folders, the DB entries for all files under that path 
 - Skip with `--noupdate` CLI flag.
 - Central version file: `C:\NSCE\FluxDB\version.txt` (overridable via `FLUXDB_CENTRAL_DIR` env var).
 
+### Keyboard shortcuts (MainWindow)
+
+| Key | Action |
+|---|---|
+| `Ctrl+C` | Copy selected files |
+| `Ctrl+X` | Cut selected files |
+| `Ctrl+V` | Paste from clipboard |
+| `Delete` | Delete selected files (with confirmation) |
+| `F2` | Rename selected file/folder |
+| `F5` | Refresh current folder view |
+| `F8` | Open log viewer |
+| `Ctrl+F` | Focus search box |
+| `Alt+Left` | Navigate back |
+| `Alt+Right` | Navigate forward |
+| `Alt+Up` / `Backspace` | Go to parent folder |
+| `Enter` | Open selected item |
+| `Escape` | Focus away from TextBox to DataGrid |
+
+Shortcuts are handled in `Window_PreviewKeyDown` and suppressed when focus is in a TextBox (except Escape).
+
+### Navigation history
+
+`MainWindow` maintains `_backHistory` and `_forwardHistory` stacks (`Stack<string>`) for folder navigation. Navigating to a new folder pushes the current folder onto the back stack and clears the forward stack. The `Alt+Left`/`Alt+Right` shortcuts pop from these stacks.
+
+### Drag & drop
+
+- Dropping a folder on the window when no root folder is open → indexes that folder as new root.
+- Dropping files/folders into the current view → copies them (or moves them if **Shift** is held). Uses `CopyOrMoveFilesAsync` which runs on a background thread and calls `Dispatcher.BeginInvoke` for UI updates.
+- `GetUniqueFilePath` and `GetUniqueFolderPath` handle naming conflicts (appends ` (2)`, ` (3)`, etc.) before the copy/move.
+
+### Sorting
+
+DataGrid sorting (`DgFiles_Sorting`) is handled manually rather than via `CollectionViewSource`. **Folders always appear first** regardless of sort direction. Sorting is done in-memory by splitting the list into folders and files, sorting each, then concatenating.
+
+### Preview
+
+- **Images**: Loaded via `BitmapImage` with `DecodePixelWidth=400` and `Freeze()` to prevent memory leaks.
+- **PDFs**: Uses `GetShellThumbnail` (shell32.dll COM interop via `IShellItemImageFactory`) to extract thumbnails. If no thumbnail handler is available, shows a fallback message.
+- **Text files**: Read with UTF-8 detection. If the file contains replacement characters (`\ufffd`) and no BOM was found, it falls back to `Encoding.Default` (ANSI). Content is truncated at 5000 characters.
+- **Image zoom**: Vertical-only zoom via mouse wheel in the preview ScrollViewer. Ctrl+wheel accelerates zoom (1.25x vs 1.1x). Scale is clamped to 0.1–10.0.
+
+### Shell thumbnail COM interop
+
+`GetShellThumbnail` in `MainWindow.xaml.cs` uses `IShellItemImageFactory` from shell32.dll via COM interop. This is a **Windows-only** pattern and requires the `WindowsAPICodePack` or manual P/Invoke. The method is fragile — any changes to COM interop or the shell API surface must be tested on the target Windows version.
+
+### SQLite interop DLLs
+
+The `System.Data.SQLite` NuGet package requires platform-specific native interop DLLs (`SQLite.Interop.dll`) in `x64/` and `x86/` subdirectories relative to the executable. These are included in the release zip. The csproj explicitly references them as content items.
+
+### App-level version state
+
+Static properties on `App` (`App.xaml.cs`):
+- `IsUpdateAvailable`, `AvailableVersion` — set by `SplashWindow` after checking remote version
+- `IsBetaUpdateAvailable`, `AvailableBetaVersion` — same for beta releases
+- `IsUpdateSkipped` — set when `--noupdate` CLI flag is present
+
+`App.GetLocalVersion()` resolves the installed version in this priority order:
+1. `version.txt` in the app directory
+2. `version.txt` in `C:\NSCE\FluxDB` (or `FLUXDB_CENTRAL_DIR`)
+3. Highest version number from `.zip` filenames in the central directory
+4. Assembly informational version as fallback
+
+### `SearchFiles` overloads
+
+`DatabaseService` has two overloads:
+- `SearchFiles(string query)` — searches all files globally
+- `SearchFiles(string query, string folderPath)` — restricts to files whose path starts with the given folder
+
+The folder-scoped overload uses `LIKE @folderPrefix` in SQL and filters the no-query fallback with `StartsWith` on the client side. Always use the folder-scoped overload when searching within the current view.
+
+### `FolderFilters` persistence
+
+`AppSettings` has a `FolderFilters` dictionary (`Dictionary<string, string>`) that stores the last selected filter type per root folder. This is loaded in `LoadFilterForFolder` and saved in `SaveFilterForFolder`. The `MatchesFilter` method in `MainWindow` does client-side filtering (folders always pass through).
+
+### InitializeDatabaseForFolder
+
+Called whenever a new root folder is opened. It **disposes the old `DatabaseService`** (and implicitly the old connection), creates a new one pointing to the `.fluxdb` file in the new folder, then wires up `IndexerService` and `ExportService`. The `_settingsService` persists, but `_databaseService`, `_indexerService`, and `_exportService` are replaced.
+
 ### PLAN.md
 
 The `PLAN.md` file at the repo root documents known bugs and a planned refactoring. It is not a spec for new features — it's a bug tracker/audit. Many of the issues listed there have been partially addressed (e.g., `InitDb` now uses transactions, `GROUP_CONCAT` uses `\0` separator, `SearchFiles` accepts a `folderPath` parameter, `MarkPathAsDeleted` and `UpdateFolderPath` exist, `CommitBatchWithRetry` was added) but the file was not updated to reflect fixes.
@@ -123,8 +201,9 @@ The `PLAN.md` file at the repo root documents known bugs and a planned refactori
 ## Conventions
 
 - **Namespace**: `FluxDB` for UI/root, `FluxDB.Models` for models, `FluxDB.Services` for services.
-- **Naming**: PascalCase for public, `_camelCase` for private fields. Controls use Hungarian-like prefixes (`txtSearch`, `btnRefresh`, `dgFiles`, `pnlProgress`).
+- **Naming**: PascalCase for public, `_camelCase` for private fields. Controls use Hungarian-like prefixes (`txtSearch`, `btnRefresh`, `dgFiles`, `pnlProgress`). Event handlers follow the `ControlName_EventName` pattern (e.g., `BtnRefresh_Click`, `DgFiles_Sorting`).
 - **Error handling**: Broad try-catch with silent swallowing is common. `LoggingService.Log()` is used to record errors.
 - **German UI**: Some UI strings and comments are in German (the project is German-authored).
 - **No async/await in constructors**: Services are initialized synchronously; async work is fire-and-forget or triggered by UI events.
 - **XAML**: Dark theme with hardcoded color brushes. No resource dictionaries or theming abstraction.
+- **Code organization**: `MainWindow.xaml.cs` is ~1800+ lines and uses `#region` blocks for logical grouping (`Keyboard Shortcuts`, `Clipboard Operations`, `Context Menu`, `Filter`, `Preview`, `Sorting`, `Drag & Drop`, etc.). New features should follow this pattern.
