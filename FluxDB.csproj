@@ -70,6 +70,9 @@
     <Compile Include="RefreshDialog.xaml.cs">
       <DependentUpon>RefreshDialog.xaml</DependentUpon>
     </Compile>
+    <Compile Include="RenameDialog.xaml.cs">
+      <DependentUpon>RenameDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Services\LoggingService.cs" />
     <Compile Include="SplashWindow.xaml.cs">
       <DependentUpon>SplashWindow.xaml</DependentUpon>
@@ -106,6 +109,9 @@
     <Compile Include="Services\SettingsService.cs" />
     <Compile Include="VersionHelper.cs" />
     <Page Include="RefreshDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="RenameDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="SplashWindow.xaml">
