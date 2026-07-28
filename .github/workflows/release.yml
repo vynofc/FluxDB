@@ -24,6 +24,16 @@ jobs:
       - name: Build
         run: msbuild FluxDB.sln /p:Configuration=Release /p:Platform="Any CPU"
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build Installer
+        run: |
+          cd Installer
+          go build -ldflags="-s -w" -o ../FluxDB-Installer.exe .
+
       - name: Create zip
         run: |
           mkdir dist
@@ -34,6 +44,7 @@ jobs:
           copy bin\Release\System.Data.SQLite.dll dist\
           xcopy bin\Release\x64 dist\x64\ /E /I
           xcopy bin\Release\x86 dist\x86\ /E /I
+          copy FluxDB-Installer.exe dist\
           Compress-Archive -Path dist\* -DestinationPath FluxDB.zip
 
       - name: Upload release asset
@@ -45,3 +56,13 @@ jobs:
           asset_path: FluxDB.zip
           asset_name: FluxDB.zip
           asset_content_type: application/zip
+
+      - name: Upload installer asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: FluxDB-Installer.exe
+          asset_name: FluxDB-Installer.exe
+          asset_content_type: application/vnd.microsoft.portable-executable
