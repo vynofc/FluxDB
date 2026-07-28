@@ -13,6 +13,7 @@ func main() {
 	customTag := flag.String("tag", "", "Bestimmte Version installieren (z.B. v1.0.0)")
 	customPath := flag.String("path", "", "Alternatives Installationsverzeichnis")
 	silent := flag.Bool("silent", false, "Keine TUI, nur Text-Output")
+	detail := flag.Bool("detail", false, "Detailmodus: Versionsauswahl + ausfuehrliches Log")
 	flag.Parse()
 
 	logger := log.New(os.Stderr)
@@ -23,8 +24,8 @@ func main() {
 		return
 	}
 
-	m := initialModel(*customTag, *customPath)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	m := initialModel(*customTag, *customPath, *detail)
+	p := tea.NewProgram(&m, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Fehler: %v\n", err)

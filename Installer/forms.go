@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/huh"
 )
 
-func buildVersionForm(releases []string) *huh.Form {
+func buildVersionForm(releases []string, selected *string) *huh.Form {
 	options := make([]huh.Option[string], len(releases))
 	for i, r := range releases {
 		label := r
@@ -16,30 +16,28 @@ func buildVersionForm(releases []string) *huh.Form {
 		options[i] = huh.NewOption(label, r)
 	}
 
-	var selected string
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Welche Version soll installiert werden?").
 				Description("Waehle eine Version aus der Liste.").
 				Options(options...).
-				Value(&selected),
+				Value(selected),
 		),
 	)
 
 	return form
 }
 
-func buildShortcutForm() *huh.Form {
-	var createShortcut bool
+func buildShortcutForm(createShortcut *bool) *huh.Form {
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
-				Title("Desktop-Verknuepfung erstellen?").
-				Description("Soll eine Verknuepfung auf dem Desktop erstellt werden?").
+				Title("Verknuepfungen erstellen?").
+				Description("Sollen Desktop- und Startmenue-Verknuepfungen erstellt werden?").
 				Affirmative("Ja, erstellen!").
 				Negative("Nein, danke").
-				Value(&createShortcut),
+				Value(createShortcut),
 		),
 	)
 

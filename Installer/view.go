@@ -17,8 +17,10 @@ func (m model) View() string {
 	s.WriteString(m.renderContent())
 	s.WriteString("\n\n")
 
-	s.WriteString(m.viewport.View())
-	s.WriteString("\n")
+	if m.detail {
+		s.WriteString(m.viewport.View())
+		s.WriteString("\n")
+	}
 
 	s.WriteString(m.renderFooter())
 
@@ -27,27 +29,13 @@ func (m model) View() string {
 
 func (m model) renderSteps() string {
 	var parts []string
-	steps := m.buildStepList()
-
-	for i, step := range steps {
+	for i, step := range m.steps {
 		stepNum := i + 1
-		done := stepNum < m.stepIndex || (stepNum == m.stepIndex && m.state == stateDone)
-		current := stepNum == m.stepIndex && m.state != stateDone && m.state != stateError
-		parts = append(parts, formatStepHeader(stepNum, len(steps), step, done, current))
+		done := step.done
+		current := i == m.activeStep && m.state != stateDone && m.state != stateError
+		parts = append(parts, formatStepHeader(stepNum, len(m.steps), step.title, done, current))
 	}
-
 	return strings.Join(parts, "\n") + "\n" + dividerStyle(strings.Repeat("─", 60))
-}
-
-func (m model) buildStepList() []string {
-	steps := []string{"Releases abrufen"}
-	if m.customTag == "" {
-		steps = append(steps, "Version waehlen")
-	}
-	steps = append(steps, "Download")
-	steps = append(steps, "Entpacken")
-	steps = append(steps, "Abschluss")
-	return steps
 }
 
 func (m model) renderContent() string {
@@ -57,12 +45,14 @@ func (m model) renderContent() string {
 	case stateLoading:
 		s.WriteString(m.spinner.View())
 		s.WriteString(" ")
-		s.WriteString(statusStyle.Render("Ermittle verfuegbare Versionen..."))
+		if m.detail {
+			s.WriteString(statusStyle.Render("Ermittle verfuegbare Versionen..."))
+		} else {
+			s.WriteString(statusStyle.Render("Ermittle neueste Version..."))
+		}
 
 	case stateSelectVersion:
 		if m.versionForm != nil {
-			s.WriteString(statusStyle.Render("Waehle eine Version aus:"))
-			s.WriteString("\n\n")
 			s.WriteString(m.versionForm.View())
 		}
 
@@ -71,10 +61,7 @@ func (m model) renderContent() string {
 		s.WriteString("\n\n")
 		s.WriteString(m.progressBar.View())
 		s.WriteString("\n")
-		pct := fmt.Sprintf("%.0f%%", m.progress*100)
-		s.WriteString(dimStyle.Render(pct))
-		s.WriteString("  ")
-		s.WriteString(dimStyle.Render(buildDownloadURL(m.tag)))
+		s.WriteString(dimStyle.Render(fmt.Sprintf("%.0f%%", m.progress*100)))
 
 	case stateExtracting:
 		s.WriteString(m.spinner.View())
@@ -89,7 +76,7 @@ func (m model) renderContent() string {
 	case stateCreatingShortcut:
 		s.WriteString(m.spinner.View())
 		s.WriteString(" ")
-		s.WriteString(statusStyle.Render("Erstelle Desktop-Verknuepfung..."))
+		s.WriteString(statusStyle.Render("Erstelle Verknuepfungen..."))
 
 	case stateDone:
 		installDir := m.installDir
@@ -102,19 +89,15 @@ func (m model) renderContent() string {
 		s.WriteString(successStyle.Render(fmt.Sprintf("✓ FluxDB %s erfolgreich installiert!", m.tag)))
 		s.WriteString("\n\n")
 		s.WriteString(dimStyle.Render(fmt.Sprintf("Installationspfad: %s", installDir)))
-		s.WriteString("\n")
 		if m.createShortcut {
-			s.WriteString(successStyle.Render("Desktop-Verknuepfung wurde erstellt"))
+			s.WriteString("\n")
+			s.WriteString(successStyle.Render("Desktop- und Startmenue-Verknuepfung erstellt"))
 		}
-		s.WriteString("\n")
-		s.WriteString(helpStyle.Render("Druecke Enter oder Q zum Beenden"))
 
 	case stateError:
 		s.WriteString(errorStyle.Render("✗ Installation fehlgeschlagen"))
 		s.WriteString("\n\n")
 		s.WriteString(errorStyle.Render(m.err.Error()))
-		s.WriteString("\n")
-		s.WriteString(helpStyle.Render("Druecke Enter oder Q zum Beenden"))
 	}
 
 	return s.String()

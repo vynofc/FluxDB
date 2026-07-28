@@ -48,6 +48,11 @@ type errMsg struct {
 	err error
 }
 
+type step struct {
+	title string
+	done  bool
+}
+
 type model struct {
 	state           state
 	tag             string
@@ -67,15 +72,14 @@ type model struct {
 	versionForm     *huh.Form
 	shortcutForm    *huh.Form
 	progressCh      chan float64
-	stepIndex       int
-	totalSteps      int
+	steps           []step
+	activeStep      int
 	selectedVersion string
 	createShortcut  bool
-	downloadedBytes int64
-	totalBytes      int64
+	detail          bool
 }
 
-func initialModel(customTag, customPath string) model {
+func initialModel(customTag, customPath string, detail bool) model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C5CE7"))
@@ -88,11 +92,33 @@ func initialModel(customTag, customPath string) model {
 	vp := viewport.New(80, 8)
 	vp.Style = logViewportStyle
 
-	totalSteps := 5
-	startState := stateLoading
+	var steps []step
+	var startState state
+
 	if customTag != "" {
-		totalSteps = 4
+		steps = []step{
+			{title: "Download"},
+			{title: "Entpacken"},
+			{title: "Abschluss"},
+		}
 		startState = stateDownloading
+	} else if detail {
+		steps = []step{
+			{title: "Releases abrufen"},
+			{title: "Version waehlen"},
+			{title: "Download"},
+			{title: "Entpacken"},
+			{title: "Abschluss"},
+		}
+		startState = stateLoading
+	} else {
+		steps = []step{
+			{title: "Version ermitteln"},
+			{title: "Download"},
+			{title: "Entpacken"},
+			{title: "Abschluss"},
+		}
+		startState = stateLoading
 	}
 
 	return model{
@@ -103,32 +129,36 @@ func initialModel(customTag, customPath string) model {
 		logs:        []string{},
 		customTag:   customTag,
 		customPath:  customPath,
-		totalSteps:  totalSteps,
-		stepIndex:   0,
+		steps:       steps,
+		activeStep:  0,
+		detail:      detail,
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m *model) Init() tea.Cmd {
 	if m.customTag != "" {
-		m.logs = append(m.logs, "🚀 FluxDB Installer gestartet")
-		m.logs = append(m.logs, fmt.Sprintf("📌 Version vorgegeben: %s", m.customTag))
+		if m.detail {
+			m.addLog("🚀 FluxDB Installer gestartet")
+			m.addLog(fmt.Sprintf("📌 Version vorgegeben: %s", m.customTag))
+		}
 		return tea.Batch(
 			m.spinner.Tick,
-			func() tea.Msg {
-				return tagFetchedMsg{tag: m.customTag}
-			},
+			func() tea.Msg { return tagFetchedMsg{tag: m.customTag} },
+		)
+	}
+
+	if m.detail {
+		return tea.Batch(
+			m.spinner.Tick,
+			func() tea.Msg { return logMsg{line: "🚀 FluxDB Installer gestartet"} },
+			func() tea.Msg { return logMsg{line: "📡 Rufe GitHub Releases ab..."} },
+			fetchReleasesCmd(),
 		)
 	}
 
 	return tea.Batch(
 		m.spinner.Tick,
-		func() tea.Msg {
-			return logMsg{line: "🚀 FluxDB Installer gestartet"}
-		},
-		func() tea.Msg {
-			return logMsg{line: "📡 Rufe GitHub Releases ab..."}
-		},
-		fetchReleasesCmd(),
+		fetchLatestTagCmd(),
 	)
 }
 
@@ -141,6 +171,17 @@ func (m *model) addLog(line string) {
 func (m *model) updateViewport() {
 	m.viewport.SetContent(formatLogs(m.logs))
 	m.viewport.GotoBottom()
+}
+
+func (m *model) nextStep() {
+	if m.activeStep < len(m.steps)-1 {
+		m.steps[m.activeStep].done = true
+		m.activeStep++
+	}
+}
+
+func (m *model) markAllStepsDone() {
+	m.steps[m.activeStep].done = true
 }
 
 type tagFetchedMsg struct {
