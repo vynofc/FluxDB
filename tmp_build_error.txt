@@ -1,0 +1,57 @@
+Run msbuild FluxDB.sln /p:Configuration=Release /p:Platform="Any CPU"
+MSBuild version 18.7.8+1ac568fee for .NET Framework
+Build started 7/28/2026 8:33:32 AM.
+
+Project "D:\a\FluxDB\FluxDB\FluxDB.sln" on node 1 (default targets).
+ValidateSolutionConfiguration:
+  Building solution configuration "Release|Any CPU".
+Project "D:\a\FluxDB\FluxDB\FluxDB.sln" (1) is building "D:\a\FluxDB\FluxDB\FluxDB.csproj" (2) on node 1 (default targets).
+PrepareForBuild:
+  Creating directory "bin\Release\".
+  Creating directory "obj\Release\".
+Project "D:\a\FluxDB\FluxDB\FluxDB.csproj" (2) is building "D:\a\FluxDB\FluxDB\FluxDB_qgdeomtk_wpftmp.csproj" (3) on node 1 (_CompileTemporaryAssembly target(s)).
+CoreCompile:
+  Setting DOTNET_TieredCompilation to '0'
+  C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\Roslyn\csc.exe /noconfig /nowarn:1701,1702 /fullpaths /nostdlib+ /platform:anycpu32bitpreferred /errorreport:prompt /warn:4 /define:TRACE /highentropyva+ /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\Microsoft.CSharp.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\mscorlib.dll" /reference:D:\a\FluxDB\FluxDB\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\PresentationCore.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\PresentationFramework.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Core.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Data.DataSetExtensions.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Data.dll" /reference:D:\a\FluxDB\FluxDB\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.118.0\lib\net46\System.Data.SQLite.dll /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.IO.Compression.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Net.Http.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Windows.Forms.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Xaml.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Xml.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Xml.Linq.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\WindowsBase.dll" /debug:pdbonly /filealign:512 /optimize+ /out:obj\Release\FluxDB.exe /subsystemversion:6.00 /target:winexe /utf8output /win32icon:FluxDB-icon.ico /deterministic+ /langversion:7.3 LogViewer.xaml.cs RefreshDialog.xaml.cs Services\LoggingService.cs SplashWindow.xaml.cs SettingsWindow.xaml.cs App.xaml.cs MainWindow.xaml.cs Models\AppSettings.cs Models\FileEntry.cs Models\IndexExport.cs Models\Tag.cs Services\DatabaseService.cs Services\ExportService.cs Services\IndexerService.cs Services\SettingsService.cs VersionHelper.cs Properties\AssemblyInfo.cs Properties\Resources.Designer.cs Properties\Settings.Designer.cs D:\a\FluxDB\FluxDB\obj\Release\LogViewer.g.cs D:\a\FluxDB\FluxDB\obj\Release\SettingsWindow.g.cs D:\a\FluxDB\FluxDB\obj\Release\MainWindow.g.cs D:\a\FluxDB\FluxDB\obj\Release\RefreshDialog.g.cs D:\a\FluxDB\FluxDB\obj\Release\SplashWindow.g.cs D:\a\FluxDB\FluxDB\obj\Release\App.g.cs D:\a\FluxDB\FluxDB\obj\Release\FluxDB_Content.g.cs
+  Compilation request FluxDB_qgdeomtk_wpftmp, PathToTool=C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\Roslyn\csc.exe
+  CommandLine = ' /noconfig'
+  BuildResponseFile = '/nowarn:1701,1702 /fullpaths /nostdlib+ /platform:anycpu32bitpreferred /errorreport:prompt /warn:4 /define:TRACE /highentropyva+ /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\Microsoft.CSharp.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\mscorlib.dll" /reference:D:\a\FluxDB\FluxDB\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\PresentationCore.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\PresentationFramework.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Core.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Data.DataSetExtensions.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Data.dll" /reference:D:\a\FluxDB\FluxDB\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.118.0\lib\net46\System.Data.SQLite.dll /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.IO.Compression.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Net.Http.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Windows.Forms.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Xaml.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Xml.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Xml.Linq.dll" /reference:"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\WindowsBase.dll" /debug:pdbonly /filealign:512 /optimize+ /out:obj\Release\FluxDB.exe /subsystemversion:6.00 /target:winexe /utf8output /win32icon:FluxDB-icon.ico /deterministic+ /langversion:7.3 LogViewer.xaml.cs RefreshDialog.xaml.cs Services\LoggingService.cs SplashWindow.xaml.cs SettingsWindow.xaml.cs App.xaml.cs MainWindow.xaml.cs Models\AppSettings.cs Models\FileEntry.cs Models\IndexExport.cs Models\Tag.cs Services\DatabaseService.cs Services\ExportService.cs Services\IndexerService.cs Services\SettingsService.cs VersionHelper.cs Properties\AssemblyInfo.cs Properties\Resources.Designer.cs Properties\Settings.Designer.cs D:\a\FluxDB\FluxDB\obj\Release\LogViewer.g.cs D:\a\FluxDB\FluxDB\obj\Release\SettingsWindow.g.cs D:\a\FluxDB\FluxDB\obj\Release\MainWindow.g.cs D:\a\FluxDB\FluxDB\obj\Release\RefreshDialog.g.cs D:\a\FluxDB\FluxDB\obj\Release\SplashWindow.g.cs D:\a\FluxDB\FluxDB\obj\Release\App.g.cs D:\a\FluxDB\FluxDB\obj\Release\FluxDB_Content.g.cs'
+  Attempting to create process 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\Roslyn\VBCSCompiler.exe' "-pipename:lk3GEFz8Fq7L5CzBTij4YT+Po32XgtYut3dBs3ahqvk"
+  Setting DOTNET_TieredCompilation to '0'
+  Successfully created process with process id 8316
+  Attempt to open named pipe 'lk3GEFz8Fq7L5CzBTij4YT+Po32XgtYut3dBs3ahqvk'
+  Attempt to connect named pipe 'lk3GEFz8Fq7L5CzBTij4YT+Po32XgtYut3dBs3ahqvk'
+  Named pipe 'lk3GEFz8Fq7L5CzBTij4YT+Po32XgtYut3dBs3ahqvk' connected
+  Begin writing request for FluxDB_qgdeomtk_wpftmp
+  End writing request for FluxDB_qgdeomtk_wpftmp
+  Begin reading response for FluxDB_qgdeomtk_wpftmp
+  End reading response for FluxDB_qgdeomtk_wpftmp
+D:\a\FluxDB\FluxDB\MainWindow.xaml.cs(346,30): error CS0246: The type or namespace name 'RenameDialog' could not be found (are you missing a using directive or an assembly reference?) [D:\a\FluxDB\FluxDB\FluxDB_qgdeomtk_wpftmp.csproj]
+D:\a\FluxDB\FluxDB\MainWindow.xaml.cs(389,30): error CS0246: The type or namespace name 'RenameDialog' could not be found (are you missing a using directive or an assembly reference?) [D:\a\FluxDB\FluxDB\FluxDB_qgdeomtk_wpftmp.csproj]
+D:\a\FluxDB\FluxDB\MainWindow.xaml.cs(38,22): warning CS0414: The field 'MainWindow._isSearchMode' is assigned but its value is never used [D:\a\FluxDB\FluxDB\FluxDB_qgdeomtk_wpftmp.csproj]
+  CompilerServer: server - server processed compilation - FluxDB_qgdeomtk_wpftmp
+Done Building Project "D:\a\FluxDB\FluxDB\FluxDB_qgdeomtk_wpftmp.csproj" (_CompileTemporaryAssembly target(s)) -- FAILED.
+Done Building Project "D:\a\FluxDB\FluxDB\FluxDB.csproj" (default targets) -- FAILED.
+Done Building Project "D:\a\FluxDB\FluxDB\FluxDB.sln" (default targets) -- FAILED.
+
+Build FAILED.
+
+"D:\a\FluxDB\FluxDB\FluxDB.sln" (default target) (1) ->
+"D:\a\FluxDB\FluxDB\FluxDB.csproj" (default target) (2) ->
+"D:\a\FluxDB\FluxDB\FluxDB_qgdeomtk_wpftmp.csproj" (_CompileTemporaryAssembly target) (3) ->
+(CoreCompile target) -> 
+  D:\a\FluxDB\FluxDB\MainWindow.xaml.cs(38,22): warning CS0414: The field 'MainWindow._isSearchMode' is assigned but its value is never used [D:\a\FluxDB\FluxDB\FluxDB_qgdeomtk_wpftmp.csproj]
+
+
+"D:\a\FluxDB\FluxDB\FluxDB.sln" (default target) (1) ->
+"D:\a\FluxDB\FluxDB\FluxDB.csproj" (default target) (2) ->
+"D:\a\FluxDB\FluxDB\FluxDB_qgdeomtk_wpftmp.csproj" (_CompileTemporaryAssembly target) (3) ->
+(CoreCompile target) -> 
+  D:\a\FluxDB\FluxDB\MainWindow.xaml.cs(346,30): error CS0246: The type or namespace name 'RenameDialog' could not be found (are you missing a using directive or an assembly reference?) [D:\a\FluxDB\FluxDB\FluxDB_qgdeomtk_wpftmp.csproj]
+  D:\a\FluxDB\FluxDB\MainWindow.xaml.cs(389,30): error CS0246: The type or namespace name 'RenameDialog' could not be found (are you missing a using directive or an assembly reference?) [D:\a\FluxDB\FluxDB\FluxDB_qgdeomtk_wpftmp.csproj]
+
+    1 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:11.56
+Error: Process completed with exit code 1.
