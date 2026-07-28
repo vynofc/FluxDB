@@ -1,5 +1,7 @@
 ﻿# FluxDB
 
+Quick: Installer ReadMe for DEVs: [Installer README.md](https://github.com/vynofc/FluxDB/tree/main/Installer/README.md)
+
 FluxDB ist ein leistungsstarker, WPF-basierter Dateimanager und Indizierungs-Service für Windows. Er ermöglicht es Benutzern, ihre Dateien effizient zu verwalten, zu indizieren und mit Tags zu versehen, um sie blitzschnell wiederzufinden.
 
 ## ✨ Funktionen
