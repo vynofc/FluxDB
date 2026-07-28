@@ -1,362 +1,232 @@
-# PLAN — Log Viewer als externes Go-Programm
+# Plugin-System Plan
 
-## Ziel
+## Überblick
 
-Den WPF-internen Log Viewer (`LogViewer.xaml` / `LogViewer.xaml.cs`) durch ein eigenständiges Go-TUI-Programm ersetzen.  
-FluxDB öffnet per F8 das externe Programm `components/Log_Viewer.exe --log <pfad>`, das die Logdatei live anzeigt.
+FluxDB bekommt ein Plugin-System, mit dem Drittanbieter die Funktionalität erweitern können — z. B. benutzerdefinierte Exportformate, automatisierte Tag-Regeln, Datei-Vorschauen oder Integrationen mit externen Tools.
 
----
-
-## 1. Go-Programm: `Log Viewer/`
-
-### 1.1 Projektstruktur
-
-```
-Log Viewer/
-├── main.go          # Entrypoint, CLI-Flags, Bubble-Tea-Programm
-├── model.go         # Bubble-Tea-Model, Messages, States
-├── update.go        # State-Machine, Tastenkürzel
-├── styles.go        # Lipgloss-Styles (Dark-Theme wie Installer)
-├── view.go          # Rendering
-├── go.mod
-├── go.sum
-├── build.bat        # Windows-Build (GOOS=windows)
-└── build.sh         # Cross-Compile von Linux/macOS
-```
-
-### 1.2 Abhängigkeiten
-
-| Modul | Zweck |
-|---|---|
-| `github.com/charmbracelet/bubbletea` | TUI-Framework |
-| `github.com/charmbracelet/lipgloss` | Terminal-Styling |
-| `github.com/charmbracelet/log` | Strukturiertes Logging (interne Fehler) |
-
-### 1.3 CLI-Flags
-
-| Flag | Beschreibung |
-|---|---|
-| `--log <pfad>` | Pfad zur Logdatei (erforderlich) |
-
-### 1.4 Funktionsumfang
-
-- **Logdatei laden**: Datei beim Start komplett einlesen
-- **Live-Tail**: Datei wird mit `fsnotify`-ähnlichem Polling (500ms) auf Änderungen überwacht und neue Zeilen werden angehängt
-- **Scrollen**: PageUp/PageDown, Home/End
-- **Refresh**: `R`-Taste lädt die Datei komplett neu
-- **Clear**: `C`-Taste leert die Datei (schreibt leeren String) und refresht
-- **Suchen**: `/`-Taste öffnet Suchleiste, `Enter` springt zum nächsten Treffer, `Esc` bricht ab
-- **Beenden**: `Esc` oder `Q` oder `Ctrl+C`
-- **Dark-Theme**: Gleiche Farbpalette wie FluxDB Installer (Hintergrund #1a1a2e, Text #e0e0e0, etc.)
-
-### 1.5 Build
-
-- Windows: `GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o bin/Log_Viewer.exe .`
-- Output: `Log Viewer/bin/Log_Viewer.exe`
+Drei Artefakte:
+1. **Plugin Loader** (in FluxDB selbst) — entdeckt, lädt und verwaltet Plugins
+2. **Plugin Template** (separates Projekt) — Vorlage zum Erstellen eigener Plugins
+3. **PLUGIN.md** — vollständige Dokumentation für Plugin-Entwickler
 
 ---
 
-## 2. FluxDB WPF-App: Änderungen
+## 1. Plugin-Architektur
 
-### 2.1 `ShowLogViewer()` in `MainWindow.xaml.cs` umbauen
-
-Statt `new LogViewer().ShowDialog()`:
+### 1.1 Core Interfaces (neue Datei: `Plugin/IFluxDBPlugin.cs`)
 
 ```csharp
-private void ShowLogViewer()
+namespace FluxDB.Plugin
 {
-    try
+    public interface IFluxDBPlugin
     {
-        var exeDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-        var viewerExe = Path.Combine(exeDir, "components", "Log_Viewer.exe");
-        var logPath = LoggingService.LogFilePath;
-
-        if (!File.Exists(viewerExe))
-        {
-            MessageBox.Show("Log Viewer nicht gefunden.", "Fehler", MessageBoxButton.OK, MessageBoxImage.Error);
-            return;
-        }
-
-        var startInfo = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = viewerExe,
-            Arguments = $"--log \"{logPath}\"",
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        System.Diagnostics.Process.Start(startInfo);
-    }
-    catch
-    {
-        MessageBox.Show("Log Viewer konnte nicht gestartet werden.", "Fehler", MessageBoxButton.OK, MessageBoxImage.Error);
+        string Name { get; }
+        string Version { get; }
+        string Author { get; }
+        string Description { get; }
+        void Initialize(IPluginContext context);
+        void Shutdown();
     }
 }
 ```
 
-**Kein Fallback** auf den alten WPF-Viewer — der wird komplett entfernt.
+### 1.2 Plugin Context (neue Datei: `Plugin/IPluginContext.cs`)
 
-### 2.2 `LogViewer.xaml` + `LogViewer.xaml.cs` entfernen
+```csharp
+namespace FluxDB.Plugin
+{
+    public interface IPluginContext
+    {
+        // Core services
+        DatabaseService Database { get; }
+        ExportService Export { get; }
+        SettingsService Settings { get; }
 
-- Beide Dateien löschen
-- Aus `FluxDB.csproj` entfernen (`<Page Include="LogViewer.xaml">` und `<Compile Include="LogViewer.xaml.cs">`)
+        // Convenience
+        string CurrentRootFolder { get; }
+        void Log(string message);
 
-### 2.3 Keine Änderung an `LoggingService`
+        // UI integration
+        void RegisterMenuItem(string header, Action callback);
+        void RegisterContextMenuItem(string header, Action<FileEntry> callback);
+        void RegisterToolbarButton(string label, string icon, Action callback);
 
-- `LoggingService` bleibt unverändert – sie schreibt weiterhin nach `%LocalAppData%\FluxDB\logs.txt`
-- Der externe Viewer liest nur die Datei, interagiert nicht mit dem WPF-Prozess
+        // Events
+        event EventHandler<FileEntry> FileIndexed;
+        event EventHandler<FileEventArgs> FileSelected;
+        event EventHandler<SearchEventArgs> SearchPerformed;
+    }
+}
+```
+
+### 1.3 Event Args (neue Datei: `Plugin/PluginEventArgs.cs`)
+
+- `FileEventArgs` — enthält `FileEntry` und `string FolderPath`
+- `SearchEventArgs` — enthält `string Query`, `List<FileEntry> Results`, `string FolderPath`
+
+### 1.4 Plugin Loader (neue Datei: `Services/PluginService.cs`)
+
+**Aufgaben:**
+- Beim Start den Ordner `%LocalAppData%\FluxDB\Plugins\` scannen (oder `Plugins\` neben der EXE, beides versuchen)
+- Alle `.dll`-Dateien laden und nach Typen suchen, die `IFluxDBPlugin` implementieren
+- Plugins instanziieren und `Initialize()` aufrufen
+- Beim Beenden `Shutdown()` auf allen geladenen Plugins aufrufen
+- Fehler isolieren: ein fehlerhaftes Plugin darf andere nicht beeinträchtigen
+
+**Wichtige Details:**
+- Laden via `Assembly.LoadFrom()` mit try/catch pro Assembly
+- Plugin-Metadaten aus dem Interface auslesen (Name, Version, Author)
+- Plugin-Status tracken (Loaded, Failed, Disabled)
+- `PluginService` als Singleton (wie `LoggingService`), da es app-weit einmalig ist
+- Kein `AppDomain`-Isolation (zu komplex für .NET Framework 4.7.2, nicht nötig für v1)
+- Dependency-Konflikt-Erkennung: vor dem Laden prüfen, ob referenzierte Assemblies vorhanden sind
+
+### 1.5 Plugin Manager UI (Erweiterung in `SettingsWindow`)
+
+Neuer Tab "Plugins" im Settings-Fenster:
+- Liste aller geladenen Plugins mit Name, Version, Author, Status
+- Checkbox zum Aktivieren/Deaktivieren (wird in `settings.json` unter `DisabledPlugins` gespeichert)
+- "Plugins-Ordner öffnen"-Button
+- "Neu laden"-Button (rescannt den Plugin-Ordner)
+
+**Änderungen an `AppSettings`:**
+Neues Feld `List<string> DisabledPlugins` (Plugins, die beim Start übersprungen werden).
 
 ---
 
-## 3. Build & Deployment
+## 2. Integration in FluxDB
 
-### 3.1 Build-Skripte für FluxDB (Gesamtprojekt)
+### 2.1 Startup (Änderung in `MainWindow.xaml.cs`)
 
-**`build.bat`** (Windows) — baut WPF-App + Log Viewer, legt alles wie im Release-ZIP ab:
-
-```bat
-@echo off
-cd /d "%~dp0"
-
-echo [1/3] FluxDB WPF-App bauen...
-nuget restore FluxDB.sln
-msbuild FluxDB.sln /p:Configuration=Release /p:Platform="Any CPU"
-
-echo [2/3] Log Viewer bauen...
-cd "Log Viewer"
-go build -ldflags="-s -w" -o ..\bin\Release\components\Log_Viewer.exe .
-cd ..
-
-echo [3/3] Fertig!
-echo FluxDB.exe      -> bin\Release\
-echo Log_Viewer.exe  -> bin\Release\components\
+In `InitializeServices()`:
+```csharp
+PluginService.Initialize(_databaseService, _exportService, _settingsService);
 ```
 
-**`build.sh`** (Linux/macOS Cross-Compile) — baut WPF-App + Log Viewer:
-
-```bash
-#!/bin/bash
-set -e
-cd "$(dirname "$0")"
-
-echo "[1/3] FluxDB WPF-App bauen (Cross-Compile via MSBuild)..."
-nuget restore FluxDB.sln
-msbuild FluxDB.sln /p:Configuration=Release /p:Platform="Any CPU"
-
-echo "[2/3] Log Viewer bauen (Cross-Compile)..."
-cd "Log Viewer"
-GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o ../bin/Release/components/Log_Viewer.exe .
-cd ..
-
-echo "[3/3] Fertig!"
-echo "FluxDB.exe      -> bin/Release/"
-echo "Log_Viewer.exe  -> bin/Release/components/"
+In `Window_Closed` (oder `OnClosed`):
+```csharp
+PluginService.Shutdown();
 ```
 
-### 3.2 CI-Workflows
+### 2.2 Event-Hooks (Änderungen in `MainWindow.xaml.cs`)
 
-#### `build.yml` (Push/PR auf main)
+- Nach `IndexerService_ProgressChanged` / wenn ein File fertig indexed ist → `PluginService.RaiseFileIndexed(fileEntry)`
+- Bei `dgFiles_SelectionChanged` → `PluginService.RaiseFileSelected(selectedFile)`
+- Nach `PerformSearch()` → `PluginService.RaiseSearchPerformed(query, results)`
 
-Zusätzlich zum bestehenden MSBuild-Schritt:
+### 2.3 UI-Menüpunkte (Änderung in `MainWindow.xaml`)
 
-```yaml
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
+- Menü-Eintrag "Plugins" im Hauptmenü (neben File/Edit/View)
+- Darunter: dynamisch generierte Einträge aus `PluginService.GetMenuItems()`
+- Context-Menü in `dgFiles` erweitert um Plugin-Einträge aus `PluginService.GetContextMenuItems()`
 
-      - name: Build Log Viewer
-        run: |
-          cd "Log Viewer"
-          go build -ldflags="-s -w" -o ..\bin\Release\components\Log_Viewer.exe .
-```
+### 2.4 Plugin-Ordner
 
-#### `release.yml` (Release published)
-
-Bestehender "Create zip"-Schritt wird erweitert — `components/` Ordner ins ZIP:
-
-```yaml
-      - name: Create zip
-        run: |
-          mkdir dist
-          mkdir dist\components
-          copy bin\Release\FluxDB.exe dist\
-          copy bin\Release\FluxDB.exe.config dist\
-          copy bin\Release\FluxDB.pdb dist\
-          copy bin\Release\Newtonsoft.Json.dll dist\
-          copy bin\Release\System.Data.SQLite.dll dist\
-          xcopy bin\Release\x64 dist\x64\ /E /I
-          xcopy bin\Release\x86 dist\x86\ /E /I
-          copy FluxDB-Installer.exe dist\
-          copy bin\Release\components\Log_Viewer.exe dist\components\
-          Compress-Archive -Path dist\* -DestinationPath FluxDB.zip
-```
-
-### 3.3 Release-Assets (unverändert)
-
-- `FluxDB.zip` enthält: FluxDB.exe + DLLs + `components/Log_Viewer.exe` + `FluxDB-Installer.exe`
-- `FluxDB-Installer.exe` wird **zusätzlich** als separates Asset hochgeladen (für direkten Download ohne ZIP)
-
-### 3.4 Installer
-
-- Installer extrahiert `components/Log_Viewer.exe` mit nach `%LOCALAPPDATA%\FluxDB\components\`
-- Keine zusätzliche Logik nötig, da die ZIP-Struktur bereits `components/` enthält
+- Hauptverzeichnis: `%LocalAppData%\FluxDB\Plugins\`
+- Fallback: `{exeDir}\Plugins\`
+- Wird beim ersten Start automatisch angelegt (leer)
+- Plugin-DLLs werden hierhin kopiert/abgelegt
 
 ---
 
-## 4. Update-Check auf GitHub API umstellen
+## 3. Plugin Template
 
-### 4.1 Problem
+### 3.1 Projektstruktur
 
-Aktuell nutzt FluxDB (`SplashWindow.xaml.cs`) eine eigene CDN-API:
-- Version: `https://nsce-cdn.fun/FluxDB/version.txt` (komma-separierte Versionen)
-- Installer: `https://nsce-cdn.fun/FluxDB/FluxDB-Installer.exe`
-- ZIPs: `C:\NSCE\FluxDB\{version}.zip`
-- Central Dir: `C:\NSCE\FluxDB\`
-
-Der **Installer** nutzt dagegen bereits die GitHub API:
-- Releases: `https://api.github.com/repos/vynofc/FluxDB/releases`
-- Latest: `https://api.github.com/repos/vynofc/FluxDB/releases/latest`
-- Download: `https://github.com/vynofc/FluxDB/releases/download/{tag}/FluxDB.zip`
-
-### 4.2 Änderungen in `SplashWindow.xaml.cs`
-
-`CheckForUpdatesAsync()` wird komplett umgebaut:
-
-```csharp
-private async Task<bool> CheckForUpdatesAsync()
-{
-    var args = Environment.GetCommandLineArgs();
-    bool skipUpdate = args.Any(a => a.Trim().Equals("--noupdate", StringComparison.OrdinalIgnoreCase));
-    App.IsUpdateSkipped = skipUpdate;
-
-    var localVersionStr = App.GetLocalVersion();
-    var assembly = Assembly.GetExecutingAssembly();
-    var exeDir = Path.GetDirectoryName(assembly.Location) ?? ".";
-
-    // GitHub API: latest release
-    var latestTag = await FetchLatestReleaseTagAsync();
-    if (latestTag == null)
-        return true; // API nicht erreichbar → weitermachen
-
-    var remoteVersion = VersionHelper.NormalizeVersion(latestTag);
-    var localVersion = VersionHelper.NormalizeVersion(localVersionStr);
-
-    if (VersionHelper.CompareVersions(remoteVersion, localVersion) <= 0)
-        return true; // up to date
-
-    // Update verfügbar
-    App.IsUpdateAvailable = true;
-    App.AvailableVersion = remoteVersion;
-
-    if (skipUpdate)
-    {
-        LoggingService.Log("Update available but --noupdate flag is set. Skipping.");
-        return true;
-    }
-
-    // Installer im App-Verzeichnis suchen
-    var installerPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
-    if (!File.Exists(installerPath))
-    {
-        // Download installer from GitHub
-        var ok = await DownloadInstallerAsync(exeDir, latestTag);
-        if (!ok) return true;
-    }
-
-    var startInfo = new ProcessStartInfo(installerPath)
-    {
-        WorkingDirectory = exeDir,
-        UseShellExecute = true
-    };
-    Process.Start(startInfo);
-    return false; // Installer gestartet → App beenden
-}
-
-private async Task<string> FetchLatestReleaseTagAsync()
-{
-    try
-    {
-        using (var http = new HttpClient())
-        {
-            http.Timeout = TimeSpan.FromSeconds(15);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("FluxDB");
-            http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-
-            var json = await http.GetStringAsync(
-                "https://api.github.com/repos/vynofc/FluxDB/releases/latest");
-            var release = JsonConvert.DeserializeObject<GitHubRelease>(json);
-            return release?.TagName;
-        }
-    }
-    catch (Exception ex)
-    {
-        LoggingService.Log($"GitHub API error: {ex.Message}");
-        return null;
-    }
-}
-
-private async Task<bool> DownloadInstallerAsync(string exeDir, string tag)
-{
-    try
-    {
-        var url = $"https://github.com/vynofc/FluxDB/releases/download/{tag}/FluxDB-Installer.exe";
-        var path = Path.Combine(exeDir, "FluxDB-Installer.exe");
-
-        using (var http = new HttpClient())
-        using (var resp = await http.GetAsync(url))
-        {
-            if (!resp.IsSuccessStatusCode) return false;
-            using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
-                await resp.Content.CopyToAsync(fs);
-        }
-        return true;
-    }
-    catch
-    {
-        return false;
-    }
-}
+```text
+FluxDB-Plugin-Template/
+├── PluginTemplate.csproj
+├── MyPlugin.cs
+├── PluginInfo.cs
+├── README.md           (kurze Anleitung)
+└── Properties/
+    └── AssemblyInfo.cs
 ```
 
-### 4.3 Neues Model: `Models/GitHubRelease.cs`
+### 3.2 `.csproj` (wesentliche Teile)
 
-```csharp
-namespace FluxDB.Models
-{
-    public class GitHubRelease
-    {
-        public string TagName { get; set; }
-    }
-}
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>MyFluxDBPlugin</AssemblyName>
+    <OutputType>Library</OutputType>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="FluxDB">
+      <HintPath>..\FluxDB\bin\Release\FluxDB.exe</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>
 ```
 
-### 4.4 Änderungen in `App.xaml.cs`
+### 3.3 `MyPlugin.cs` (Beispiel-Plugin)
 
-`GetLocalVersion()` wird vereinfacht — **entfernt**: `C:\NSCE\FluxDB`-Pfade, ZIP-Scanning, `FLUXDB_CENTRAL_DIR`. Nur noch:
+Ein einfaches Plugin, das:
+- `Initialize()` eine Log-Nachricht schreibt
+- Auf `FileIndexed`-Event reagiert und große Dateien (>100 MB) automatisch mit dem Tag "large" versieht
+- Einen Menüeintrag "Plugin: Show Stats" registriert, der ein MessageBox mit Statistiken anzeigt
 
-```csharp
-public static string GetLocalVersion()
-{
-    // 1. version.txt im App-Verzeichnis
-    // 2. Assembly-Version als Fallback
-}
-```
+### 3.4 Build & Deploy
 
-### 4.5 Entfallende Sachen
-
-- `https://nsce-cdn.fun/FluxDB/version.txt` — ersetzt durch GitHub API
-- `https://nsce-cdn.fun/FluxDB/FluxDB-Installer.exe` — ersetzt durch GitHub Releases Download
-- `C:\NSCE\FluxDB\` — kein Hardcoded-Pfad mehr
-- `FLUXDB_CENTRAL_DIR` Env-Variable — entfällt
-- Beta-Logik (`!beta`-Suffix, `IsBetaUpdateAvailable`) — entfällt (GitHub Releases haben keine Beta-Markierung in dem Format)
+- Build mit `dotnet build -c Release` (oder `msbuild`)
+- Ausgabe-DLL sowie alle Abhängigkeiten in den `Plugins\`-Ordner kopieren
+- FluxDB erkennt das Plugin beim nächsten Start automatisch
 
 ---
 
-## 5. Migrationspfad (Reihenfolge)
+## 4. PLUGIN.md — Inhalt
 
-1. **Go Log Viewer bauen** → `Log Viewer/` Projekt erstellen und testen
-2. **Build-Skripte erstellen** → `build.bat` + `build.sh` für Gesamtprojekt
-3. **F8-Integration** → `MainWindow.xaml.cs` umbauen (kein Fallback, startet direkt `Log_Viewer.exe`)
-4. **Alten Viewer entfernen** → `LogViewer.xaml`, `LogViewer.xaml.cs`, `.csproj`-Einträge löschen
-5. **CI anpassen** → `build.yml` + `release.yml` bauen `Log_Viewer.exe` mit, `release.yml` packt `components/` ins ZIP
-6. **Update-Check umstellen** → GitHub API statt CDN, `C:\NSCE`-Pfade entfernen, Beta-Logik entfernen
+### 4.1 Struktur der Dokumentation
+
+1. **Quick Start** — 3-Schritte-Anleitung zum Erstellen des ersten Plugins
+2. **Plugin Interface** — Detailbeschreibung von `IFluxDBPlugin`
+3. **Plugin Context** — Alle verfügbaren Services und APIs mit Code-Beispielen
+4. **Events** — Alle Events mit Beispielen
+5. **UI-Integration** — Menüeinträge, Toolbar-Buttons, Context-Menüs
+6. **Datenbank-Zugriff** — Wie man über `DatabaseService` auf Files, Tags, Notes zugreift
+7. **Export-Service** — Wie man den Export-Service nutzt
+8. **Fehlerbehandlung** — Best Practices (try/catch, keine Exceptions in Events werfen)
+9. **Build & Deployment** — Schritt-für-Schritt: Template klonen, bauen, im Plugins-Ordner ablegen
+10. **Beispiel-Plugins** — 3 vollständige Code-Beispiele:
+    - **AutoTagger**: Taggt Dateien anhand von Regeln (z. B. `*.pdf` → "document")
+    - **FileStats**: Zeigt Statistiken über die indizierten Dateien in einem MessageBox
+    - **CustomExporter**: Exportiert die Datenbank als CSV
+11. **API-Referenz** — Vollständige Referenz aller Interfaces, Klassen und Methoden
+12. **FAQ / Troubleshooting**
+
+### 4.2 Wichtige Hinweise in der Doku
+
+- Thread-Safety: DB-Zugriffe immer im selben Thread, UI-Updates nur via `Dispatcher`
+- Keine langen Operationen in Event-Handlern (UI-Thread-Blockierung)
+- Plugin-DLLs müssen für .NET Framework 4.7.2 kompiliert sein
+- Newtonsoft.Json 13.0.3 ist als Abhängigkeit verfügbar (über FluxDB referenziert)
+- Plugin-Name muss eindeutig sein (sonst wird nur das erste geladen)
+- Logging über `context.Log()` nutzen, nicht `Console.WriteLine`
+
+---
+
+## 5. Umsetzungsreihenfolge
+
+### Phase 1: Core
+1. `Plugin/IFluxDBPlugin.cs` — Interface
+2. `Plugin/IPluginContext.cs` — Context Interface
+3. `Plugin/PluginEventArgs.cs` — Event Args
+4. `Plugin/PluginContext.cs` — Konkrete Implementierung
+5. `Services/PluginService.cs` — Loader (Singleton)
+
+### Phase 2: Integration
+6. `MainWindow.xaml.cs` — PluginService initialisieren, Events triggern
+7. `MainWindow.xaml` — Menü-Einträge für Plugins
+8. `AppSettings.cs` — `DisabledPlugins`-Feld hinzufügen
+9. `SettingsWindow.xaml/cs` — Plugin-Tab mit UI
+
+### Phase 3: Template & Docs
+10. `FluxDB-Plugin-Template/` — Projekt-Vorlage erstellen
+11. `PLUGIN.md` — Vollständige Dokumentation schreiben
+12. `README.md` — Hinweis auf Plugin-System ergänzen
+
+### Phase 4: Testing
+13. Beispiel-Plugin (AutoTagger) bauen und testen
+14. Fehlerfälle testen (fehlende DLL, kaputtes Plugin, Interface-Änderungen)
