@@ -19,13 +19,24 @@ func fetchTag(customTag string) (string, error) {
 
 func downloadSilent(tag string) (string, error) {
 	msg := downloadWithProgressCmd(tag)()
-	switch m := msg.(type) {
-	case downloadCompleteMsg:
-		return m.path, nil
-	case errMsg:
-		return "", m.err
+	started, ok := msg.(downloadStartedMsg)
+	if !ok {
+		if errMsg, ok := msg.(errMsg); ok {
+			return "", errMsg.err
+		}
+		return "", fmt.Errorf("unerwarteter fehler beim download")
 	}
-	return "", fmt.Errorf("unerwarteter fehler beim download")
+
+	for innerMsg := range started.ch {
+		switch m := innerMsg.(type) {
+		case downloadCompleteMsg:
+			return m.path, nil
+		case errMsg:
+			return "", m.err
+		}
+	}
+
+	return "", fmt.Errorf("downloadkanal unerwartet geschlossen")
 }
 
 func extractSilent(zipPath, customPath string) error {
