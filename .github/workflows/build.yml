@@ -33,5 +33,5 @@ jobs:
 
       - name: Build Log Viewer
         run: |
-          cd "Log Viewer"
+          cd "Log_Viewer"
           go build -ldflags="-s -w" -o ..\bin\Release\components\Log_Viewer.exe .
