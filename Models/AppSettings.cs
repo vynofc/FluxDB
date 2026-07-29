@@ -16,5 +16,7 @@ namespace FluxDB.Models
         public List<string> RecentFolders { get; set; } = new List<string>();
 
         public Dictionary<string, string> FolderFilters { get; set; } = new Dictionary<string, string>();
+
+        public List<string> DisabledPlugins { get; set; } = new List<string>();
     }
 }

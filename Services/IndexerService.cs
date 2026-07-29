@@ -17,6 +17,7 @@ namespace FluxDB.Services
 
         public event EventHandler<IndexProgressEventArgs> ProgressChanged;
         public event EventHandler<string> StatusChanged;
+        public event EventHandler<FileIndexedEventArgs> FileIndexed;
 
         public IndexerService(DatabaseService database)
         {
@@ -84,6 +85,12 @@ namespace FluxDB.Services
                         _database.UpsertFile(fileEntry, currentTransaction);
                         existingPaths.Add(filePath);
                         result.FilesIndexed++;
+
+                        FileIndexed?.Invoke(this, new FileIndexedEventArgs
+                        {
+                            File = fileEntry,
+                            RootPath = rootPath
+                        });
                     }
                     catch (Exception ex)
                     {
@@ -192,6 +199,12 @@ namespace FluxDB.Services
             }
             catch (UnauthorizedAccessException) { }
         }
+    }
+
+    public class FileIndexedEventArgs : EventArgs
+    {
+        public FileEntry File { get; set; }
+        public string RootPath { get; set; }
     }
 
     public class IndexProgressEventArgs : EventArgs

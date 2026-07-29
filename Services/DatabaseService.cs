@@ -219,6 +219,23 @@ namespace FluxDB.Services
             return tags;
         }
 
+        public List<string> GetFileTags(int fileId)
+        {
+            return GetTagsForFile(fileId);
+        }
+
+        public void AddTagToFile(int fileId, string tagName)
+        {
+            if (string.IsNullOrWhiteSpace(tagName)) return;
+            var tagId = GetOrCreateTag(tagName.Trim().ToLower());
+            using (var cmd = new SQLiteCommand("INSERT OR IGNORE INTO file_tags (file_id,tag_id) VALUES (@f,@t)", _connection))
+            {
+                cmd.Parameters.AddWithValue("@f", fileId);
+                cmd.Parameters.AddWithValue("@t", tagId);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
         public List<Tag> GetAllTags()
         {
             var tags = new List<Tag>();

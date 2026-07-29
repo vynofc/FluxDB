@@ -74,6 +74,7 @@
       <DependentUpon>RenameDialog.xaml</DependentUpon>
     </Compile>
     <Compile Include="Services\LoggingService.cs" />
+    <Compile Include="Services\PluginService.cs" />
     <Compile Include="SplashWindow.xaml.cs">
       <DependentUpon>SplashWindow.xaml</DependentUpon>
     </Compile>
@@ -103,6 +104,10 @@
     <Compile Include="Models\FileEntry.cs" />
     <Compile Include="Models\IndexExport.cs" />
     <Compile Include="Models\Tag.cs" />
+    <Compile Include="Plugin\IFluxDBPlugin.cs" />
+    <Compile Include="Plugin\IPluginContext.cs" />
+    <Compile Include="Plugin\PluginContext.cs" />
+    <Compile Include="Plugin\PluginEventArgs.cs" />
     <Compile Include="Services\DatabaseService.cs" />
     <Compile Include="Services\ExportService.cs" />
     <Compile Include="Services\IndexerService.cs" />

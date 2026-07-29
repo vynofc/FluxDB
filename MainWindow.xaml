@@ -367,7 +367,7 @@
                     
                     <!-- Context Menu -->
                     <DataGrid.ContextMenu>
-                        <ContextMenu>
+                        <ContextMenu x:Name="dgFilesContextMenu" Opened="DgFilesContextMenu_Opened">
                             <MenuItem Header="Open" Click="ContextMenu_Open" FontWeight="Bold"/>
                             <MenuItem Header="Open File Location" Click="ContextMenu_OpenLocation"/>
                             <Separator/>

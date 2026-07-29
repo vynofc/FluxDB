@@ -15,6 +15,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FluxDB.Models;
+using FluxDB.Plugin;
 using FluxDB.Services;
 using Microsoft.Win32;
 using System.Reflection;
@@ -91,6 +92,10 @@ namespace FluxDB
             _exportService = new ExportService(_databaseService, _settingsService);
             _indexerService.ProgressChanged += IndexerService_ProgressChanged;
             _indexerService.StatusChanged += IndexerService_StatusChanged;
+            _indexerService.FileIndexed += IndexerService_FileIndexed;
+
+            PluginService.Initialize(_databaseService, _exportService, _settingsService);
+            PluginService.SetCurrentRootFolder(folderPath);
 
             // Make sure this folder is recorded as recent / last root
             try
@@ -460,6 +465,38 @@ namespace FluxDB
             // Show Windows properties dialog
             var info = new ProcessStartInfo("explorer.exe", $"/select,\"{selected.Path}\"");
             Process.Start(info);
+        }
+
+        private void DgFilesContextMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            var contextMenu = sender as ContextMenu;
+            if (contextMenu == null) return;
+
+            var itemsToRemove = new List<object>();
+            foreach (var item in contextMenu.Items)
+            {
+                if (item is FrameworkElement fe && fe.Tag != null && fe.Tag.ToString() == "PluginItem")
+                    itemsToRemove.Add(item);
+            }
+            foreach (var item in itemsToRemove)
+                contextMenu.Items.Remove(item);
+
+            var pluginItems = PluginService.GetContextMenuItems();
+            if (pluginItems == null || pluginItems.Count == 0) return;
+
+            var separator = new Separator { Tag = "PluginItem" };
+            contextMenu.Items.Add(separator);
+
+            foreach (var item in pluginItems)
+            {
+                var menuItem = new MenuItem { Header = item.Header, Tag = "PluginItem" };
+                menuItem.Click += (s, args) =>
+                {
+                    var selected = dgFiles.SelectedItem as FileEntry;
+                    if (selected != null) item.Callback(selected);
+                };
+                contextMenu.Items.Add(menuItem);
+            }
         }
 
         #endregion
@@ -1501,6 +1538,8 @@ namespace FluxDB
             dgFiles.ItemsSource = results.Where(MatchesFilter).ToList();
             txtFileCount.Text = $"{results.Count} found";
             txtStatus.Text = $"Search results for: {query}";
+
+            PluginService.RaiseSearchPerformed(query, results, _currentViewFolder ?? _currentRootFolder);
         }
 
         private void DgFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1508,6 +1547,11 @@ namespace FluxDB
             _selectedFile = dgFiles.SelectedItem as FileEntry;
             UpdateDetailsPanel();
             UpdatePreview(_selectedFile);
+
+            if (_selectedFile != null)
+            {
+                PluginService.RaiseFileSelected(_selectedFile, _currentViewFolder ?? _currentRootFolder);
+            }
         }
 
         private void UpdateDetailsPanel()
@@ -1645,6 +1689,11 @@ namespace FluxDB
             Dispatcher.Invoke(() => txtProgressStatus.Text = status);
         }
 
+        private void IndexerService_FileIndexed(object sender, FileIndexedEventArgs e)
+        {
+            PluginService.RaiseFileIndexed(e.File, e.RootPath);
+        }
+
         #endregion
 
         private async void ShowRefreshDialog()
@@ -1741,6 +1790,7 @@ namespace FluxDB
         protected override void OnClosed(EventArgs e)
         {
             _indexCancellation?.Cancel();
+            PluginService.Shutdown();
             _databaseService?.Dispose();
             base.OnClosed(e);
         }
