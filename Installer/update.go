@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -54,6 +55,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			tickCmd(),
 		)
 
+	case downloadStartedMsg:
+		return m, waitForDownloadCmd(msg.ch)
+
 	case downloadProgressMsg:
 		m.progress = msg.percent
 		cmd := m.progressBar.SetPercent(msg.percent)
@@ -78,6 +82,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func waitForDownloadCmd(ch <-chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return errMsg{err: fmt.Errorf("downloadkanal unerwartet geschlossen")}
+		}
+		return msg
+	}
 }
 
 func tickCmd() tea.Cmd {
