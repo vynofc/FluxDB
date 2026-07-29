@@ -68,6 +68,12 @@ namespace FluxDB.Services
                         if (_writeQueue.Count == 0)
                         {
                             _isProcessingQueue = false;
+                            // Double-check: entries may have been added while we were writing
+                            if (_writeQueue.Count > 0)
+                            {
+                                _isProcessingQueue = true;
+                                continue;
+                            }
                             return;
                         }
                         linesToWrite = _writeQueue.ToArray();
@@ -82,7 +88,7 @@ namespace FluxDB.Services
                     {
                         // swallow file write errors
                     }
-                    
+
                     Thread.Sleep(100); // Small delay to batch more logs
                 }
             }

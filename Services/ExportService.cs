@@ -42,6 +42,7 @@ namespace FluxDB.Services
                 {
                     Path = file.Path,
                     Name = file.Name,
+                    Extension = file.Extension,
                     CreatedAt = file.CreatedAt,
                     ModifiedAt = file.ModifiedAt,
                     Size = file.Size,

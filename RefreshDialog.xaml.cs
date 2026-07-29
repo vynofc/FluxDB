@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Forms;
 
 namespace FluxDB
 {
@@ -32,7 +31,7 @@ namespace FluxDB
 
         private void BtnBrowse_Click(object sender, RoutedEventArgs e)
         {
-            using (var dlg = new FolderBrowserDialog())
+            using (var dlg = new System.Windows.Forms.FolderBrowserDialog())
             {
                 dlg.Description = "Select folder to refresh";
                 if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)

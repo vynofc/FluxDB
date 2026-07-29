@@ -68,7 +68,7 @@ namespace FluxDB
                     this.Icon = BitmapFrame.Create(new Uri(icoPath));
                 }
             }
-            catch { }
+            catch (Exception ex) { LoggingService.Log($"Failed to load window icon: {ex.Message}"); }
 
             InitializeServices();
             LoadInitialData();
@@ -97,7 +97,7 @@ namespace FluxDB
             {
                 _settingsService.AddRecentFolder(folderPath);
             }
-            catch { }
+            catch (Exception ex) { LoggingService.Log($"Failed to load window icon: {ex.Message}"); }
         }
 
         private bool HasExistingIndex(string folderPath)
@@ -759,7 +759,7 @@ namespace FluxDB
                 if (!double.IsNaN(horCenter) && !double.IsInfinity(horCenter))
                     imgPreviewContainer.ScrollToHorizontalOffset(horCenter);
             }
-            catch { }
+            catch (Exception ex) { LoggingService.Log($"Failed to load window icon: {ex.Message}"); }
         }
 
         #endregion
@@ -1008,25 +1008,26 @@ namespace FluxDB
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error adding file to index: {ex.Message}");
+                LoggingService.Log($"Error adding file to index: {ex.Message}");
             }
         }
 
-        private void AddFolderToIndex(string folderPath)
+        private async void AddFolderToIndex(string folderPath)
         {
             if (_databaseService == null) return;
 
             try
             {
-                var files = Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories);
-                using (var transaction = _databaseService.BeginTransaction())
+                var entries = await Task.Run(() =>
                 {
+                    var result = new List<FileEntry>();
+                    var files = Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories);
                     foreach (var file in files)
                     {
                         try
                         {
                             var fileInfo = new FileInfo(file);
-                            var entry = new FileEntry
+                            result.Add(new FileEntry
                             {
                                 Path = file,
                                 Name = fileInfo.Name,
@@ -1034,20 +1035,28 @@ namespace FluxDB
                                 Size = fileInfo.Length,
                                 CreatedAt = fileInfo.CreationTime,
                                 ModifiedAt = fileInfo.LastWriteTime
-                            };
-                            _databaseService.UpsertFile(entry, transaction);
+                            });
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"Error adding file to index: {ex.Message}");
+                            LoggingService.Log($"Error scanning file for index: {ex.Message}");
                         }
+                    }
+                    return result;
+                });
+
+                using (var transaction = _databaseService.BeginTransaction())
+                {
+                    foreach (var entry in entries)
+                    {
+                        _databaseService.UpsertFile(entry, transaction);
                     }
                     transaction.Commit();
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error adding folder to index: {ex.Message}");
+                LoggingService.Log($"Error adding folder to index: {ex.Message}");
             }
         }
 
@@ -1276,7 +1285,7 @@ namespace FluxDB
             catch (UnauthorizedAccessException) { }
             catch (DirectoryNotFoundException) { }
 
-            var allFiles = _databaseService.GetAllFiles();
+            var allFiles = _databaseService.GetFilesInFolder(_currentViewFolder);
             var filesInFolder = allFiles
                 .Where(f => Path.GetDirectoryName(f.Path) == _currentViewFolder)
                 .Where(MatchesFilter)
@@ -1698,19 +1707,21 @@ namespace FluxDB
 
         private async Task RefreshSpecificFolderAsync(string folder)
         {
+            if (_isIndexing) return;
             if (_indexerService == null || _databaseService == null)
             {
                 InitializeDatabaseForFolder(_currentRootFolder ?? folder);
             }
 
-            var cts = new CancellationTokenSource();
+            _isIndexing = true;
+            _indexCancellation?.Dispose();
+            _indexCancellation = new CancellationTokenSource();
             try
             {
                 pnlProgress.Visibility = Visibility.Visible;
                 progressBar.Value = 0;
-                _indexCancellation = cts;
 
-                var result = await _indexerService.ScanFolderAsync(folder, cts.Token);
+                var result = await _indexerService.ScanFolderAsync(folder, _indexCancellation.Token);
                 if (result.Success)
                     txtStatus.Text = $"Indexed {result.FilesIndexed} files in {result.Duration.TotalSeconds:F1}s";
                 else if (result.Cancelled)
@@ -1726,6 +1737,7 @@ namespace FluxDB
             }
             finally
             {
+                _isIndexing = false;
                 pnlProgress.Visibility = Visibility.Collapsed;
                 _indexCancellation = null;
             }
@@ -1805,7 +1817,7 @@ namespace FluxDB
                 if (hr != 0 || factory == null) return null;
 
                 var sz = new SIZE { cx = size, cy = size };
-                factory.GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_BIGGERSIZEOK, out var hBitmap);
+                factory.GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_THUMBNAILONLY, out var hBitmap);
                 if (hBitmap == IntPtr.Zero) return null;
 
                 try

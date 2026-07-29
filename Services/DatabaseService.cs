@@ -88,6 +88,33 @@ namespace FluxDB.Services
             return files;
         }
 
+        public List<FileEntry> GetFilesInFolder(string folderPath)
+        {
+            var files = new List<FileEntry>();
+            var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
+            var sql = @"
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
+                FROM files f
+                LEFT JOIN notes n ON f.id = n.file_id
+                LEFT JOIN file_tags ft ON f.id = ft.file_id
+                LEFT JOIN tags t ON ft.tag_id = t.id
+                WHERE f.deleted = 0 AND f.path LIKE @folderPrefix
+                GROUP BY f.id";
+
+            using (var cmd = new SQLiteCommand(sql, _connection))
+            {
+                cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        files.Add(MapFileEntry(r));
+                    }
+                }
+            }
+            return files;
+        }
+
         private FileEntry MapFileEntry(SQLiteDataReader r)
         {
             var f = new FileEntry
@@ -113,34 +140,6 @@ namespace FluxDB.Services
                 f.Tags = new List<string>();
             }
             return f;
-        }
-
-        public List<FileEntry> SearchFiles(string query)
-        {
-            if (string.IsNullOrWhiteSpace(query)) return GetAllFiles();
-            var files = new List<FileEntry>();
-            var sql = @"
-                SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
-                FROM files f
-                LEFT JOIN notes n ON f.id = n.file_id
-                LEFT JOIN file_tags ft ON f.id = ft.file_id
-                LEFT JOIN tags t ON ft.tag_id = t.id
-                WHERE f.deleted=0 
-                GROUP BY f.id
-                HAVING f.name LIKE @q OR f.path LIKE @q OR tags_text LIKE @q OR n.note LIKE @q";
-
-            using (var cmd = new SQLiteCommand(sql, _connection))
-            {
-                cmd.Parameters.AddWithValue("@q", "%" + query + "%");
-                using (var r = cmd.ExecuteReader())
-                {
-                    while (r.Read())
-                    {
-                        files.Add(MapFileEntry(r));
-                    }
-                }
-            }
-            return files;
         }
 
         public List<FileEntry> SearchByTag(string tagName)
@@ -172,36 +171,49 @@ namespace FluxDB.Services
         public int GetOrCreateTag(string name)
         {
             name = name.Trim().ToLower();
-            using (var cmd = new SQLiteCommand("SELECT id FROM tags WHERE name=@n", _connection))
+            using (var transaction = _connection.BeginTransaction())
             {
-                cmd.Parameters.AddWithValue("@n", name);
-                var r = cmd.ExecuteScalar();
-                if (r != null) return Convert.ToInt32(r);
-            }
-            using (var cmd = new SQLiteCommand("INSERT INTO tags (name) VALUES (@n); SELECT last_insert_rowid();", _connection))
-            {
-                cmd.Parameters.AddWithValue("@n", name);
-                return Convert.ToInt32(cmd.ExecuteScalar());
+                using (var cmd = new SQLiteCommand("INSERT OR IGNORE INTO tags (name) VALUES (@n); SELECT id FROM tags WHERE name=@n;", _connection, transaction))
+                {
+                    cmd.Parameters.AddWithValue("@n", name);
+                    var result = Convert.ToInt32(cmd.ExecuteScalar());
+                    transaction.Commit();
+                    return result;
+                }
             }
         }
 
         public void SetTagsForFile(int fileId, List<string> tags)
         {
-            using (var cmd = new SQLiteCommand("DELETE FROM file_tags WHERE file_id=@id", _connection))
+            using (var transaction = _connection.BeginTransaction())
             {
-                cmd.Parameters.AddWithValue("@id", fileId);
-                cmd.ExecuteNonQuery();
-            }
-            foreach (var tag in tags)
-            {
-                if (string.IsNullOrWhiteSpace(tag)) continue;
-                var tagId = GetOrCreateTag(tag);
-                using (var cmd = new SQLiteCommand("INSERT OR IGNORE INTO file_tags (file_id,tag_id) VALUES (@f,@t)", _connection))
+                using (var cmd = new SQLiteCommand("DELETE FROM file_tags WHERE file_id=@id", _connection, transaction))
                 {
-                    cmd.Parameters.AddWithValue("@f", fileId);
-                    cmd.Parameters.AddWithValue("@t", tagId);
+                    cmd.Parameters.AddWithValue("@id", fileId);
                     cmd.ExecuteNonQuery();
                 }
+                foreach (var tag in tags)
+                {
+                    if (string.IsNullOrWhiteSpace(tag)) continue;
+                    var tagId = GetOrCreateTagInTransaction(tag, transaction);
+                    using (var cmd = new SQLiteCommand("INSERT OR IGNORE INTO file_tags (file_id,tag_id) VALUES (@f,@t)", _connection, transaction))
+                    {
+                        cmd.Parameters.AddWithValue("@f", fileId);
+                        cmd.Parameters.AddWithValue("@t", tagId);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+                transaction.Commit();
+            }
+        }
+
+        private int GetOrCreateTagInTransaction(string name, SQLiteTransaction transaction)
+        {
+            name = name.Trim().ToLower();
+            using (var cmd = new SQLiteCommand("INSERT OR IGNORE INTO tags (name) VALUES (@n); SELECT id FROM tags WHERE name=@n;", _connection, transaction))
+            {
+                cmd.Parameters.AddWithValue("@n", name);
+                return Convert.ToInt32(cmd.ExecuteScalar());
             }
         }
 
@@ -284,6 +296,14 @@ namespace FluxDB.Services
                     }
                 }
                 transaction.Commit();
+            }
+
+            if (toDelete.Count > 0)
+            {
+                using (var cmd = new SQLiteCommand("VACUUM", _connection))
+                {
+                    cmd.ExecuteNonQuery();
+                }
             }
         }
 

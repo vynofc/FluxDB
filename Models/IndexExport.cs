@@ -10,6 +10,7 @@ namespace FluxDB.Models
     {
         public string Path { get; set; }
         public string Name { get; set; }
+        public string Extension { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime ModifiedAt { get; set; }
         public long Size { get; set; }

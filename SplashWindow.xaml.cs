@@ -47,7 +47,7 @@ namespace FluxDB
                         bmp.EndInit();
                         imgLogo.Source = bmp;
                     }
-                    catch { }
+                    catch (Exception ex) { LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}"); }
                 }
                 else if (File.Exists(pngPath))
                 {
@@ -66,10 +66,10 @@ namespace FluxDB
                         bmp.EndInit();
                         imgLogo.Source = bmp;
                     }
-                    catch { }
+                    catch (Exception ex) { LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}"); }
                 }
             }
-            catch { }
+            catch (Exception ex) { LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}"); }
         }
 
         private async void SplashWindow_Loaded(object sender, RoutedEventArgs e)
@@ -118,16 +118,6 @@ namespace FluxDB
             }
         }
 
-        private string NormalizeVersion(string s)
-        {
-            return VersionHelper.NormalizeVersion(s);
-        }
-
-        private int CompareVersions(string v1, string v2)
-        {
-            return VersionHelper.CompareVersions(v1, v2);
-        }
-
         private async Task<bool> CheckForUpdatesAsync()
         {
             try
@@ -144,10 +134,10 @@ namespace FluxDB
                 if (latestTag == null)
                     return true;
 
-                var remoteVersion = NormalizeVersion(latestTag);
-                var localVersion = NormalizeVersion(localVersionStr);
+                var remoteVersion = VersionHelper.NormalizeVersion(latestTag);
+                var localVersion = VersionHelper.NormalizeVersion(localVersionStr);
 
-                if (CompareVersions(remoteVersion, localVersion) <= 0)
+                if (VersionHelper.CompareVersions(remoteVersion, localVersion) <= 0)
                     return true;
 
                 App.IsUpdateAvailable = true;
