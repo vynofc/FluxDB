@@ -25,3 +25,13 @@ jobs:
 
       - name: Build
         run: msbuild FluxDB.sln /p:Configuration=Release /p:Platform="Any CPU"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build Log Viewer
+        run: |
+          cd "Log Viewer"
+          go build -ldflags="-s -w" -o ..\bin\Release\components\Log_Viewer.exe .

@@ -15,8 +15,6 @@ namespace FluxDB
     {
         public static bool IsUpdateAvailable { get; set; } = false;
         public static string AvailableVersion { get; set; } = "";
-        public static bool IsBetaUpdateAvailable { get; set; } = false;
-        public static string AvailableBetaVersion { get; set; } = "";
         public static bool IsUpdateSkipped { get; set; } = false;
 
         public static string GetLocalVersion()
@@ -42,47 +40,13 @@ namespace FluxDB
                         FluxDB.Services.LoggingService.Log($"Error reading local version.txt: {ex.Message}");
                     }
                 }
-
-                // 2. Try central version.txt
-                var centralDir = Environment.GetEnvironmentVariable("FLUXDB_CENTRAL_DIR") ?? "C:\\NSCE\\FluxDB";
-                var centralFile = System.IO.Path.Combine(centralDir, "version.txt");
-                if (System.IO.File.Exists(centralFile))
-                {
-                    try
-                    {
-                        var ver = System.IO.File.ReadAllText(centralFile).Trim();
-                        if (!string.IsNullOrEmpty(ver) && VersionHelper.CompareVersions(ver, maxVer) > 0) maxVer = ver;
-                    }
-                    catch (Exception ex)
-                    {
-                        FluxDB.Services.LoggingService.Log($"Error reading central version.txt: {ex.Message}");
-                    }
-                }
-
-                // 3. Try highest version zip in FLUXDB_CENTRAL_DIR
-                if (System.IO.Directory.Exists(centralDir))
-                {
-                    try
-                    {
-                        var zips = System.IO.Directory.GetFiles(centralDir, "*.zip");
-                        foreach (var zip in zips)
-                        {
-                            var name = System.IO.Path.GetFileNameWithoutExtension(zip);
-                            if (!string.IsNullOrEmpty(name) && VersionHelper.CompareVersions(name, maxVer) > 0) maxVer = name;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        FluxDB.Services.LoggingService.Log($"Error scanning central ZIPs: {ex.Message}");
-                    }
-                }
             }
             catch (Exception ex)
             {
                 FluxDB.Services.LoggingService.Log($"Error in GetLocalVersion: {ex.Message}");
             }
 
-            // 4. Fallback to Assembly
+            // 2. Fallback to Assembly version
             try
             {
                 var ass = System.Reflection.Assembly.GetExecutingAssembly();

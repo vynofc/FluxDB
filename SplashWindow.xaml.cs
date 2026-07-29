@@ -7,7 +7,9 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using FluxDB.Models;
 using FluxDB.Services;
+using Newtonsoft.Json;
 
 namespace FluxDB
 {
@@ -135,112 +137,42 @@ namespace FluxDB
                 App.IsUpdateSkipped = skipUpdate;
 
                 var localVersionStr = App.GetLocalVersion();
-                bool isLocalBeta = localVersionStr.Contains("-");
-
                 var assembly = Assembly.GetExecutingAssembly();
-                var exePath = assembly.Location;
-                var exeDir = Path.GetDirectoryName(exePath) ?? ".";
-                
-                using (var http = new HttpClient())
+                var exeDir = Path.GetDirectoryName(assembly.Location) ?? ".";
+
+                var latestTag = await FetchLatestReleaseTagAsync();
+                if (latestTag == null)
+                    return true;
+
+                var remoteVersion = NormalizeVersion(latestTag);
+                var localVersion = NormalizeVersion(localVersionStr);
+
+                if (CompareVersions(remoteVersion, localVersion) <= 0)
+                    return true;
+
+                App.IsUpdateAvailable = true;
+                App.AvailableVersion = remoteVersion;
+
+                if (skipUpdate)
                 {
-                    http.Timeout = TimeSpan.FromSeconds(10);
-                    var versionUrl = "https://nsce-cdn.fun/FluxDB/version.txt";
-                    string remoteVersionText = null;
-                    try
-                    {
-                        remoteVersionText = await http.GetStringAsync(versionUrl).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        LoggingService.Log($"Update check: Failed to download version.txt: {ex.Message}");
-                    }
-
-                    if (string.IsNullOrEmpty(remoteVersionText))
-                        return true;
-
-                    var parts = remoteVersionText.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-                    string newestStableRaw = null;
-                    string newestOverallRaw = null;
-
-                    foreach (var part in parts)
-                    {
-                        var raw = part.Trim();
-                        bool isRemoteBeta = raw.Contains("!beta");
-
-                        if (newestOverallRaw == null || CompareVersions(raw, newestOverallRaw) > 0)
-                            newestOverallRaw = raw;
-
-                        if (!isRemoteBeta)
-                        {
-                            if (newestStableRaw == null || CompareVersions(raw, newestStableRaw) > 0)
-                                newestStableRaw = raw;
-                        }
-                    }
-
-                    LoggingService.Log($"Update check: Stable={newestStableRaw}, Overall={newestOverallRaw}, Local={localVersionStr}");
-
-                    string targetUpdateRaw = null;
-
-                    // Logic:
-                    // 1. If a newer Stable is available -> Force Update to newest Stable
-                    if (newestStableRaw != null && CompareVersions(newestStableRaw, localVersionStr) > 0)
-                    {
-                        targetUpdateRaw = newestStableRaw;
-                    }
-                    // 2. If a newer Overall (Beta) is available
-                    else if (newestOverallRaw != null && CompareVersions(newestOverallRaw, localVersionStr) > 0)
-                    {
-                        if (isLocalBeta)
-                        {
-                            // If we are already on a beta, force update to newest available (next beta or release)
-                            targetUpdateRaw = newestOverallRaw;
-                        }
-                        else
-                        {
-                            // We are on Stable, and there is only a newer Beta available -> Optional
-                            App.IsBetaUpdateAvailable = true;
-                            App.AvailableBetaVersion = NormalizeVersion(newestOverallRaw);
-                            return true;
-                        }
-                    }
-
-                    if (targetUpdateRaw == null)
-                    {
-                        // Up to date
-                        return true;
-                    }
-
-                    // New version available for force update
-                    var finalRemoteRaw = NormalizeVersion(targetUpdateRaw);
-                    App.IsUpdateAvailable = true;
-                    App.AvailableVersion = finalRemoteRaw;
-
-                    if (skipUpdate)
-                    {
-                        LoggingService.Log("Update available but --noupdate flag is set. Skipping installer.");
-                        return true;
-                    }
-
-                    // Zip name should match what's in version.txt (without !beta suffix)
-                    var zipName = targetUpdateRaw.Split('!')[0].Trim() + ".zip";
-                    var zipPath = Path.Combine("C:\\NSCE\\FluxDB", zipName);
-                    LoggingService.Log($"Expected zip path: {zipPath} exists={File.Exists(zipPath)}");
-
-                    // Start installer
-                    var installerInFolder = Path.Combine("C:\\NSCE\\FluxDB", "FluxDB-Installer.exe");
-                    if (File.Exists(installerInFolder))
-                    {
-                        var startInfo = new ProcessStartInfo(installerInFolder)
-                        {
-                            WorkingDirectory = Path.GetDirectoryName(installerInFolder),
-                            UseShellExecute = true
-                        };
-                        Process.Start(startInfo);
-                        return false; 
-                    }
-
-                    return await RunInstallerAsync(exeDir).ConfigureAwait(false);
+                    LoggingService.Log("Update available but --noupdate flag is set. Skipping.");
+                    return true;
                 }
+
+                var installerPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
+                if (!File.Exists(installerPath))
+                {
+                    var ok = await DownloadInstallerAsync(exeDir, latestTag);
+                    if (!ok) return true;
+                }
+
+                var startInfo = new ProcessStartInfo(installerPath)
+                {
+                    WorkingDirectory = exeDir,
+                    UseShellExecute = true
+                };
+                Process.Start(startInfo);
+                return false;
             }
             catch (Exception ex)
             {
@@ -249,60 +181,48 @@ namespace FluxDB
             }
         }
 
-        private async Task<bool> RunInstallerAsync(string exeDir)
+        private async Task<string> FetchLatestReleaseTagAsync()
         {
             try
             {
-                var installerPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
-                if (!File.Exists(installerPath))
+                using (var http = new HttpClient())
                 {
-                    return await DownloadAndRunInstallerAsync(exeDir).ConfigureAwait(false);
-                }
+                    http.Timeout = TimeSpan.FromSeconds(15);
+                    http.DefaultRequestHeaders.UserAgent.ParseAdd("FluxDB");
+                    http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 
-                var start = new ProcessStartInfo(installerPath)
-                {
-                    WorkingDirectory = exeDir,
-                    UseShellExecute = true
-                };
-                Process.Start(start);
-                return false; // we started installer; exit app
+                    var json = await http.GetStringAsync(
+                        "https://api.github.com/repos/vynofc/FluxDB/releases/latest");
+                    var release = JsonConvert.DeserializeObject<GitHubRelease>(json);
+                    return release?.TagName;
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                return true; // on failure, continue
+                LoggingService.Log($"GitHub API error: {ex.Message}");
+                return null;
             }
         }
 
-        private async Task<bool> DownloadAndRunInstallerAsync(string exeDir)
+        private async Task<bool> DownloadInstallerAsync(string exeDir, string tag)
         {
             try
             {
-                var installerUrl = "https://nsce-cdn.fun/FluxDB/FluxDB-Installer.exe";
-                var installerPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
+                var url = $"https://github.com/vynofc/FluxDB/releases/download/{tag}/FluxDB-Installer.exe";
+                var path = Path.Combine(exeDir, "FluxDB-Installer.exe");
 
                 using (var http = new HttpClient())
-                using (var resp = await http.GetAsync(installerUrl).ConfigureAwait(false))
+                using (var resp = await http.GetAsync(url))
                 {
-                    if (!resp.IsSuccessStatusCode)
-                        return true;
-
-                    using (var fs = new FileStream(installerPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    {
-                        await resp.Content.CopyToAsync(fs).ConfigureAwait(false);
-                    }
+                    if (!resp.IsSuccessStatusCode) return false;
+                    using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+                        await resp.Content.CopyToAsync(fs);
                 }
-
-                var start = new ProcessStartInfo(installerPath)
-                {
-                    WorkingDirectory = exeDir,
-                    UseShellExecute = true
-                };
-                Process.Start(start);
-                return false;
+                return true;
             }
             catch
             {
-                return true;
+                return false;
             }
         }
     }

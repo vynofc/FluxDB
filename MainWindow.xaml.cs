@@ -1733,9 +1733,31 @@ namespace FluxDB
 
         private void ShowLogViewer()
         {
-            var viewer = new LogViewer();
-            viewer.Owner = this;
-            viewer.ShowDialog();
+            try
+            {
+                var exeDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+                var viewerExe = Path.Combine(exeDir, "components", "Log_Viewer.exe");
+                var logPath = LoggingService.LogFilePath;
+
+                if (!File.Exists(viewerExe))
+                {
+                    MessageBox.Show("Log Viewer nicht gefunden.", "Fehler", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var startInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = viewerExe,
+                    Arguments = $"--log \"{logPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                System.Diagnostics.Process.Start(startInfo);
+            }
+            catch
+            {
+                MessageBox.Show("Log Viewer konnte nicht gestartet werden.", "Fehler", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         protected override void OnClosed(EventArgs e)

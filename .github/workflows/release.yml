@@ -34,9 +34,15 @@ jobs:
           cd Installer
           go build -ldflags="-s -w" -o ../FluxDB-Installer.exe .
 
+      - name: Build Log Viewer
+        run: |
+          cd "Log Viewer"
+          go build -ldflags="-s -w" -o ..\bin\Release\components\Log_Viewer.exe .
+
       - name: Create zip
         run: |
           mkdir dist
+          mkdir dist\components
           copy bin\Release\FluxDB.exe dist\
           copy bin\Release\FluxDB.exe.config dist\
           copy bin\Release\FluxDB.pdb dist\
@@ -45,6 +51,7 @@ jobs:
           xcopy bin\Release\x64 dist\x64\ /E /I
           xcopy bin\Release\x86 dist\x86\ /E /I
           copy FluxDB-Installer.exe dist\
+          copy bin\Release\components\Log_Viewer.exe dist\components\
           Compress-Archive -Path dist\* -DestinationPath FluxDB.zip
 
       - name: Upload release asset

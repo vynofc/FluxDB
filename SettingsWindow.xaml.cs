@@ -38,12 +38,6 @@ namespace FluxDB
                 txtUpdateStatus.Foreground = Brushes.Orange;
                 btnDownloadUpdate.Visibility = Visibility.Visible;
             }
-            else if (App.IsBetaUpdateAvailable)
-            {
-                txtUpdateStatus.Text = $"Beta available: {App.AvailableBetaVersion}";
-                txtUpdateStatus.Foreground = Brushes.Cyan;
-                btnDownloadUpdate.Visibility = Visibility.Visible;
-            }
             else
             {
                 txtUpdateStatus.Text = "Your version is up to date.";
@@ -54,11 +48,6 @@ namespace FluxDB
             if (App.IsUpdateSkipped)
             {
                 txtUpdateDetails.Text = "Program started with --noupdate. Auto-update was skipped.";
-                txtUpdateDetails.Visibility = Visibility.Visible;
-            }
-            else if (App.IsBetaUpdateAvailable && !App.IsUpdateAvailable)
-            {
-                txtUpdateDetails.Text = "A newer beta version is available for testing.";
                 txtUpdateDetails.Visibility = Visibility.Visible;
             }
             else
@@ -82,7 +71,7 @@ namespace FluxDB
 
         private void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
         {
-            System.Diagnostics.Process.Start("https://nsce-cdn.fun/FluxDB/FluxDB-Installer.exe");
+            System.Diagnostics.Process.Start("https://github.com/vynofc/FluxDB/releases/latest");
         }
     }
 }
