@@ -105,3 +105,4 @@ $RECYCLE.BIN/
 .AppleDouble
 .LSOverride
 /.output.txt
+node_modules
