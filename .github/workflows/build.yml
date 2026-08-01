@@ -21,17 +21,25 @@ jobs:
         uses: nuget/setup-nuget@v2
 
       - name: Restore packages
-        run: nuget restore FluxDB.sln
+        run: nuget restore WPF/FluxDB/FluxDB.csproj
 
       - name: Build
-        run: msbuild FluxDB.sln /p:Configuration=Release /p:Platform="Any CPU"
+        run: |
+          if (-not (Test-Path bin)) { New-Item -ItemType Directory -Path bin -Force | Out-Null }
+          msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir=bin\
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.22"
 
+      - name: Build Installer
+        run: |
+          cd Installer
+          go build -ldflags="-s -w" -o ../bin/FluxDB-Installer.exe .
+
       - name: Build Log Viewer
         run: |
+          if (-not (Test-Path bin/components)) { New-Item -ItemType Directory -Path bin/components -Force | Out-Null }
           cd "Log_Viewer"
-          go build -ldflags="-s -w" -o ..\bin\Release\components\Log_Viewer.exe .
+          go build -ldflags="-s -w" -o ../bin/components/Log_Viewer.exe .

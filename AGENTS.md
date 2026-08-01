@@ -1,87 +1,73 @@
 # AGENTS.md — FluxDB
 
-## Project Overview
+## Projektübersicht
 
-FluxDB consists of two components:
+FluxDB besteht aus drei Komponenten:
 
-1. **FluxDB** — a **WPF desktop application** (C# 7.3, .NET Framework 4.7.2) for Windows. It scans local folders, indexes file metadata into an embedded SQLite database, and provides a file manager with tagging, search, preview, and export capabilities.
-2. **FluxDB Installer** — a **Go-based TUI installer** (Go 1.22+) that downloads the latest FluxDB release from GitHub and extracts it to `%LOCALAPPDATA%\FluxDB`.
+1. **WPF-App** unter [WPF/FluxDB](WPF/FluxDB/) – Windows-Desktopanwendung mit Dateisuche, Indizierung, Tags, Vorschau und Einstellungen.
+2. **Installer** unter [Installer](Installer/) – Go-basierter TUI-Installer für die Verteilung.
+3. **Log-Viewer** unter [Log_Viewer](Log_Viewer/) – separater Viewer für Anwendungs- und Indexierungs-Logs.
 
-**Key constraint**: Windows-only. Uses WPF, shell32.dll COM interop, and hardcoded `C:\NSCE\FluxDB` paths.
+**Wichtige Einschränkung:** Das Projekt ist Windows-only und verwendet WPF, COM-Interop sowie feste Pfade wie `C:\NSCE\FluxDB`.
 
 ---
 
 ## Build & Run
 
-### FluxDB (WPF App)
+### WPF-App
 
-```bash
+```powershell
 # Restore NuGet packages
-nuget restore FluxDB.sln
+nuget restore WPF/FluxDB/FluxDB.csproj
 
 # Build (Release)
-msbuild FluxDB.sln /p:Configuration=Release /p:Platform="Any CPU"
+msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir=bin\
 
 # Build (Debug)
-msbuild FluxDB.sln /p:Configuration=Debug /p:Platform="Any CPU"
+msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Debug /p:Platform=AnyCPU /p:OutDir=bin\
 ```
 
-Executable output: `bin/Release/FluxDB.exe` or `bin/Debug/FluxDB.exe`.
+Ausgabe: [bin](bin/) mit `FluxDB.exe`, `FluxDB-Installer.exe`, `components/Log_Viewer.exe`, `x64/SQLite.Interop.dll`, `x86/SQLite.Interop.dll` und `FluxDB.zip` nach dem Full-Build.
 
-### FluxDB Installer (Go)
+### Installer (Go)
 
-```bash
-# Windows
-cd Installer && build.bat
-
-# Cross-compile from Linux/macOS
-cd Installer && bash build.sh
+```powershell
+cd Installer
+build.bat
 ```
 
-Executable output: `Installer/bin/FluxDB-Installer.exe`.
+Ausgabe: [bin](bin/).
 
-**No test suite exists** in this project.
+### Log-Viewer (Go)
+
+```powershell
+cd Log_Viewer
+go build -ldflags="-s -w" -o ..\bin\Log_Viewer.exe .
+```
+
+**Es gibt derzeit keine Test-Suite im Repository.**
 
 ---
 
 ## CI / Workflows
 
-| Workflow | Trigger | What it does |
+| Workflow | Trigger | Was passiert |
 |---|---|---|
-| `build.yml` | Push/PR to `main` | Builds FluxDB.sln (MSBuild) on `windows-latest` |
-| `release.yml` | Release published | Builds FluxDB.sln + Installer (Go), packages both into `FluxDB.zip`, uploads zip + `FluxDB-Installer.exe` as release assets |
+| `build.yml` | Push/PR auf `main` | Baut die WPF-App aus [WPF/FluxDB](WPF/FluxDB/) und den Log-Viewer |
+| `release.yml` | Veröffentlichtes Release | Baut WPF-App, Installer und Log-Viewer, erzeugt `FluxDB.zip` |
 
 ---
 
-## Architecture
+## Architekturhinweise
 
-### FluxDB (WPF App)
+Die WPF-App liegt jetzt unter [WPF/FluxDB](WPF/FluxDB/) und enthält die typischen Bausteine:
 
-#### Startup flow
+- UI-Dateien wie `App.xaml`, `MainWindow.xaml`, `SettingsWindow.xaml` und die Dialogfenster
+- Modelle unter `Models/`
+- Services unter `Services/`
+- Hilfsfunktionen wie `VersionHelper.cs`
 
-1. `App.xaml` sets `StartupUri="SplashWindow.xaml"`
-2. `SplashWindow` checks for updates (HTTP GET `https://nsce-cdn.fun/FluxDB/version.txt`), then creates and shows `MainWindow`
-3. `MainWindow` constructor calls `InitializeServices()` → `LoadInitialData()`
-
-#### Service layer
-
-| Service | Type | Responsibilities |
-|---|---|---|
-| `SettingsService` | instance | Loads/saves `AppSettings` as JSON from `%LocalAppData%\FluxDB\settings.json`. Manages recent folders (max 10). |
-| `DatabaseService` | instance, `IDisposable` | Opens SQLite connection to `.fluxdb` file in the indexed folder. All CRUD for files, tags, notes. |
-| `IndexerService` | instance | Recursively scans a folder, builds `FileEntry` objects, upserts into DB via `DatabaseService`. Raises `ProgressChanged` and `StatusChanged` events. |
-| `ExportService` | instance | Converts DB contents to JSON (`IndexExport` model), writes to file or GZip stream. |
-| `LoggingService` | **static** | Thread-safe in-memory log buffer (2000 lines) + background file writer to `%LocalAppData%\FluxDB\logs.txt`. |
-
-#### Models
-
-| Model | Notes |
-|---|---|
-| `FileEntry` | `INotifyPropertyChanged` for WPF binding. Has computed `SizeDisplay`, `Icon`, `IconColor` properties. Tags are stored as `List<string>` and serialized as `TagsText` (null-byte `\0` separated). |
-| `Tag` | Simple `Id` + `Name`. |
-| `AppSettings` | JSON-serialized via Newtonsoft.Json. Contains `DeviceId`, `LastRootFolder`, `Theme`, `PreviewScale`, `AutoUpdateCheck`, `RecentFolders`, `FolderFilters`. |
-| `IndexExport` / `IndexExportItem` | Export format for JSON/GZip output. |
-
+Die Build-Skripte und GitHub-Workflows verwenden diese neue Struktur, damit die App sauber von den anderen Komponenten getrennt ist.
 #### Database schema
 
 SQLite database file named `.fluxdb` lives in the root of the indexed folder:

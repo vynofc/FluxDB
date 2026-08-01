@@ -1,51 +1,166 @@
 @echo off
+setlocal EnableExtensions
 cd /d "%~dp0"
 
-echo === FluxDB Build ===
+set "ROOT_DIR=%CD%"
+set "BIN_DIR=%ROOT_DIR%\bin"
+set "WPF_PROJECT=%ROOT_DIR%\WPF\FluxDB\FluxDB.csproj"
+set "INSTALLER_DIR=%ROOT_DIR%\Installer"
+set "LOG_VIEWER_DIR=%ROOT_DIR%\Log_Viewer"
+
+set "choice=%~1"
+if not defined choice (
+  echo === FluxDB Build Menu ===
+  echo.
+  echo 1^) Install requirements
+  echo 2^) Build WPF app
+  echo 3^) Build Installer
+  echo 4^) Build Log Viewer
+  echo 5^) Build full release package
+  echo 6^) Exit
+  echo.
+  set /p choice=Choose an option [1-6]: 
+)
+
+if /i "%choice%"=="1" goto run_install_requirements
+if /i "%choice%"=="2" goto run_build_wpf
+if /i "%choice%"=="3" goto run_build_installer
+if /i "%choice%"=="4" goto run_build_logviewer
+if /i "%choice%"=="5" goto run_build_full
+if /i "%choice%"=="6" goto end
+
+echo Invalid selection.
+goto end
+
+:run_install_requirements
+call :install_requirements
+if errorlevel 1 exit /b 1
+goto end
+
+:run_build_wpf
+call :build_wpf
+if errorlevel 1 exit /b 1
+goto end
+
+:run_build_installer
+call :build_installer
+if errorlevel 1 exit /b 1
+goto end
+
+:run_build_logviewer
+call :build_logviewer
+if errorlevel 1 exit /b 1
+goto end
+
+:run_build_full
+call :build_full
+if errorlevel 1 exit /b 1
+goto end
+
+:install_requirements
+call install-requirements.bat
+if errorlevel 1 exit /b 1
+exit /b 0
+
+:ensure_bin_dir
+if not exist "%BIN_DIR%" mkdir "%BIN_DIR%"
+if errorlevel 1 exit /b 1
+exit /b 0
+
+:build_wpf
 echo.
+echo [1/2] Restore NuGet packages...
+if not exist "nuget.exe" (
+    echo nuget.exe not found. Please run install-requirements.bat first.
+    exit /b 1
+)
 
-REM --- WPF App ---
-echo [1/5] Restore NuGet packages...
-nuget restore FluxDB.sln
+nuget.exe restore "%WPF_PROJECT%" -PackagesDirectory WPF\FluxDB\packages
+if errorlevel 1 exit /b 1
 
-echo [2/5] Build WPF App...
-msbuild FluxDB.sln /p:Configuration=Release /p:Platform="Any CPU"
+echo [2/2] Build WPF app into bin\...
+call :resolve_msbuild
+if errorlevel 1 exit /b 1
 
-REM --- Go: Installer ---
-echo [3/5] Build Installer...
-cd Installer
-go build -ldflags="-s -w" -o ..\FluxDB-Installer.exe .
-cd ..
+if /i "%MSBUILD_EXE%"=="msbuild" (
+    msbuild "%WPF_PROJECT%" /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir=%BIN_DIR%\
+) else (
+    "%MSBUILD_EXE%" "%WPF_PROJECT%" /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir=%BIN_DIR%\
+)
+if errorlevel 1 exit /b 1
+exit /b 0
 
-REM --- Go: Log Viewer ---
-echo [4/5] Build Log Viewer...
-if not exist "bin\Release\components" mkdir bin\Release\components
-cd "Log_Viewer"
-go build -ldflags="-s -w" -o ..\bin\Release\components\Log_Viewer.exe .
-cd ..
+:resolve_msbuild
+set "MSBUILD_EXE=msbuild"
+where msbuild >nul 2>&1
+if not errorlevel 1 exit /b 0
 
-REM --- Package ---
-echo [5/5] Package distribution...
-if exist dist rmdir /s /q dist
-mkdir dist
-mkdir dist\components
+for /f "delims=" %%I in ('where /r "%ProgramFiles%\Microsoft Visual Studio" MSBuild.exe 2^>nul') do (
+  set "MSBUILD_EXE=%%I"
+  exit /b 0
+)
 
-copy bin\Release\FluxDB.exe          dist\
-copy bin\Release\FluxDB.exe.config   dist\ 2>nul
-copy bin\Release\FluxDB.pdb          dist\ 2>nul
-copy bin\Release\Newtonsoft.Json.dll dist\ 2>nul
-copy bin\Release\System.Data.SQLite.dll dist\ 2>nul
-xcopy bin\Release\x64 dist\x64\ /E /I /Q 2>nul
-xcopy bin\Release\x86 dist\x86\ /E /I /Q 2>nul
-copy FluxDB-Installer.exe            dist\
-copy bin\Release\components\Log_Viewer.exe dist\components\
+for /f "delims=" %%I in ('where /r "%ProgramFiles(x86)%\Microsoft Visual Studio" MSBuild.exe 2^>nul') do (
+  set "MSBUILD_EXE=%%I"
+  exit /b 0
+)
 
-powershell -Command "Compress-Archive -Path dist\* -DestinationPath FluxDB.zip -Force"
+echo MSBuild was not found. Install Visual Studio Build Tools or add MSBuild to PATH.
+exit /b 1
 
-echo [6/6] Aufräumen...
-rmdir /s /q dist
+:build_installer
+echo.
+echo Building Installer into bin\...
+call :ensure_bin_dir
+if errorlevel 1 exit /b 1
+
+pushd "%INSTALLER_DIR%"
+go build -ldflags="-s -w" -o "%BIN_DIR%\FluxDB-Installer.exe" .
+if errorlevel 1 (
+    popd
+    exit /b 1
+)
+popd
+exit /b 0
+
+:build_logviewer
+echo.
+echo Building Log Viewer into bin\components\...
+call :ensure_bin_dir
+if errorlevel 1 exit /b 1
+if not exist "%BIN_DIR%\components" mkdir "%BIN_DIR%\components"
+if errorlevel 1 exit /b 1
+
+pushd "%LOG_VIEWER_DIR%"
+go build -ldflags="-s -w" -o "%BIN_DIR%\components\Log_Viewer.exe" .
+if errorlevel 1 (
+    popd
+    exit /b 1
+)
+popd
+exit /b 0
+
+:build_full
+echo.
+echo Building full release package...
+call :build_wpf
+if errorlevel 1 exit /b 1
+call :build_installer
+if errorlevel 1 exit /b 1
+call :build_logviewer
+if errorlevel 1 exit /b 1
+
+powershell -NoProfile -Command "Compress-Archive -Path '%BIN_DIR%\*' -DestinationPath '%ROOT_DIR%\FluxDB.zip' -Force"
+if errorlevel 1 exit /b 1
 
 echo.
-echo ✓ Build abgeschlossen
-echo   FluxDB.zip          (Release-Paket)
-echo   FluxDB-Installer.exe
+echo ✓ Full release package created
+echo   bin\FluxDB.exe
+echo   bin\FluxDB-Installer.exe
+echo   bin\components\Log_Viewer.exe
+echo   FluxDB.zip
+exit /b 0
+
+:end
+echo.
+echo Finished.

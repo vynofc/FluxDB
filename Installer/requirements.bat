@@ -2,6 +2,10 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
+set "ROOT_DIR=%CD%\.."
+set "BIN_DIR=%ROOT_DIR%\bin"
+if not exist "%BIN_DIR%" mkdir "%BIN_DIR%"
+
 echo ============================================
 echo   FluxDB Installer - Requirements Check
 echo ============================================
@@ -46,7 +50,7 @@ echo.
 
 :: Build
 echo [INFO] Baue FluxDB-Installer...
-go build -ldflags="-s -w" -o .\bin\FluxDB-Installer.exe .
+go build -ldflags="-s -w" -o "%BIN_DIR%\FluxDB-Installer.exe" .
 if %ERRORLEVEL% NEQ 0 (
     echo [FEHLER] Build fehlgeschlagen
     exit /b 1

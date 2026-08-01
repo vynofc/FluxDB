@@ -4,6 +4,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BIN_DIR="$ROOT_DIR/bin"
+mkdir -p "$BIN_DIR"
+
 echo "============================================"
 echo "  FluxDB Installer - Requirements Check"
 echo "============================================"
@@ -45,7 +49,7 @@ echo ""
 
 # Build (cross-compile for Windows by default)
 echo "[INFO] Baue FluxDB-Installer..."
-GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o ./bin/FluxDB-Installer.exe .
+GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o "$BIN_DIR/FluxDB-Installer.exe" .
 echo ""
 echo "============================================"
 echo "[OK] FluxDB-Installer.exe erstellt (bin/)"

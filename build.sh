@@ -2,50 +2,134 @@
 set -e
 cd "$(dirname "$0")"
 
-echo "=== FluxDB Build ==="
-echo ""
+ROOT_DIR="$(pwd)"
+BIN_DIR="$ROOT_DIR/bin"
+WPF_PROJECT="$ROOT_DIR/WPF/FluxDB/FluxDB.csproj"
+INSTALLER_DIR="$ROOT_DIR/Installer"
+LOG_VIEWER_DIR="$ROOT_DIR/Log_Viewer"
 
-# --- WPF App (benötigt MSBuild + NuGet) ---
-echo "[1/5] Restore NuGet packages..."
-nuget restore FluxDB.sln
+ensure_bin_dir() {
+  mkdir -p "$BIN_DIR"
+}
 
-echo "[2/5] Build WPF App..."
-msbuild FluxDB.sln /p:Configuration=Release /p:Platform="Any CPU"
+build_wpf() {
+  echo ""
+  echo "[1/2] Restore NuGet packages..."
+  if [ -f "nuget.exe" ]; then
+    mono nuget.exe restore "$WPF_PROJECT" -PackagesDirectory WPF/FluxDB/packages
+  else
+    echo "nuget.exe not found. Please run install-requirements.sh first."
+    exit 1
+  fi
+  echo "[2/2] Build WPF App..."
+  ensure_bin_dir
+  msbuild "$WPF_PROJECT" /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir="$BIN_DIR/"
+}
 
-# --- Go: Installer (cross-compile) ---
-echo "[3/5] Build Installer..."
-cd Installer
-GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o ../FluxDB-Installer.exe .
-cd ..
+build_installer() {
+  echo ""
+  echo "Building Installer into bin/..."
+  ensure_bin_dir
+  (cd "$INSTALLER_DIR" && GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o "$BIN_DIR/FluxDB-Installer.exe" .)
+}
 
-# --- Go: Log Viewer (cross-compile) ---
-echo "[4/5] Build Log Viewer..."
-mkdir -p bin/Release/components
-cd Log_Viewer
-GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o ../bin/Release/components/Log_Viewer.exe .
-cd ..
+build_logviewer() {
+  echo ""
+  echo "Building Log Viewer into bin/components/..."
+  ensure_bin_dir
+  mkdir -p "$BIN_DIR/components"
+  (cd "$LOG_VIEWER_DIR" && GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o "$BIN_DIR/components/Log_Viewer.exe" .)
+}
 
-# --- Package ---
-echo "[5/5] Package distribution..."
-rm -rf dist
-mkdir -p dist/components
+build_full() {
+  echo ""
+  echo "Building full release package..."
+  build_wpf
+  build_installer
+  build_logviewer
 
-cp bin/Release/FluxDB.exe          dist/
-cp bin/Release/FluxDB.exe.config   dist/ 2>/dev/null || true
-cp bin/Release/FluxDB.pdb          dist/ 2>/dev/null || true
-cp bin/Release/Newtonsoft.Json.dll dist/ 2>/dev/null || true
-cp bin/Release/System.Data.SQLite.dll dist/ 2>/dev/null || true
-cp -r bin/Release/x64              dist/ 2>/dev/null || true
-cp -r bin/Release/x86              dist/ 2>/dev/null || true
-cp FluxDB-Installer.exe            dist/
-cp bin/Release/components/Log_Viewer.exe dist/components/
+  if command -v zip >/dev/null 2>&1; then
+    (cd "$BIN_DIR" && zip -r "$ROOT_DIR/FluxDB.zip" .)
+  else
+    echo "zip command not found; skipping archive creation."
+  fi
 
-zip -r FluxDB.zip dist/
+  echo ""
+  echo "✓ Full release package created"
+  echo "  bin/FluxDB.exe"
+  echo "  bin/FluxDB-Installer.exe"
+  echo "  bin/components/Log_Viewer.exe"
+  echo "  FluxDB.zip"
+}
 
-echo "[6/6] Aufräumen..."
-rm -rf dist
+show_menu() {
+  echo "=== FluxDB Build Menu ==="
+  echo ""
+  echo "1) Install requirements"
+  echo "2) Build WPF app"
+  echo "3) Build Installer"
+  echo "4) Build Log Viewer"
+  echo "5) Build full release package"
+  echo "6) Exit"
+  echo ""
+  read -r -p "Choose an option [1-6]: " choice
+}
 
-echo ""
-echo "✓ Build abgeschlossen"
-echo "  FluxDB.zip          (Release-Paket)"
-echo "  FluxDB-Installer.exe"
+choice="${1:-}"
+if [ -z "$choice" ]; then
+  while true; do
+    show_menu
+
+    case "$choice" in
+      1)
+        bash install-requirements.sh
+        ;;
+      2)
+        build_wpf
+        ;;
+      3)
+        build_installer
+        ;;
+      4)
+        build_logviewer
+        ;;
+      5)
+        build_full
+        ;;
+      6)
+        exit 0
+        ;;
+      *)
+        echo "Invalid selection."
+        ;;
+    esac
+
+    echo ""
+    read -r -p "Press Enter to return to the menu..." _
+    clear
+  done
+else
+  case "$choice" in
+    1)
+      bash install-requirements.sh
+      ;;
+    2)
+      build_wpf
+      ;;
+    3)
+      build_installer
+      ;;
+    4)
+      build_logviewer
+      ;;
+    5)
+      build_full
+      ;;
+    6)
+      exit 0
+      ;;
+    *)
+      echo "Invalid selection."
+      ;;
+  esac
+fi
