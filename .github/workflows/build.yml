@@ -21,7 +21,7 @@ jobs:
         uses: nuget/setup-nuget@v2
 
       - name: Restore packages
-        run: nuget restore FluxDB.sln
+        run: nuget restore FluxDB.sln -PackagesDirectory WPF/FluxDB/packages
 
       - name: Build
         run: |
