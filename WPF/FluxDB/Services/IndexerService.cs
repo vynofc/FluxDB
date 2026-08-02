@@ -44,11 +44,12 @@ namespace FluxDB.Services
             var existingPaths = new HashSet<string>();
             var files = new List<string>();
 
-            // Collect all files first
+            LoggingService.LogDebug($"ScanFolderAsync started: root={rootPath}");
             StatusChanged?.Invoke(this, "Scanning folders...");
             await Task.Run(() => CollectFiles(rootPath, files, cancellationToken), cancellationToken);
 
             result.TotalFiles = files.Count;
+            LoggingService.LogDebug($"File collection complete: {files.Count} files found under {rootPath}");
             StatusChanged?.Invoke(this, $"Found {files.Count} files. Indexing...");
 
             // Index files
@@ -81,20 +82,22 @@ namespace FluxDB.Services
                             LastIndexedAt = DateTime.Now
                         };
 
+                        LoggingService.LogDebug($"UpsertFile: {filePath} | size={fileInfo.Length} | ext={fileInfo.Extension} | modified={fileInfo.LastWriteTime:o}");
                         _database.UpsertFile(fileEntry, currentTransaction);
                         existingPaths.Add(filePath);
                         result.FilesIndexed++;
                     }
                     catch (Exception ex)
                     {
+                        LoggingService.LogDebug($"UpsertFile FAILED: {filePath} — {ex.GetType().Name}: {ex.Message}");
                         result.Errors.Add($"{filePath}: {ex.Message}");
                     }
 
                     processed++;
                     
-                    // Batch commit for performance and stability
                     if (processed % BatchSize == 0)
                     {
+                        LoggingService.LogDebug($"Committing batch at {processed}/{files.Count} files");
                         CommitBatchWithRetry(currentTransaction);
                         currentTransaction.Dispose();
                         currentTransaction = _database.BeginTransaction();
@@ -115,10 +118,12 @@ namespace FluxDB.Services
 
                 if (!result.Cancelled)
                 {
+                    LoggingService.LogDebug($"Final batch commit: {result.FilesIndexed} files indexed");
                     CommitBatchWithRetry(currentTransaction);
                 }
                 else
                 {
+                    LoggingService.LogDebug("Scan cancelled — rolling back current transaction");
                     try { currentTransaction.Rollback(); } catch { }
                 }
             }
@@ -136,6 +141,10 @@ namespace FluxDB.Services
 
             result.EndTime = DateTime.Now;
             result.Success = !result.Cancelled;
+            LoggingService.LogDebug($"ScanFolderAsync done: success={result.Success} cancelled={result.Cancelled} indexed={result.FilesIndexed}/{result.TotalFiles} errors={result.Errors.Count} duration={result.Duration.TotalSeconds:F2}s");
+            if (result.Errors.Count > 0)
+                foreach (var err in result.Errors)
+                    LoggingService.LogDebug($"  IndexError: {err}");
             StatusChanged?.Invoke(this, result.Cancelled ? "Cancelled" : "Indexing complete!");
 
             return result;
@@ -150,10 +159,12 @@ namespace FluxDB.Services
                 try
                 {
                     transaction.Commit();
+                    LoggingService.LogDebug($"CommitBatchWithRetry: success on attempt {attempt + 1}");
                     return;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    LoggingService.LogDebug($"CommitBatchWithRetry: attempt {attempt + 1} failed — {ex.Message}, retryDelayMs={delayMs}");
                     if (attempt < maxRetries - 1)
                     {
                         Thread.Sleep(delayMs);
@@ -161,6 +172,7 @@ namespace FluxDB.Services
                     }
                     else
                     {
+                        LoggingService.LogDebug("CommitBatchWithRetry: all retries exhausted, rolling back");
                         try { transaction.Rollback(); } catch { }
                         throw;
                     }

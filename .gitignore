@@ -1,6 +1,7 @@
 # Visual Studio / .NET
 bin/
 obj/
+WPF/FluxDB/Properties/AssemblyVersion.cs
 .vs/
 *.user
 *.suo
@@ -107,5 +108,5 @@ $RECYCLE.BIN/
 /.output.txt
 node_modules
 
-#Secret Information
-gemini-curl.txt
+#other
+FluxDB.zip

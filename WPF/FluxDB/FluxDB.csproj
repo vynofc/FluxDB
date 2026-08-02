@@ -117,6 +117,7 @@
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Properties\AssemblyVersion.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -167,6 +168,26 @@
     <Content Include="bin\Release\x86\SQLite.Interop.dll" />
     <Content Include="FluxDB\.gitignore" />
   </ItemGroup>
+  <Target Name="GenerateAssemblyVersionFromFile" BeforeTargets="BeforeBuild">
+    <ReadLinesFromFile File="$(MSBuildProjectDirectory)\..\..\version.txt">
+      <Output TaskParameter="Lines" ItemName="_VersionLines" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_AppVersion>@(_VersionLines->'%(Identity)', '')</_AppVersion>
+      <!-- Strip pre-release suffix (e.g. -debug) — AssemblyVersion only accepts numeric x.y.z -->
+      <_AppVersionNumeric>$([System.Text.RegularExpressions.Regex]::Match($(_AppVersion), '^\d+(\.\d+)*'))</_AppVersionNumeric>
+    </PropertyGroup>
+    <ItemGroup>
+      <_VersionFileLines Include="// Auto-generated from version.txt — nicht manuell bearbeiten." />
+      <_VersionFileLines Include="using System.Reflection%3B" />
+      <_VersionFileLines Include="[assembly: AssemblyVersion(&quot;$(_AppVersionNumeric)&quot;)]" />
+      <_VersionFileLines Include="[assembly: AssemblyFileVersion(&quot;$(_AppVersionNumeric)&quot;)]" />
+      <_VersionFileLines Include="[assembly: AssemblyInformationalVersion(&quot;$(_AppVersion)&quot;)]" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(MSBuildProjectDirectory)\Properties\AssemblyVersion.cs"
+                      Lines="@(_VersionFileLines)"
+                      Overwrite="true" />
+  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.118.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets" Condition="Exists('packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.118.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets')" />
 </Project>

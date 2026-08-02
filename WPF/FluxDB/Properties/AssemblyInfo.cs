@@ -48,6 +48,4 @@ using System.Windows;
 //      Buildnummer
 //      Revision
 //
-[assembly: AssemblyVersion("0.1.5.0")]
-[assembly: AssemblyFileVersion("0.1.5.0")]
-[assembly: AssemblyInformationalVersion("0.1.5.0")]
+// Version wird aus version.txt im Repo-Root generiert (Properties\AssemblyVersion.cs).

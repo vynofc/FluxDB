@@ -130,18 +130,28 @@ namespace FluxDB
                 var assembly = Assembly.GetExecutingAssembly();
                 var exeDir = Path.GetDirectoryName(assembly.Location) ?? ".";
 
+                LoggingService.LogDebug($"CheckForUpdatesAsync: localVersion={localVersionStr} exeDir={exeDir} skipUpdate={skipUpdate}");
+
                 var latestTag = await FetchLatestReleaseTagAsync();
+                LoggingService.LogDebug($"CheckForUpdatesAsync: latestTag={latestTag ?? "(null — fetch failed)"}");
                 if (latestTag == null)
                     return true;
 
                 var remoteVersion = VersionHelper.NormalizeVersion(latestTag);
                 var localVersion = VersionHelper.NormalizeVersion(localVersionStr);
+                var cmp = VersionHelper.CompareVersions(remoteVersion, localVersion);
 
-                if (VersionHelper.CompareVersions(remoteVersion, localVersion) <= 0)
+                LoggingService.LogDebug($"CheckForUpdatesAsync: remoteVersion={remoteVersion} localVersion={localVersion} compareResult={cmp}");
+
+                if (cmp <= 0)
+                {
+                    LoggingService.LogDebug("CheckForUpdatesAsync: no update needed");
                     return true;
+                }
 
                 App.IsUpdateAvailable = true;
                 App.AvailableVersion = remoteVersion;
+                LoggingService.LogDebug($"CheckForUpdatesAsync: update available {localVersion} \u2192 {remoteVersion}");
 
                 if (skipUpdate)
                 {
@@ -150,13 +160,17 @@ namespace FluxDB
                 }
 
                 var installerPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
+                LoggingService.LogDebug($"CheckForUpdatesAsync: installerPath={installerPath} exists={File.Exists(installerPath)}");
                 if (!File.Exists(installerPath))
                 {
+                    LoggingService.LogDebug("CheckForUpdatesAsync: downloading installer...");
                     var ok = await DownloadInstallerAsync(exeDir, latestTag);
+                    LoggingService.LogDebug($"CheckForUpdatesAsync: installer download result={ok}");
                     if (!ok) return true;
                 }
 
-                var startInfo = new ProcessStartInfo(installerPath)
+                LoggingService.LogDebug($"CheckForUpdatesAsync: launching installer, shutting down app");
+                var startInfo = new ProcessStartInfo(installerPath, "--silent")
                 {
                     WorkingDirectory = exeDir,
                     UseShellExecute = true
@@ -181,15 +195,21 @@ namespace FluxDB
                     http.DefaultRequestHeaders.UserAgent.ParseAdd("FluxDB");
                     http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 
-                    var json = await http.GetStringAsync(
-                        "https://api.github.com/repos/vynofc/FluxDB/releases/latest");
+                    LoggingService.LogDebug("FetchLatestReleaseTagAsync: GET https://api.github.com/repos/vynofc/FluxDB/releases/latest");
+                    var response = await http.GetAsync("https://api.github.com/repos/vynofc/FluxDB/releases/latest");
+                    LoggingService.LogDebug($"FetchLatestReleaseTagAsync: HTTP {(int)response.StatusCode} {response.StatusCode}");
+                    response.EnsureSuccessStatusCode();
+                    var json = await response.Content.ReadAsStringAsync();
+                    LoggingService.LogDebug($"FetchLatestReleaseTagAsync: response body={json}");
                     var release = JsonConvert.DeserializeObject<GitHubRelease>(json);
+                    LoggingService.LogDebug($"FetchLatestReleaseTagAsync: deserialized TagName={release?.TagName}");
                     return release?.TagName;
                 }
             }
             catch (Exception ex)
             {
-                LoggingService.Log($"GitHub API error: {ex.Message}");
+                LoggingService.Log($"GitHub API error: {ex.GetType().Name}: {ex.Message}");
+                LoggingService.LogDebug($"FetchLatestReleaseTagAsync FAILED — {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }

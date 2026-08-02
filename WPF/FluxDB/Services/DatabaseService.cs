@@ -16,9 +16,11 @@ namespace FluxDB.Services
             var dir = Path.GetDirectoryName(databasePath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) 
                 Directory.CreateDirectory(dir);
+            LoggingService.LogDebug($"DatabaseService: opening DB at {databasePath}");
             _connection = new SQLiteConnection(string.Format("Data Source={0};Version=3;", databasePath));
             _connection.Open();
             InitDb();
+            LoggingService.LogDebug("DatabaseService: DB opened and schema initialized");
         }
 
         private void InitDb()
@@ -185,6 +187,7 @@ namespace FluxDB.Services
 
         public void SetTagsForFile(int fileId, List<string> tags)
         {
+            LoggingService.LogDebug($"SetTagsForFile: fileId={fileId} tags=[{string.Join(", ", tags)}]");
             using (var transaction = _connection.BeginTransaction())
             {
                 using (var cmd = new SQLiteCommand("DELETE FROM file_tags WHERE file_id=@id", _connection, transaction))
@@ -265,6 +268,7 @@ namespace FluxDB.Services
         public void MarkDeletedFiles(HashSet<string> existingPaths, string scopePath = null)
         {
             var toDelete = new List<int>();
+            LoggingService.LogDebug($"MarkDeletedFiles: scope={scopePath ?? "(all)"}, existingPaths.Count={existingPaths.Count}");
 
             using (var transaction = _connection.BeginTransaction())
             {
@@ -301,6 +305,7 @@ namespace FluxDB.Services
                 transaction.Commit();
             }
 
+            LoggingService.LogDebug($"MarkDeletedFiles: marked {toDelete.Count} files as deleted");
             if (toDelete.Count > 0)
             {
                 using (var cmd = new SQLiteCommand("VACUUM", _connection))
@@ -320,6 +325,7 @@ namespace FluxDB.Services
 
         public void MarkFileAsDeleted(int fileId)
         {
+            LoggingService.LogDebug($"MarkFileAsDeleted: fileId={fileId}");
             using (var cmd = new SQLiteCommand("UPDATE files SET deleted=1 WHERE id=@id", _connection))
             {
                 cmd.Parameters.AddWithValue("@id", fileId);
@@ -329,6 +335,7 @@ namespace FluxDB.Services
 
         public void MarkPathAsDeleted(string folderPath)
         {
+            LoggingService.LogDebug($"MarkPathAsDeleted: {folderPath}");
             var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
             using (var cmd = new SQLiteCommand("UPDATE files SET deleted=1 WHERE path=@path OR path LIKE @prefix", _connection))
             {
@@ -340,6 +347,7 @@ namespace FluxDB.Services
 
         public void UpdateFolderPath(string oldPath, string newPath)
         {
+            LoggingService.LogDebug($"UpdateFolderPath: {oldPath} → {newPath}");
             var oldPrefix = oldPath.EndsWith("\\") ? oldPath : oldPath + "\\";
             var newPrefix = newPath.EndsWith("\\") ? newPath : newPath + "\\";
             using (var transaction = _connection.BeginTransaction())
@@ -364,8 +372,12 @@ namespace FluxDB.Services
         public List<FileEntry> SearchFiles(string query, string folderPath)
         {
             if (string.IsNullOrWhiteSpace(query))
+            {
+                LoggingService.LogDebug($"SearchFiles: empty query, returning all files under {folderPath}");
                 return GetAllFiles().Where(f => f.Path.StartsWith(folderPath, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
 
+            LoggingService.LogDebug($"SearchFiles: query=\"{query}\" folderPath={folderPath}");
             var files = new List<FileEntry>();
             var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
             var sql = @"
@@ -390,6 +402,7 @@ namespace FluxDB.Services
                     }
                 }
             }
+            LoggingService.LogDebug($"SearchFiles: returned {files.Count} results for query=\"{query}\"");
             return files;
         }
 

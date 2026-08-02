@@ -17,6 +17,16 @@ namespace FluxDB
         public static string AvailableVersion { get; set; } = "";
         public static bool IsUpdateSkipped { get; set; } = false;
 
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            base.OnStartup(e);
+            var ver = GetLocalVersion();
+            bool debugMode = ver.EndsWith("-debug", StringComparison.OrdinalIgnoreCase);
+            FluxDB.Services.LoggingService.SetDebugMode(debugMode);
+            if (debugMode)
+                FluxDB.Services.LoggingService.Log($"DEBUG MODE ACTIVE — version: {ver}");
+        }
+
         public static string GetLocalVersion()
         {
             string maxVer = "0.0.0";

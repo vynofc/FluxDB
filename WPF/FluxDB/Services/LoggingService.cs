@@ -13,6 +13,10 @@ namespace FluxDB.Services
         private const int MaxBufferLines = 2000;
         private static readonly string _logFilePath;
 
+        public static bool IsDebugMode { get; private set; }
+
+        public static void SetDebugMode(bool value) => IsDebugMode = value;
+
         static LoggingService()
         {
             try
@@ -99,6 +103,12 @@ namespace FluxDB.Services
                     _isProcessingQueue = false;
                 }
             }
+        }
+
+        public static void LogDebug(string message)
+        {
+            if (!IsDebugMode) return;
+            Log($"[DEBUG] {message}");
         }
 
         public static string[] GetLogs()
