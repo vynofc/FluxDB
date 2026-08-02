@@ -262,7 +262,7 @@ namespace FluxDB.Services
             }
         }
 
-        public void MarkDeletedFiles(HashSet<string> existingPaths)
+        public void MarkDeletedFiles(HashSet<string> existingPaths, string scopePath = null)
         {
             var toDelete = new List<int>();
 
@@ -277,6 +277,8 @@ namespace FluxDB.Services
                     {
                         var id = r.GetInt32(0);
                         var path = r.GetString(1);
+                        if (scopePath != null && !path.StartsWith(scopePath.EndsWith("\\") ? scopePath : scopePath + "\\", StringComparison.OrdinalIgnoreCase))
+                            continue;
                         if (!existingPaths.Contains(path))
                         {
                             toDelete.Add(id);

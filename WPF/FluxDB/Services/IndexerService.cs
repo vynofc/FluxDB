@@ -131,7 +131,7 @@ namespace FluxDB.Services
             if (!cancellationToken.IsCancellationRequested)
             {
                 StatusChanged?.Invoke(this, "Checking for deleted files...");
-                _database.MarkDeletedFiles(existingPaths);
+                _database.MarkDeletedFiles(existingPaths, rootPath);
             }
 
             result.EndTime = DateTime.Now;
