@@ -10,6 +10,10 @@ FluxDB besteht aus drei Komponenten:
 
 **Wichtige Einschränkung:** Das Projekt ist Windows-only und verwendet WPF, COM-Interop sowie feste Pfade wie `C:\NSCE\FluxDB`.
 
+**Anmerkung zur Ordnerstruktur:** Der `FluxDB/` Ordner auf Repo-Root-Ebene (nicht `WPF/FluxDB/`) enthält nur Icon-Dateien und eine `packages.config` — das sind Artefakte der alten Struktur. Die eigentliche WPF-App liegt unter `WPF/FluxDB/`.
+
+**Devcontainer:** Es gibt eine `.devcontainer/devcontainer.json` Konfiguration mit einem Universal-Image, PowerShell-Extensions und dotnet SDKs (8.0, 9.0, 10.0). Diese kann für VS Code Remote Development verwendet werden.
+
 ---
 
 ## Build & Run
@@ -55,6 +59,7 @@ go build -ldflags="-s -w" -o ..\bin\Log_Viewer.exe .
 |---|---|---|
 | `build.yml` | Push/PR auf `main` | Baut die WPF-App aus [WPF/FluxDB](WPF/FluxDB/) und den Log-Viewer |
 | `release.yml` | Veröffentlichtes Release | Baut WPF-App, Installer und Log-Viewer, erzeugt `FluxDB.zip` |
+| `issue-triage.yml` | Issue-Opening | Auto-labeling of issues |
 
 ---
 
@@ -84,20 +89,56 @@ SQLite database file named `.fluxdb` lives in the root of the indexed folder:
 - `LogViewer` — reads `LoggingService.GetLogs()`.
 - `RefreshDialog` — modal with three options: rescan entire root, current view, or specific folder.
 - `SplashWindow` — transient startup window with update check.
+- `RenameDialog` — modal for renaming files/folders.
+
+#### WPF Services
+
+| File | Responsibility |
+|---|---|
+| `DatabaseService.cs` | SQLite CRUD: file index, tags, notes, folder path updates, search, batch delete marking |
+| `IndexerService.cs` | File system scanning, batched indexing (1000 files/batch), progress reporting, deleted file detection |
+| `LoggingService.cs` | Static logger with in-memory buffer (max 2000 lines), background file writes via `ThreadPool`, debug mode toggle |
+| `SettingsService.cs` | JSON settings (`%LOCALAPPDATA%\FluxDB\settings.json`): recent folders, theme, auto-update, device ID |
+| `ExportService.cs` | Export index to JSON or GZIP via `Newtonsoft.Json` |
+
+#### Version handling
+
+- `version.txt` at repo root (currently `1.0.1`) drives the assembly version via an MSBuild `BeforeBuild` target that generates `Properties/AssemblyVersion.cs`
+- `App.GetLocalVersion()` reads `version.txt` from the app directory, falls back to `AssemblyInformationalVersionAttribute`
+- Debug mode is auto-detected: if the local version ends with `-debug`, `LoggingService.SetDebugMode(true)` is called
+- Version strings use `VersionHelper.CompareVersions` for comparison — strips `v` prefix, `!beta` suffix, handles `x.y.z-suffix` semver
 
 ### FluxDB Installer (Go)
 
 #### Startup flow
 
-1. `main.go` parses CLI flags (`--tag`, `--path`, `--silent`)
-2. If `--silent`: runs `runSilent()` — plain text output, no TUI
+1. `main.go` parses CLI flags (`--tag`, `--path`, `--silent`, `--silent-start`, `--detail`)
+2. If `--silent` or `--silent-start`: runs `runSilent()` — plain text output, no TUI; `--silent-start` additionally calls `launchFluxDB()` after extraction
 3. Otherwise: starts Bubble Tea TUI with `initialModel()`
+   - If `--tag` is provided: skips to downloading directly
+   - If `--detail`: fetches all releases, shows version selection form, verbose logging
+   - Default: fetches latest release tag only
 
 #### State machine
 
+Without `--detail` (default):
 ```
-stateFetchingTag → stateDownloading → stateExtracting → stateDone
-     ↓                  ↓                  ↓              ↓
+stateLoading → stateDownloading → stateExtracting → stateAskShortcut → stateDone
+     ↓              ↓                  ↓                  ↓                ↓
+  stateError    stateError         stateError         stateError     (Enter→Quit)
+```
+
+With `--detail`:
+```
+stateLoading → stateSelectVersion → stateDownloading → stateExtracting → stateAskShortcut → stateCreatingShortcut → stateDone
+     ↓                 ↓                  ↓                  ↓                ↓                     ↓                  ↓
+  stateError       stateError         stateError         stateError      stateError            stateError       (Enter→Quit)
+```
+
+With `--tag` (custom tag):
+```
+stateDownloading → stateExtracting → stateAskShortcut → stateDone
+     ↓                 ↓                  ↓                ↓
   stateError        stateError         stateError     (Enter→Quit)
 ```
 
@@ -105,14 +146,17 @@ stateFetchingTag → stateDownloading → stateExtracting → stateDone
 
 | File | Responsibility |
 |---|---|
-| `main.go` | Entrypoint, CLI flag parsing, TUI/Silent dispatch |
-| `model.go` | Bubble Tea model, states, message types |
-| `update.go` | State machine (Update function) |
+| `main.go` | Entrypoint, CLI flag parsing, TUI/Silent dispatch, `launchFluxDB` helper |
+| `model.go` | Bubble Tea model, states, message types, `initialModel` |
+| `update.go` | State machine (Update function), form handlers |
 | `view.go` | Rendering (TUI + silent view) |
-| `github.go` | GitHub API: fetch latest release tag, build download URL |
-| `download.go` | ZIP download from GitHub Releases to `%TEMP%` |
-| `extract.go` | ZIP extraction to `%LOCALAPPDATA%\FluxDB`, writes `version.txt`, cleans up temp file |
-| `silent.go` | Silent-mode logic (no Bubble Tea), `fetchTag`/`downloadSilent`/`extractSilent` helpers |
+| `github.go` | GitHub API: fetch latest release tag (`/releases/latest`), fetch all releases (`/releases?per_page=20`), build download URL |
+| `download.go` | ZIP download from GitHub Releases to `%TEMP%`, progress reporting via channel |
+| `extract.go` | ZIP extraction to `%LOCALAPPDATA%\FluxDB` (or `--path`), writes `version.txt`, handles locked files by renaming to `.old`, cleans up temp file |
+| `silent.go` | Silent-mode logic (no Bubble Tea), `runSilent` orchestrates full flow |
+| `shortcut.go` | Creates Desktop and Start Menu shortcuts via PowerShell COM script |
+| `forms.go` | `huh` form builders for version selection and shortcut confirmation |
+| `helpers.go` | Log formatting, step header rendering |
 | `styles.go` | Lipgloss styles (dark theme matching FluxDB) |
 
 #### CLI flags
@@ -122,22 +166,39 @@ stateFetchingTag → stateDownloading → stateExtracting → stateDone
 | `--tag <version>` | Install specific version (skips GitHub API call) |
 | `--path <dir>` | Alternative install directory (default: `%LOCALAPPDATA%\FluxDB`) |
 | `--silent` | No TUI, text-only output (for CI/scripting) |
+| `--silent-start` | Like `--silent`, but auto-launches FluxDB after install |
+| `--detail` | Detailed mode: version selection form + verbose log output |
 
 #### Dependencies
 
 | Module | Purpose |
 |---|---|
 | `github.com/charmbracelet/bubbletea` | TUI framework |
-| `github.com/charmbracelet/bubbles` | Progress bar, spinner |
+| `github.com/charmbracelet/bubbles` | Progress bar, spinner, viewport |
+| `github.com/charmbracelet/huh` | Form-based user input (version selection, shortcut confirmation) |
 | `github.com/charmbracelet/lipgloss` | Terminal styling |
 | `github.com/charmbracelet/log` | Structured logging |
 
 #### What the installer does NOT do
 
-- No autostart / Start Menu entries
 - No auto-update (FluxDB handles this via `SplashWindow`)
 - No uninstall (delete `%LOCALAPPDATA%\FluxDB` manually)
 - No admin rights needed (installs to `%LOCALAPPDATA%`)
+
+### Log-Viewer (Go)
+
+| File | Responsibility |
+|---|---|
+| `main.go` | Entrypoint, CLI flag parsing (`--log <path>` required), Bubble Tea dispatch |
+| `model.go` | Model struct, state, message types |
+| `update.go` | Update function, key handling, log tailing |
+| `view.go` | Rendering, log line parsing/styling |
+
+#### Tail behavior
+
+- Polls the log file every 500ms via `tailTick`
+- Seeks from last-known byte offset, appends new lines
+- On file truncation (size < lastSize), resets to current size without re-reading
 
 ---
 
@@ -161,6 +222,10 @@ The database file `.fluxdb` is stored **inside the indexed folder**, not in `%Lo
 - `LoggingService` uses a `lock` and `ThreadPool.QueueUserWorkItem` for background file writes.
 - `DatabaseService` has a single `SQLiteConnection` — all DB access is serial (no connection pooling). SQLite writes are not thread-safe; ensure all DB operations happen on the same thread or serialize access.
 
+### SQLite interop DLLs
+
+`System.Data.SQLite.Core` requires native `SQLite.Interop.dll` (x64 and x86) in the output directory. The `.csproj` imports `Stub.System.Data.SQLite.Core.NetFramework.targets` which copies these to `bin\x64\` and `bin\x86\` during build. When packaging, both architecture folders must be present alongside the managed DLLs.
+
 ### Dispatcher.Invoke in background tasks
 
 `MainWindow` at several points calls `Dispatcher.Invoke` (synchronous) inside `Task.Run` — this blocks the background thread waiting for the UI thread. Prefer `Dispatcher.BeginInvoke` for fire-and-forget UI updates from background tasks.
@@ -180,9 +245,16 @@ When renaming or deleting folders, the DB entries for all files under that path 
 - Skip with `--noupdate` CLI flag.
 - Central version file: `C:\NSCE\FluxDB\version.txt` (overridable via `FLUXDB_CENTRAL_DIR` env var).
 
-### PLAN.md
+### PLAN-csproj-fix.md
 
-The `PLAN.md` file at the repo root documents the Installer design and known bugs/planned refactoring for the WPF app. It is not a spec for new features — it's a planning document. Many of the issues listed there have been partially addressed (e.g., `InitDb` now uses transactions, `GROUP_CONCAT` uses `\0` separator, `SearchFiles` accepts a `folderPath` parameter, `MarkPathAsDeleted` and `UpdateFolderPath` exist, `CommitBatchWithRetry` was added) but the file was not updated to reflect fixes.
+The `PLAN-csproj-fix.md` file at the repo root documents a planned migration of the WPF `.csproj` from the legacy format to SDK-style. Key points:
+- Replace `FluxDB.csproj` with `<Project Sdk="Microsoft.NET.Sdk">` + `<UseWPF>true</UseWPF>`
+- Replace `packages.config` with `PackageReference` entries
+- Drop `Stub.System.Data.SQLite.Core.NetFramework` (only needed for old-style csproj)
+- Keep `GenerateAssemblyInfo=false` because `AssemblyInfo.cs` contains `[assembly: ThemeInfo(...)]`
+- Build scripts and CI pass `/p:OutDir=bin\` which overrides SDK default, so no downstream changes needed
+
+This has NOT yet been implemented. The current `.csproj` still uses the legacy format.
 
 ---
 
