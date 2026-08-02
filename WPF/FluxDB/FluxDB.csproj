@@ -132,8 +132,6 @@
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
-    <None Include="bin\Debug\FluxDB.exe.config" />
-    <None Include="bin\Release\FluxDB.exe.config" />
     <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -148,25 +146,6 @@
     <Resource Include="FluxDB-icon.ico" />
     <Resource Include="FluxDB-icon.png" />
     <Content Include=".gitignore" />
-    <Content Include="bin\Debug\FluxDB-Installer.exe" />
-    <Content Include="bin\Debug\FluxDB.exe" />
-    <Content Include="bin\Debug\FluxDB.pdb" />
-    <Content Include="bin\Debug\Newtonsoft.Json.dll" />
-    <Content Include="bin\Debug\Newtonsoft.Json.xml" />
-    <Content Include="bin\Debug\System.Data.SQLite.dll" />
-    <Content Include="bin\Debug\System.Data.SQLite.xml" />
-    <Content Include="bin\Debug\x64\SQLite.Interop.dll" />
-    <Content Include="bin\Debug\x86\SQLite.Interop.dll" />
-    <Content Include="bin\Release\FluxDB-Installer.exe" />
-    <Content Include="bin\Release\FluxDB.exe" />
-    <Content Include="bin\Release\FluxDB.pdb" />
-    <Content Include="bin\Release\Newtonsoft.Json.dll" />
-    <Content Include="bin\Release\Newtonsoft.Json.xml" />
-    <Content Include="bin\Release\System.Data.SQLite.dll" />
-    <Content Include="bin\Release\System.Data.SQLite.xml" />
-    <Content Include="bin\Release\x64\SQLite.Interop.dll" />
-    <Content Include="bin\Release\x86\SQLite.Interop.dll" />
-    <Content Include="FluxDB\.gitignore" />
   </ItemGroup>
   <Target Name="GenerateAssemblyVersionFromFile" BeforeTargets="BeforeBuild">
     <ReadLinesFromFile File="$(MSBuildProjectDirectory)\..\..\version.txt">
