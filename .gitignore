@@ -106,3 +106,6 @@ $RECYCLE.BIN/
 .LSOverride
 /.output.txt
 node_modules
+
+#Secret Information
+gemini-curl.txt
