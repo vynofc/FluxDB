@@ -1,0 +1,32 @@
+name: Feature Request
+description: Eine neue Funktion oder Verbesserung vorschlagen
+labels: [enhancement]
+assignees: [vynOFC]
+
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Komponente
+      description: Für welchen Teil von FluxDB ist dieses Feature gedacht?
+      options:
+        - FluxDB (WPF-App)
+        - Installer
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature-Beschreibung
+      description: Was soll hinzugefügt oder verbessert werden?
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation / Nutzen
+      description: Warum wäre dieses Feature hilfreich?
+    validations:
+      required: false

@@ -1,0 +1,43 @@
+name: Bug Report
+description: Einen Fehler oder Absturz melden
+labels: [bug]
+assignees: [vynOFC]
+
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Komponente
+      description: Welcher Teil von FluxDB ist betroffen?
+      options:
+        - FluxDB (WPF-App)
+        - Installer
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Fehlerbeschreibung
+      description: Was ist passiert? Was hast du erwartet?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Schritte zur Reproduktion
+      placeholder: |
+        1. Öffne ...
+        2. Klicke auf ...
+        3. Fehler tritt auf
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: FluxDB-Version
+      placeholder: z.B. v1.4.2
+    validations:
+      required: false
