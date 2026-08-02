@@ -342,7 +342,7 @@ jobs:
               }
             }
 
-      - name: Assign issue to Copilot and request fix
+      - name: Assign issue to Copilot
         uses: actions/github-script@v7
         env:
           CREATED_BRANCH: ${{ steps.create_branch.outputs.branch_name }}
@@ -376,14 +376,8 @@ jobs:
               }
             }
 
-            const branchName = process.env.CREATED_BRANCH || `issue/${issueNumber}`;
-            const body = assigned
-              ? `Copilot-Assign erfolgreich (${selectedAssignee}). Bitte pruefe Fix fuer dieses Issue auf Branch \`${branchName}\`.`
-              : `Copilot konnte nicht als Assignee gesetzt werden. Bitte pruefe trotzdem einen Fix fuer dieses Issue auf Branch \`${branchName}\`.`;
-
-            await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number: issueNumber,
-              body
-            });
+            if (assigned) {
+              console.log(`Copilot assigned: ${selectedAssignee}`);
+            } else {
+              console.log('Copilot could not be assigned');
+            }
