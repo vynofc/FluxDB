@@ -71,6 +71,13 @@ func extractFile(f *zip.File, destDir string) error {
 		return err
 	}
 
+	// Rename locked files (e.g. running .exe) before overwriting
+	if _, statErr := os.Stat(targetPath); statErr == nil {
+		oldPath := targetPath + ".old"
+		os.Remove(oldPath)
+		os.Rename(targetPath, oldPath)
+	}
+
 	out, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 	if err != nil {
 		return err

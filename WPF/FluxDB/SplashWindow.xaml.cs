@@ -170,7 +170,7 @@ namespace FluxDB
                 }
 
                 LoggingService.LogDebug($"CheckForUpdatesAsync: launching installer, shutting down app");
-                var startInfo = new ProcessStartInfo(installerPath, "--silent")
+                var startInfo = new ProcessStartInfo(installerPath, "--silent-start")
                 {
                     WorkingDirectory = exeDir,
                     UseShellExecute = true

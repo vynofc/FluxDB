@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
@@ -13,14 +15,15 @@ func main() {
 	customTag := flag.String("tag", "", "Bestimmte Version installieren (z.B. v1.0.0)")
 	customPath := flag.String("path", "", "Alternatives Installationsverzeichnis")
 	silent := flag.Bool("silent", false, "Keine TUI, nur Text-Output")
+	silentStart := flag.Bool("silent-start", false, "Wie --silent, startet FluxDB nach der Installation automatisch")
 	detail := flag.Bool("detail", false, "Detailmodus: Versionsauswahl + ausfuehrliches Log")
 	flag.Parse()
 
 	logger := log.New(os.Stderr)
 	logger.SetLevel(log.DebugLevel)
 
-	if *silent {
-		runSilent(*customTag, *customPath, logger)
+	if *silent || *silentStart {
+		runSilent(*customTag, *customPath, *silentStart, logger)
 		return
 	}
 
@@ -33,7 +36,16 @@ func main() {
 	}
 }
 
-func runSilent(customTag, customPath string, logger *log.Logger) {
+func launchFluxDB(installDir string, logger *log.Logger) {
+	exe := filepath.Join(installDir, "FluxDB.exe")
+	cmd := exec.Command(exe)
+	cmd.Dir = installDir
+	if err := cmd.Start(); err != nil {
+		logger.Warn("FluxDB konnte nicht gestartet werden", "error", err)
+	}
+}
+
+func runSilent(customTag, customPath string, startAfter bool, logger *log.Logger) {
 	var tag string
 	if customTag != "" {
 		tag = customTag
@@ -77,6 +89,9 @@ func runSilent(customTag, customPath string, logger *log.Logger) {
 		case extractCompleteMsg:
 			logger.Info(fmt.Sprintf("FluxDB %s erfolgreich installiert!", tag))
 			logger.Info(fmt.Sprintf("Installationspfad: %s", em.installDir))
+			if startAfter {
+				launchFluxDB(em.installDir, logger)
+			}
 		case errMsg:
 			logger.Error("Entpacken fehlgeschlagen", "error", em.err)
 			os.Exit(1)
