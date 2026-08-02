@@ -1761,8 +1761,7 @@ namespace FluxDB
                 {
                     FileName = viewerExe,
                     Arguments = $"--log \"{logPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
+                    UseShellExecute = true
                 };
                 System.Diagnostics.Process.Start(startInfo);
             }
