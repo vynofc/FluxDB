@@ -15,12 +15,7 @@ ensure_bin_dir() {
 build_wpf() {
   echo ""
   echo "[1/2] Restore NuGet packages..."
-  if [ -f "nuget.exe" ]; then
-    mono nuget.exe restore "$WPF_PROJECT" -PackagesDirectory WPF/FluxDB/packages
-  else
-    echo "nuget.exe not found. Please run install-requirements.sh first."
-    exit 1
-  fi
+  dotnet restore "$WPF_PROJECT"
   echo "[2/2] Build WPF App..."
   ensure_bin_dir
   msbuild "$WPF_PROJECT" /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir="$BIN_DIR/"
