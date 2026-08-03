@@ -23,7 +23,7 @@ jobs:
       - name: Build
         run: |
           if (-not (Test-Path bin)) { New-Item -ItemType Directory -Path bin -Force | Out-Null }
-          msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir=bin\
+          msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir="${{ github.workspace }}\bin\"
 
       - name: Setup Go
         uses: actions/setup-go@v5

@@ -21,7 +21,7 @@ jobs:
       - name: Build
         run: |
           if (-not (Test-Path bin)) { New-Item -ItemType Directory -Path bin -Force | Out-Null }
-          msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir=bin\
+          msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir="${{ github.workspace }}\bin\"
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -31,7 +31,7 @@ jobs:
       - name: Build Installer
         run: |
           cd Installer
-          go build -ldflags="-s -w" -o ../bin/FluxDB-Installer.exe .
+          go build -ldflags="-s -w" -o FluxDB-Installer.exe .
 
       - name: Build Log Viewer
         run: |
@@ -59,6 +59,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: bin/FluxDB-Installer.exe
+          asset_path: Installer/FluxDB-Installer.exe
           asset_name: FluxDB-Installer.exe
           asset_content_type: application/vnd.microsoft.portable-executable
