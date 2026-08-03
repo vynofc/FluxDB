@@ -41,3 +41,15 @@ body:
       placeholder: z.B. v1.4.2
     validations:
       required: false
+
+  - type: dropdown
+    id: size
+    attributes:
+      label: 🟢🟡🔴 Umfang des Problems
+      description: Wie groß schätzt du das Problem ein?
+      options:
+        - 🟢 small — kleiner Fix, schnell erledigt
+        - 🟡 medium — mittlerer Aufwand
+        - 🔴 big — großes Problem, viel Arbeit
+    validations:
+      required: true

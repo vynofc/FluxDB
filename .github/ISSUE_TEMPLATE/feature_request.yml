@@ -30,3 +30,15 @@ body:
       description: Warum wäre dieses Feature hilfreich?
     validations:
       required: false
+
+  - type: dropdown
+    id: size
+    attributes:
+      label: 🟢🟡🔴 Umfang des Features
+      description: Wie groß schätzt du das Feature ein?
+      options:
+        - 🟢 small — kleine Änderung, schnell umgesetzt
+        - 🟡 medium — mittlerer Aufwand
+        - 🔴 big — großes Feature, viel Arbeit
+    validations:
+      required: true

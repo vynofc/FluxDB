@@ -58,10 +58,22 @@ jobs:
               else if (isEnhancement) typeLabel = 'enhancement';
             }
 
+            // --- Size ---
+            // Parse template dropdown: "### 🟢🟡🔴 Umfang ...\n\n🟢 small — kleiner Fix..."
+            const sizeMatch = (issue.body || '').match(/###\s*🟢🟡🔴\s*Umfang[^\n]*\s*\n+([^\n]+)/i);
+            let sizeLabel = null;
+            if (sizeMatch) {
+              const val = sizeMatch[1].trim().toLowerCase();
+              if (val.includes('small')) sizeLabel = 'small';
+              else if (val.includes('medium')) sizeLabel = 'medium';
+              else if (val.includes('big')) sizeLabel = 'big';
+            }
+
             // Apply missing labels
             const labelsToAdd = [];
             if (componentLabel && !existingLabels.includes(componentLabel)) labelsToAdd.push(componentLabel);
             if (typeLabel && !existingLabels.includes(typeLabel)) labelsToAdd.push(typeLabel);
+            if (sizeLabel && !existingLabels.includes(sizeLabel)) labelsToAdd.push(sizeLabel);
 
             if (labelsToAdd.length > 0) {
               await github.rest.issues.addLabels({
