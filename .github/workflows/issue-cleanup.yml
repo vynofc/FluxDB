@@ -1,0 +1,44 @@
+name: Issue Cleanup
+
+on:
+  issues:
+    types: [closed]
+
+jobs:
+  delete-branch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Delete issue branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = context.payload.issue.number;
+
+            const { data: branches } = await github.rest.git.listMatchingRefs({
+              owner,
+              repo,
+              ref: `heads/issue/${issueNumber}-`
+            });
+
+            for (const branch of branches) {
+              const branchName = branch.ref.replace('refs/heads/', '');
+              try {
+                await github.rest.git.deleteRef({
+                  owner,
+                  repo,
+                  ref: `heads/${branchName}`
+                });
+                console.log(`Deleted branch: ${branchName}`);
+              } catch (e) {
+                console.log(`Failed to delete ${branchName}: ${e.message}`);
+              }
+            }
+
+            if (branches.length === 0) {
+              console.log(`No branches found for issue #${issueNumber}`);
+            }
