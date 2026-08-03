@@ -70,12 +70,7 @@ exit /b 0
 :build_wpf
 echo.
 echo [1/2] Restore NuGet packages...
-if not exist "nuget.exe" (
-    echo nuget.exe not found. Please run install-requirements.bat first.
-    exit /b 1
-)
-
-nuget.exe restore "%WPF_PROJECT%" -PackagesDirectory WPF\FluxDB\packages
+dotnet restore "%WPF_PROJECT%"
 if errorlevel 1 exit /b 1
 
 echo [2/2] Build WPF app into bin\...

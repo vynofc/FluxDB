@@ -15,11 +15,8 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Setup NuGet
-        uses: nuget/setup-nuget@v2
-
       - name: Restore packages
-        run: nuget restore FluxDB.sln -PackagesDirectory WPF/FluxDB/packages
+        run: dotnet restore WPF/FluxDB/FluxDB.csproj
 
       - name: Build
         run: |
