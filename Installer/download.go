@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,31 +14,36 @@ func startDownloadCmd(tag string, progressCh chan float64) tea.Cmd {
 	return func() tea.Msg {
 		url := buildDownloadURL(tag)
 		tmpDir := os.TempDir()
-		zipPath := filepath.Join(tmpDir, fmt.Sprintf("FluxDB-%s.zip", tag))
+		out, err := os.CreateTemp(tmpDir, fmt.Sprintf("FluxDB-%s-*.zip", tag))
+		if err != nil {
+			return errMsg{err: fmt.Errorf("temporaere datei erstellen fehlgeschlagen: %w", err)}
+		}
+		zipPath := out.Name()
 
 		client := &http.Client{Timeout: 30 * time.Minute}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
+			os.Remove(zipPath)
+			out.Close()
 			return errMsg{err: fmt.Errorf("download-request erstellen fehlgeschlagen: %w", err)}
 		}
 		req.Header.Set("User-Agent", "FluxDB-Installer")
 
 		resp, err := client.Do(req)
 		if err != nil {
+			os.Remove(zipPath)
+			out.Close()
 			return errMsg{err: fmt.Errorf("download fehlgeschlagen: %w", err)}
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			os.Remove(zipPath)
+			out.Close()
 			if resp.StatusCode == http.StatusNotFound {
 				return errMsg{err: fmt.Errorf("Release %s nicht gefunden", tag)}
 			}
 			return errMsg{err: fmt.Errorf("download fehlgeschlagen: HTTP %s", resp.Status)}
-		}
-
-		out, err := os.Create(zipPath)
-		if err != nil {
-			return errMsg{err: fmt.Errorf("temporaere datei erstellen fehlgeschlagen: %w", err)}
 		}
 		defer out.Close()
 

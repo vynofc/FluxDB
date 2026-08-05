@@ -39,13 +39,20 @@ $shortcut.Description = "FluxDB - File Manager"
 $shortcut.Save()
 `, exePath, installDir, exePath, installDir)
 
-		tmpFile := filepath.Join(os.TempDir(), "fluxdb_shortcut.ps1")
-		if err := os.WriteFile(tmpFile, []byte(psScript), 0644); err != nil {
+		tmpFile, err := os.CreateTemp(os.TempDir(), "fluxdb_shortcut_*.ps1")
+		if err != nil {
+			return errMsg{err: fmt.Errorf("temporaere datei erstellen fehlgeschlagen: %w", err)}
+		}
+		tmpPath := tmpFile.Name()
+		if _, err := tmpFile.Write([]byte(psScript)); err != nil {
+			tmpFile.Close()
+			os.Remove(tmpPath)
 			return errMsg{err: fmt.Errorf("powershell script schreiben fehlgeschlagen: %w", err)}
 		}
-		defer os.Remove(tmpFile)
+		tmpFile.Close()
+		defer os.Remove(tmpPath)
 
-		cmd := exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", tmpFile)
+		cmd := exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", tmpPath)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return errMsg{err: fmt.Errorf("verknuepfung fehlgeschlagen: %w: %s", err, string(output))}
