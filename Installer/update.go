@@ -104,9 +104,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		)
 
 	case downloadProgressMsg:
+		if m.state != stateDownloading {
+			return m, nil
+		}
 		progress := float64(msg)
 		m.progress = progress
 		cmd := m.progressBar.SetPercent(progress)
+		if m.detail {
+			m.addLog(fmt.Sprintf("📥 Download: %.0f%%", progress*100))
+		}
 		return m, tea.Batch(cmd, listenProgress(m.progressCh))
 
 	case downloadCompleteMsg:

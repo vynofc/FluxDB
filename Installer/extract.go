@@ -17,7 +17,13 @@ func extractCmd(zipPath, customPath string) tea.Cmd {
 		if installDir == "" {
 			localAppData := os.Getenv("LOCALAPPDATA")
 			if localAppData == "" {
-				home, _ := os.UserHomeDir()
+				home, err := os.UserHomeDir()
+				if err != nil {
+					home = os.Getenv("USERPROFILE")
+				}
+				if home == "" {
+					return errMsg{err: fmt.Errorf("installationsverzeichnis konnte nicht ermittelt werden")}
+				}
 				localAppData = filepath.Join(home, "AppData", "Local")
 			}
 			installDir = filepath.Join(localAppData, "FluxDB")

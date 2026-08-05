@@ -57,9 +57,12 @@ go build -ldflags="-s -w" -o ..\bin\Log_Viewer.exe .
 
 | Workflow | Trigger | Was passiert |
 |---|---|---|
-| `build.yml` | Push/PR auf `main` | Baut die WPF-App aus [WPF/FluxDB](WPF/FluxDB/) und den Log-Viewer |
+| `build-wpf.yml` | Push/PR auf `main` (Änderungen in `WPF/`) | Baut die WPF-App aus [WPF/FluxDB](WPF/FluxDB/) |
+| `build-installer.yml` | Push/PR auf `main` (Änderungen in `Installer/`) | Baut den Go-Installer |
+| `build-log-viewer.yml` | Push/PR auf `main` (Änderungen in `Log_Viewer/`) | Baut den Go Log-Viewer |
 | `release.yml` | Veröffentlichtes Release | Baut WPF-App, Installer und Log-Viewer, erzeugt `FluxDB.zip` |
 | `issue-triage.yml` | Issue-Opening | Auto-labeling of issues |
+| `issue-cleanup.yml` | Issue-Closing | Löscht alle Branches des Issues |
 
 ---
 
