@@ -73,35 +73,10 @@ echo [1/2] Restore NuGet packages...
 dotnet restore "%WPF_PROJECT%"
 if errorlevel 1 exit /b 1
 
-echo [2/2] Build WPF app into bin\...
-call :resolve_msbuild
-if errorlevel 1 exit /b 1
-
-if /i "%MSBUILD_EXE%"=="msbuild" (
-    msbuild "%WPF_PROJECT%" /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir=%BIN_DIR%\
-) else (
-    "%MSBUILD_EXE%" "%WPF_PROJECT%" /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir=%BIN_DIR%\
-)
+echo [2/2] Publish WPF app into bin\...
+dotnet publish "%WPF_PROJECT%" -c Release -o "%BIN_DIR%"
 if errorlevel 1 exit /b 1
 exit /b 0
-
-:resolve_msbuild
-set "MSBUILD_EXE=msbuild"
-where msbuild >nul 2>&1
-if not errorlevel 1 exit /b 0
-
-for /f "delims=" %%I in ('where /r "%ProgramFiles%\Microsoft Visual Studio" MSBuild.exe 2^>nul') do (
-  set "MSBUILD_EXE=%%I"
-  exit /b 0
-)
-
-for /f "delims=" %%I in ('where /r "%ProgramFiles(x86)%\Microsoft Visual Studio" MSBuild.exe 2^>nul') do (
-  set "MSBUILD_EXE=%%I"
-  exit /b 0
-)
-
-echo MSBuild was not found. Install Visual Studio Build Tools or add MSBuild to PATH.
-exit /b 1
 
 :build_installer
 echo.

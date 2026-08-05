@@ -12,16 +12,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Restore packages
-        run: dotnet restore WPF/FluxDB/FluxDB.csproj
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
 
       - name: Build
-        run: |
-          if (-not (Test-Path bin)) { New-Item -ItemType Directory -Path bin -Force | Out-Null }
-          msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir="${{ github.workspace }}\bin\"
+        run: dotnet publish WPF/FluxDB/FluxDB.csproj -c Release -o "${{ github.workspace }}\bin\"
 
       - name: Setup Go
         uses: actions/setup-go@v5

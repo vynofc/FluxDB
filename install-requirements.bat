@@ -4,10 +4,10 @@ cd /d "%~dp0"
 echo === FluxDB Requirements Setup ===
 echo.
 
-echo [1/4] Checking for .NET SDK...
-dotnet --version >nul 2>&1
+echo [1/4] Checking for .NET 10 SDK...
+dotnet --list-sdks | findstr "10.0" >nul 2>&1
 if errorlevel 1 (
-    echo .NET SDK is not installed or not available in PATH.
+    echo .NET 10 SDK is not installed or not available in PATH.
     echo Install from https://dotnet.microsoft.com/download
     exit /b 1
 )
