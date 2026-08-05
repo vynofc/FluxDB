@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 namespace FluxDB.Models
 {
-    public class FileEntry : INotifyPropertyChanged
+    public partial class FileEntry : ObservableObject
     {
         private static readonly Dictionary<string, (string Icon, string Color)> IconLookup = new Dictionary<string, (string, string)>
         {
@@ -26,94 +23,47 @@ namespace FluxDB.Models
             [".html"] = ("\uE943", "#00CED1"), [".css"] = ("\uE943", "#00CED1"), [".xaml"] = ("\uE943", "#00CED1"), [".xml"] = ("\uE943", "#00CED1"),
             [".json"] = ("\uE943", "#00CED1"), [".sql"] = ("\uE943", "#00CED1"), [".php"] = ("\uE943", "#00CED1"),
         };
+
+        [ObservableProperty]
         private int _id;
+
+        [ObservableProperty]
         private string _path;
+
+        [ObservableProperty]
         private string _name;
+
+        [ObservableProperty]
         private string _extension;
+
+        [ObservableProperty]
         private long _size;
+
+        [ObservableProperty]
         private DateTime _createdAt;
+
+        [ObservableProperty]
         private DateTime _modifiedAt;
+
+        [ObservableProperty]
         private bool _deleted;
+
+        [ObservableProperty]
         private DateTime _lastIndexedAt;
+
+        [ObservableProperty]
         private string _tagsText;
+
+        [ObservableProperty]
         private string _note;
+
+        [ObservableProperty]
         private bool _isFolder;
+
         private string _cachedIcon;
         private string _cachedIconColor;
         private string _cachedSizeDisplay;
         private bool _cacheValid;
-
-        public int Id
-        {
-            get { return _id; }
-            set { _id = value; OnPropertyChanged(); }
-        }
-
-        public string Path
-        {
-            get { return _path; }
-            set { _path = value; OnPropertyChanged(); }
-        }
-
-        public string Name
-        {
-            get { return _name; }
-            set { _name = value; OnPropertyChanged(); }
-        }
-
-        public string Extension
-        {
-            get { return _extension; }
-            set { _extension = value; _cacheValid = false; OnPropertyChanged(); }
-        }
-
-        public long Size
-        {
-            get { return _size; }
-            set { _size = value; _cacheValid = false; OnPropertyChanged(); }
-        }
-
-        public DateTime CreatedAt
-        {
-            get { return _createdAt; }
-            set { _createdAt = value; OnPropertyChanged(); }
-        }
-
-        public DateTime ModifiedAt
-        {
-            get { return _modifiedAt; }
-            set { _modifiedAt = value; OnPropertyChanged(); }
-        }
-
-        public bool Deleted
-        {
-            get { return _deleted; }
-            set { _deleted = value; OnPropertyChanged(); }
-        }
-
-        public DateTime LastIndexedAt
-        {
-            get { return _lastIndexedAt; }
-            set { _lastIndexedAt = value; OnPropertyChanged(); }
-        }
-
-        public string TagsText
-        {
-            get { return _tagsText; }
-            set { _tagsText = value; OnPropertyChanged(); }
-        }
-
-        public string Note
-        {
-            get { return _note; }
-            set { _note = value; OnPropertyChanged(); }
-        }
-
-        public bool IsFolder
-        {
-            get { return _isFolder; }
-            set { _isFolder = value; _cacheValid = false; OnPropertyChanged(); }
-        }
 
         public List<string> Tags { get; set; } = new List<string>();
 
@@ -131,9 +81,6 @@ namespace FluxDB.Models
             }
         }
 
-        /// <summary>
-        /// Simple text-based icon
-        /// </summary>
         public string Icon
         {
             get
@@ -143,9 +90,6 @@ namespace FluxDB.Models
             }
         }
 
-        /// <summary>
-        /// Icon color based on file type
-        /// </summary>
         public string IconColor
         {
             get
@@ -153,12 +97,6 @@ namespace FluxDB.Models
                 if (_cacheValid && _cachedIconColor != null) return _cachedIconColor;
                 return _cachedIconColor = _isFolder ? "#DCB67A" : GetExtLookup().Color;
             }
-        }
-
-        private (string Icon, string Color) GetExtLookup()
-        {
-            var ext = (_extension ?? "").ToLower();
-            return IconLookup.TryGetValue(ext, out var value) ? value : ("\uE160", "#BDC3C7");
         }
 
         public string TypeDisplay
@@ -170,12 +108,25 @@ namespace FluxDB.Models
             }
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        protected void OnPropertyChanged([CallerMemberName] string name = null)
+        partial void OnExtensionChanged(string value)
         {
-            if (PropertyChanged != null)
-                PropertyChanged(this, new PropertyChangedEventArgs(name));
+            _cacheValid = false;
+        }
+
+        partial void OnSizeChanged(long value)
+        {
+            _cacheValid = false;
+        }
+
+        partial void OnIsFolderChanged(bool value)
+        {
+            _cacheValid = false;
+        }
+
+        private (string Icon, string Color) GetExtLookup()
+        {
+            var ext = (_extension ?? "").ToLower();
+            return IconLookup.TryGetValue(ext, out var value) ? value : ("\uE160", "#BDC3C7");
         }
     }
 }

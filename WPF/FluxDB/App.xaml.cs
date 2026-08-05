@@ -1,25 +1,45 @@
-﻿using System;
-using System.Windows;
+using System.Diagnostics;
+using System.Net.Http;
+using System.Reflection;
+using System.Windows.Media;
+using Newtonsoft.Json;
+using Wpf.Ui.Appearance;
+using Wpf.Ui.Controls;
 
 namespace FluxDB
 {
-    /// <summary>
-    /// Interaktionslogik für "App.xaml"
-    /// </summary>
     public partial class App : Application
     {
-        public static bool IsUpdateAvailable { get; set; } = false;
+        public static bool IsUpdateAvailable { get; set; }
         public static string AvailableVersion { get; set; } = "";
-        public static bool IsUpdateSkipped { get; set; } = false;
+        public static bool IsUpdateSkipped { get; set; }
 
-        protected override void OnStartup(StartupEventArgs e)
+        private IHost _host;
+
+        public static IHost Host => ((App)Current)._host;
+
+        private void OnStartup(object sender, StartupEventArgs e)
         {
-            base.OnStartup(e);
             var ver = GetLocalVersion();
             bool debugMode = ver.EndsWith("-debug", StringComparison.OrdinalIgnoreCase);
-            FluxDB.Services.LoggingService.SetDebugMode(debugMode);
+            Services.LoggingService.SetDebugMode(debugMode);
             if (debugMode)
-                FluxDB.Services.LoggingService.Log($"DEBUG MODE ACTIVE — version: {ver}");
+                Services.LoggingService.Log($"DEBUG MODE ACTIVE — version: {ver}");
+
+            _host = Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
+                .ConfigureServices((context, services) =>
+                {
+                    services.AddFluxDB();
+                })
+                .Build();
+
+            var splash = new SplashWindow();
+            splash.Show();
+        }
+
+        private void OnExit(object sender, ExitEventArgs e)
+        {
+            Services.LoggingService.Shutdown();
         }
 
         public static string GetLocalVersion()
@@ -27,42 +47,33 @@ namespace FluxDB
             string maxVer = "0.0.0";
             try
             {
-                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                var assembly = Assembly.GetExecutingAssembly();
                 var exePath = assembly.Location;
-                var exeDir = System.IO.Path.GetDirectoryName(exePath);
+                var exeDir = Path.GetDirectoryName(exePath);
 
-                // 1. Try local version.txt in app folder
-                var localFile = System.IO.Path.Combine(exeDir ?? "", "version.txt");
-                if (System.IO.File.Exists(localFile))
+                var localFile = Path.Combine(exeDir ?? "", "version.txt");
+                if (File.Exists(localFile))
                 {
                     try
                     {
-                        var ver = System.IO.File.ReadAllText(localFile).Trim();
-                        if (!string.IsNullOrEmpty(ver) && VersionHelper.CompareVersions(ver, maxVer) > 0) maxVer = ver;
+                        var ver = File.ReadAllText(localFile).Trim();
+                        if (!string.IsNullOrEmpty(ver) && VersionHelper.CompareVersions(ver, maxVer) > 0)
+                            maxVer = ver;
                     }
-                    catch (Exception ex)
-                    {
-                        FluxDB.Services.LoggingService.Log($"Error reading local version.txt: {ex.Message}");
-                    }
+                    catch (Exception ex) { Services.LoggingService.Log($"Error reading local version.txt: {ex.Message}"); }
                 }
             }
-            catch (Exception ex)
-            {
-                FluxDB.Services.LoggingService.Log($"Error in GetLocalVersion: {ex.Message}");
-            }
+            catch (Exception ex) { Services.LoggingService.Log($"Error in GetLocalVersion: {ex.Message}"); }
 
-            // 2. Fallback to Assembly version
             try
             {
-                var ass = System.Reflection.Assembly.GetExecutingAssembly();
-                var inf = (System.Reflection.AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(ass, typeof(System.Reflection.AssemblyInformationalVersionAttribute));
+                var ass = Assembly.GetExecutingAssembly();
+                var inf = (AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(ass, typeof(AssemblyInformationalVersionAttribute));
                 var assVer = inf?.InformationalVersion ?? ass.GetName().Version.ToString();
-                if (VersionHelper.CompareVersions(assVer, maxVer) > 0) maxVer = assVer;
+                if (VersionHelper.CompareVersions(assVer, maxVer) > 0)
+                    maxVer = assVer;
             }
-            catch (Exception ex)
-            {
-                FluxDB.Services.LoggingService.Log($"Error reading Assembly version: {ex.Message}");
-            }
+            catch (Exception ex) { Services.LoggingService.Log($"Error reading Assembly version: {ex.Message}"); }
 
             return maxVer;
         }

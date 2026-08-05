@@ -12,18 +12,19 @@ namespace FluxDB
             txtName.Text = currentName;
             txtName.SelectAll();
             txtName.Focus();
-        }
-
-        private void BtnCancel_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
+            Loaded += (s, e) => txtName.Focus();
         }
 
         private void BtnOk_Click(object sender, RoutedEventArgs e)
         {
             NewName = txtName.Text.Trim();
             DialogResult = true;
+            Close();
+        }
+
+        private void BtnCancel_Click(object sender, RoutedEventArgs e)
+        {
+            DialogResult = false;
             Close();
         }
     }
