@@ -151,12 +151,14 @@ namespace FluxDB.Services
             return f;
         }
 
-        public void SetTagsForFile(int fileId, List<string> tags)
+        public void SetTagsForFile(int fileId, List<string> tags, SQLiteTransaction transaction = null)
         {
             LoggingService.LogDebug($"SetTagsForFile: fileId={fileId} tags=[{string.Join(", ", tags)}]");
-            using (var transaction = _connection.BeginTransaction())
+            var ownTransaction = transaction == null;
+            var tx = transaction ?? _connection.BeginTransaction();
+            try
             {
-                using (var cmd = new SQLiteCommand("DELETE FROM file_tags WHERE file_id=@id", _connection, transaction))
+                using (var cmd = new SQLiteCommand("DELETE FROM file_tags WHERE file_id=@id", _connection, tx))
                 {
                     cmd.Parameters.AddWithValue("@id", fileId);
                     cmd.ExecuteNonQuery();
@@ -164,15 +166,22 @@ namespace FluxDB.Services
                 foreach (var tag in tags)
                 {
                     if (string.IsNullOrWhiteSpace(tag)) continue;
-                    var tagId = GetOrCreateTagInTransaction(tag, transaction);
-                    using (var cmd = new SQLiteCommand("INSERT OR IGNORE INTO file_tags (file_id,tag_id) VALUES (@f,@t)", _connection, transaction))
+                    var tagId = GetOrCreateTagInTransaction(tag, tx);
+                    using (var cmd = new SQLiteCommand("INSERT OR IGNORE INTO file_tags (file_id,tag_id) VALUES (@f,@t)", _connection, tx))
                     {
                         cmd.Parameters.AddWithValue("@f", fileId);
                         cmd.Parameters.AddWithValue("@t", tagId);
                         cmd.ExecuteNonQuery();
                     }
                 }
-                transaction.Commit();
+                if (ownTransaction)
+                    tx.Commit();
+            }
+            catch
+            {
+                if (ownTransaction)
+                    tx.Dispose();
+                throw;
             }
         }
 
@@ -186,9 +195,9 @@ namespace FluxDB.Services
             }
         }
 
-        public void SetNoteForFile(int fileId, string note)
+        public void SetNoteForFile(int fileId, string note, SQLiteTransaction transaction = null)
         {
-            using (var cmd = new SQLiteCommand("INSERT INTO notes (file_id,note) VALUES (@id,@n) ON CONFLICT(file_id) DO UPDATE SET note=@n", _connection))
+            using (var cmd = new SQLiteCommand("INSERT INTO notes (file_id,note) VALUES (@id,@n) ON CONFLICT(file_id) DO UPDATE SET note=@n", _connection, transaction))
             {
                 cmd.Parameters.AddWithValue("@id", fileId);
                 cmd.Parameters.AddWithValue("@n", note ?? "");

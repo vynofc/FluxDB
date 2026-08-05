@@ -123,6 +123,28 @@
                     </Border>
                 </StackPanel>
             </TabItem>
+
+            <TabItem Header="Data">
+                <StackPanel Margin="0,20,0,0">
+                    <TextBlock Text="Export / Import" FontSize="16" FontWeight="Bold" Margin="0,0,0,15" Foreground="{StaticResource AccentBrush}"/>
+
+                    <Border Background="{StaticResource SecondaryBackgroundBrush}" Padding="15" CornerRadius="4" Margin="0,0,0,15">
+                        <StackPanel>
+                            <TextBlock Text="Export" FontSize="14" FontWeight="Bold" Margin="0,0,0,5"/>
+                            <TextBlock Text="Export the current index as JSON or compressed JSON." FontSize="11" Opacity="0.6" Margin="0,0,0,10"/>
+                            <Button x:Name="btnExport" Content="Export Index..." Style="{StaticResource SecondaryButtonStyle}" Width="150" Click="BtnExport_Click"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="{StaticResource SecondaryBackgroundBrush}" Padding="15" CornerRadius="4">
+                        <StackPanel>
+                            <TextBlock Text="Import" FontSize="14" FontWeight="Bold" Margin="0,0,0,5"/>
+                            <TextBlock Text="Import a previously exported index file. Existing entries will be updated, new entries will be added." FontSize="11" Opacity="0.6" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                            <Button x:Name="btnImport" Content="Import Index..." Style="{StaticResource SecondaryButtonStyle}" Width="150" Click="BtnImport_Click"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </TabItem>
         </TabControl>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">

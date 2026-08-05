@@ -1488,7 +1488,7 @@ namespace FluxDB
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
         {
             var settings = _settingsService.Load();
-            var settingsWindow = new SettingsWindow(settings, _exportService, _currentRootFolder);
+            var settingsWindow = new SettingsWindow(settings, _exportService, _databaseService, _currentRootFolder);
             settingsWindow.Owner = this;
             if (settingsWindow.ShowDialog() == true)
             {
