@@ -159,16 +159,8 @@ namespace FluxDB.Models
             get
             {
                 if (_cacheValid && _cachedIcon != null) return _cachedIcon;
-                _cachedIcon = ComputeIcon();
-                return _cachedIcon;
+                return _cachedIcon = ComputeIconValue(IconMap, "\uE8B7", "\uE160");
             }
-        }
-
-        private string ComputeIcon()
-        {
-            if (_isFolder) return "\uE8B7";
-            var ext = (_extension ?? "").ToLower();
-            return IconMap.TryGetValue(ext, out var icon) ? icon : "\uE160";
         }
 
         /// <summary>
@@ -179,16 +171,15 @@ namespace FluxDB.Models
             get
             {
                 if (_cacheValid && _cachedIconColor != null) return _cachedIconColor;
-                _cachedIconColor = ComputeIconColor();
-                return _cachedIconColor;
+                return _cachedIconColor = ComputeIconValue(IconColorMap, "#DCB67A", "#BDC3C7");
             }
         }
 
-        private string ComputeIconColor()
+        private string ComputeIconValue(Dictionary<string, string> map, string folderDefault, string fileDefault)
         {
-            if (_isFolder) return "#DCB67A";
+            if (_isFolder) return folderDefault;
             var ext = (_extension ?? "").ToLower();
-            return IconColorMap.TryGetValue(ext, out var color) ? color : "#BDC3C7";
+            return map.TryGetValue(ext, out var value) ? value : fileDefault;
         }
 
         public string TypeDisplay
