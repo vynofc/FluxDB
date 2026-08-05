@@ -125,7 +125,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addLog("📂 Entpacke Dateien...")
 		}
 		return m, tea.Batch(
-			extractCmd(m.zipPath, m.customPath),
+			extractCmd(m.zipPath, m.customPath, m.tag),
 			m.spinner.Tick,
 		)
 

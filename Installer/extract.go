@@ -11,7 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func extractCmd(zipPath, customPath string) tea.Cmd {
+func extractCmd(zipPath, customPath, tag string) tea.Cmd {
 	return func() tea.Msg {
 		installDir := customPath
 		if installDir == "" {
@@ -46,8 +46,6 @@ func extractCmd(zipPath, customPath string) tea.Cmd {
 		}
 
 		versionFile := filepath.Join(installDir, "version.txt")
-		tag := strings.TrimPrefix(filepath.Base(zipPath), "FluxDB-")
-		tag = strings.TrimSuffix(tag, ".zip")
 		if err := os.WriteFile(versionFile, []byte(tag), 0644); err != nil {
 			return errMsg{err: fmt.Errorf("version datei schreiben fehlgeschlagen: %w", err)}
 		}

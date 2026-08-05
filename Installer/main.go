@@ -84,7 +84,7 @@ func runSilent(customTag, customPath string, startAfter bool, logger *log.Logger
 	case downloadCompleteMsg:
 		logger.Info("Download abgeschlossen", "path", m.path)
 		logger.Info("Entpacke...")
-		extractResult := extractCmd(m.path, customPath)()
+		extractResult := extractCmd(m.path, customPath, tag)()
 		switch em := extractResult.(type) {
 		case extractCompleteMsg:
 			logger.Info(fmt.Sprintf("FluxDB %s erfolgreich installiert!", tag))
