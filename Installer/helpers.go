@@ -17,19 +17,6 @@ func formatLogs(logs []string) string {
 	return sb.String()
 }
 
-func formatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
 func formatStepHeader(step, total int, title string, done bool, current bool) string {
 	prefix := fmt.Sprintf("[%d/%d]", step, total)
 	if done {

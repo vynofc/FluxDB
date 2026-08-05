@@ -11,7 +11,6 @@ var (
 	textColor      = lipgloss.Color("#DFE6E9")
 	dimColor       = lipgloss.Color("#636E72")
 	highlightColor = lipgloss.Color("#FFEAA7")
-	backgroundColor = lipgloss.Color("#2D3436")
 
 	titleStyle = lipgloss.NewStyle().
 			Foreground(primaryColor).
@@ -48,14 +47,6 @@ var (
 	logStyle = lipgloss.NewStyle().
 			Foreground(dimColor)
 
-	logHighlightStyle = lipgloss.NewStyle().
-				Foreground(highlightColor)
-
-	logSuccessStyle = lipgloss.NewStyle().
-			Foreground(successColor)
-
-	logErrorStyle = lipgloss.NewStyle().
-			Foreground(errorColor)
 
 	stepStyle = lipgloss.NewStyle().
 			Foreground(primaryColor).
@@ -68,10 +59,6 @@ var (
 	stepCurrentStyle = lipgloss.NewStyle().
 			Foreground(highlightColor).
 			Bold(true)
-
-	separatorStyle = lipgloss.NewStyle().
-			Foreground(dimColor).
-			Render
 
 	dividerStyle = lipgloss.NewStyle().
 			Foreground(dimColor).

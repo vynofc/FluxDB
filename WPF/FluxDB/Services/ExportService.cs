@@ -108,10 +108,5 @@ namespace FluxDB.Services
                 jsonWriter.WriteEndObject();
             }
         }
-
-        public string GetDefaultExportPath()
-        {
-            return Path.Combine(_settings.GetAppDataDirectory(), "index.json");
-        }
     }
 }

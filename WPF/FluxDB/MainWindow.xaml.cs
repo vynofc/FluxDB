@@ -36,7 +36,6 @@ namespace FluxDB
         private string _currentRootFolder;
         private string _currentViewFolder;
         private bool _isIndexing;
-        private bool _isSearchMode;
 
         // Navigation History
         private Stack<string> _backHistory = new Stack<string>();
@@ -1257,7 +1256,6 @@ namespace FluxDB
             }
 
             _currentViewFolder = folderPath;
-            _isSearchMode = false;
 
             UpdateNavigationButtons();
             UpdateBreadcrumbs();
@@ -1506,7 +1504,6 @@ namespace FluxDB
         private void BtnClearSearch_Click(object sender, RoutedEventArgs e)
         {
             txtSearch.Text = "";
-            _isSearchMode = false;
             NavigateToFolder(_currentViewFolder, addToHistory: false);
             txtStatus.Text = "Search cleared";
         }
@@ -1528,12 +1525,10 @@ namespace FluxDB
             var query = txtSearch.Text.Trim();
             if (string.IsNullOrEmpty(query))
             {
-                _isSearchMode = false;
                 await RefreshCurrentFolderViewAsync();
                 return;
             }
 
-            _isSearchMode = true;
             var folder = _currentViewFolder ?? _currentRootFolder;
             List<FileEntry> results = await Task.Run(() => _databaseService.SearchFiles(query, folder));
 
@@ -1834,11 +1829,7 @@ namespace FluxDB
         private static extern bool DeleteObject(IntPtr hObject);
 
         private const int SIIGBF_RESIZETOFIT = 0x00;
-        private const int SIIGBF_BIGGERSIZEOK = 0x01;
-        private const int SIIGBF_MEMORYONLY = 0x02;
-        private const int SIIGBF_ICONONLY = 0x04;
         private const int SIIGBF_THUMBNAILONLY = 0x08;
-        private const int SIIGBF_INCACHEONLY = 0x10;
 
         private BitmapSource GetShellThumbnail(string path, int size)
         {

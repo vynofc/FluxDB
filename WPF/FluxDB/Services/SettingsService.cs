@@ -36,14 +36,6 @@ namespace FluxDB.Services
         }
 
         /// <summary>
-        /// Get the database path
-        /// </summary>
-        public string GetDatabasePath()
-        {
-            return Path.Combine(GetAppDataDirectory(), "fluxdb.db");
-        }
-
-        /// <summary>
         /// Load settings from file
         /// </summary>
         public AppSettings Load()

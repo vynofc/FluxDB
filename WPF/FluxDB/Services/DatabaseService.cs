@@ -151,47 +151,6 @@ namespace FluxDB.Services
             return f;
         }
 
-        public List<FileEntry> SearchByTag(string tagName)
-        {
-            var files = new List<FileEntry>();
-            var sql = @"
-                SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
-                FROM files f
-                LEFT JOIN notes n ON f.id = n.file_id
-                INNER JOIN file_tags ft ON f.id = ft.file_id
-                INNER JOIN tags t ON ft.tag_id = t.id
-                WHERE f.deleted = 0 AND t.name LIKE @t
-                GROUP BY f.id";
-
-            using (var cmd = new SQLiteCommand(sql, _connection))
-            {
-                cmd.Parameters.AddWithValue("@t", "%" + tagName + "%");
-                using (var r = cmd.ExecuteReader())
-                {
-                    while (r.Read())
-                    {
-                        files.Add(MapFileEntry(r));
-                    }
-                }
-            }
-            return files;
-        }
-
-        public int GetOrCreateTag(string name)
-        {
-            name = name.Trim().ToLower();
-            using (var transaction = _connection.BeginTransaction())
-            {
-                using (var cmd = new SQLiteCommand("INSERT OR IGNORE INTO tags (name) VALUES (@n); SELECT id FROM tags WHERE name=@n;", _connection, transaction))
-                {
-                    cmd.Parameters.AddWithValue("@n", name);
-                    var result = Convert.ToInt32(cmd.ExecuteScalar());
-                    transaction.Commit();
-                    return result;
-                }
-            }
-        }
-
         public void SetTagsForFile(int fileId, List<string> tags)
         {
             LoggingService.LogDebug($"SetTagsForFile: fileId={fileId} tags=[{string.Join(", ", tags)}]");
@@ -227,31 +186,6 @@ namespace FluxDB.Services
             }
         }
 
-        public List<string> GetTagsForFile(int fileId)
-        {
-            var tags = new List<string>();
-            using (var cmd = new SQLiteCommand("SELECT t.name FROM tags t INNER JOIN file_tags ft ON t.id=ft.tag_id WHERE ft.file_id=@id", _connection))
-            {
-                cmd.Parameters.AddWithValue("@id", fileId);
-                using (var r = cmd.ExecuteReader())
-                {
-                    while (r.Read()) tags.Add(r.GetString(0));
-                }
-            }
-            return tags;
-        }
-
-        public List<Tag> GetAllTags()
-        {
-            var tags = new List<Tag>();
-            using (var cmd = new SQLiteCommand("SELECT id,name FROM tags", _connection))
-            using (var r = cmd.ExecuteReader())
-            {
-                while (r.Read()) tags.Add(new Tag { Id = r.GetInt32(0), Name = r.GetString(1) });
-            }
-            return tags;
-        }
-
         public void SetNoteForFile(int fileId, string note)
         {
             using (var cmd = new SQLiteCommand("INSERT INTO notes (file_id,note) VALUES (@id,@n) ON CONFLICT(file_id) DO UPDATE SET note=@n", _connection))
@@ -259,16 +193,6 @@ namespace FluxDB.Services
                 cmd.Parameters.AddWithValue("@id", fileId);
                 cmd.Parameters.AddWithValue("@n", note ?? "");
                 cmd.ExecuteNonQuery();
-            }
-        }
-
-        public string GetNoteForFile(int fileId)
-        {
-            using (var cmd = new SQLiteCommand("SELECT note FROM notes WHERE file_id=@id", _connection))
-            {
-                cmd.Parameters.AddWithValue("@id", fileId);
-                var r = cmd.ExecuteScalar();
-                return r != null ? r.ToString() : "";
             }
         }
 
