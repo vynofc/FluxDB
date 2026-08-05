@@ -33,6 +33,17 @@ namespace FluxDB.Services
 
         private static readonly Queue<string> _writeQueue = new Queue<string>();
         private static bool _isProcessingQueue = false;
+        private static StreamWriter _logWriter;
+        private static readonly object _writerLock = new object();
+
+        private static StreamWriter GetWriter()
+        {
+            if (_logWriter == null)
+            {
+                _logWriter = new StreamWriter(_logFilePath, true, Encoding.UTF8) { AutoFlush = true };
+            }
+            return _logWriter;
+        }
 
         public static void Log(string message)
         {
@@ -72,7 +83,6 @@ namespace FluxDB.Services
                         if (_writeQueue.Count == 0)
                         {
                             _isProcessingQueue = false;
-                            // Double-check: entries may have been added while we were writing
                             if (_writeQueue.Count > 0)
                             {
                                 _isProcessingQueue = true;
@@ -86,14 +96,17 @@ namespace FluxDB.Services
 
                     try
                     {
-                        File.AppendAllLines(_logFilePath, linesToWrite, Encoding.UTF8);
+                        lock (_writerLock)
+                        {
+                            var writer = GetWriter();
+                            foreach (var line in linesToWrite)
+                                writer.WriteLine(line);
+                        }
                     }
                     catch
                     {
                         // swallow file write errors
                     }
-
-                    Thread.Sleep(100); // Small delay to batch more logs
                 }
             }
             catch
@@ -129,5 +142,15 @@ namespace FluxDB.Services
         }
 
         public static string LogFilePath => _logFilePath;
+
+        public static void Shutdown()
+        {
+            lock (_lock)
+            {
+                _logWriter?.Flush();
+                _logWriter?.Dispose();
+                _logWriter = null;
+            }
+        }
     }
 }

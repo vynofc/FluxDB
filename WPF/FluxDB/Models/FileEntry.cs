@@ -7,6 +7,45 @@ namespace FluxDB.Models
 {
     public class FileEntry : INotifyPropertyChanged
     {
+        private static readonly Dictionary<string, string> IconMap = new Dictionary<string, string>
+        {
+            [".jpg"] = "\uEB9F", [".jpeg"] = "\uEB9F", [".png"] = "\uEB9F", [".gif"] = "\uEB9F",
+            [".bmp"] = "\uEB9F", [".webp"] = "\uEB9F", [".ico"] = "\uEB9F",
+            [".mp3"] = "\uE189", [".wav"] = "\uE189", [".flac"] = "\uE189", [".aac"] = "\uE189",
+            [".ogg"] = "\uE189", [".wma"] = "\uE189", [".m4a"] = "\uE189",
+            [".mp4"] = "\uE116", [".avi"] = "\uE116", [".mkv"] = "\uE116", [".mov"] = "\uE116",
+            [".wmv"] = "\uE116", [".flv"] = "\uE116", [".webm"] = "\uE116",
+            [".pdf"] = "\uE162",
+            [".doc"] = "\uE132", [".docx"] = "\uE132", [".rtf"] = "\uE132", [".odt"] = "\uE132",
+            [".txt"] = "\uE132", [".md"] = "\uE132",
+            [".xls"] = "\uE1D2", [".xlsx"] = "\uE1D2", [".csv"] = "\uE1D2", [".ods"] = "\uE1D2",
+            [".zip"] = "\uF012", [".rar"] = "\uF012", [".7z"] = "\uF012", [".tar"] = "\uF012", [".gz"] = "\uF012",
+            [".exe"] = "\uE71D", [".msi"] = "\uE71D",
+            [".cs"] = "\uE943", [".js"] = "\uE943", [".ts"] = "\uE943", [".py"] = "\uE943",
+            [".java"] = "\uE943", [".cpp"] = "\uE943", [".c"] = "\uE943", [".h"] = "\uE943",
+            [".html"] = "\uE943", [".css"] = "\uE943", [".xaml"] = "\uE943", [".xml"] = "\uE943",
+            [".json"] = "\uE943", [".sql"] = "\uE943", [".php"] = "\uE943",
+        };
+
+        private static readonly Dictionary<string, string> IconColorMap = new Dictionary<string, string>
+        {
+            [".jpg"] = "#9B59B6", [".jpeg"] = "#9B59B6", [".png"] = "#9B59B6", [".gif"] = "#9B59B6",
+            [".bmp"] = "#9B59B6", [".webp"] = "#9B59B6", [".ico"] = "#9B59B6",
+            [".mp3"] = "#2ECC71", [".wav"] = "#2ECC71", [".flac"] = "#2ECC71", [".aac"] = "#2ECC71",
+            [".ogg"] = "#2ECC71", [".wma"] = "#2ECC71", [".m4a"] = "#2ECC71",
+            [".mp4"] = "#E74C3C", [".avi"] = "#E74C3C", [".mkv"] = "#E74C3C", [".mov"] = "#E74C3C",
+            [".wmv"] = "#E74C3C", [".flv"] = "#E74C3C", [".webm"] = "#E74C3C",
+            [".pdf"] = "#E74C3C",
+            [".doc"] = "#3498DB", [".docx"] = "#3498DB", [".rtf"] = "#3498DB", [".odt"] = "#3498DB",
+            [".txt"] = "#3498DB", [".md"] = "#3498DB",
+            [".xls"] = "#27AE60", [".xlsx"] = "#27AE60", [".csv"] = "#27AE60", [".ods"] = "#27AE60",
+            [".zip"] = "#E67E22", [".rar"] = "#E67E22", [".7z"] = "#E67E22", [".tar"] = "#E67E22", [".gz"] = "#E67E22",
+            [".exe"] = "#95A5A6", [".msi"] = "#95A5A6",
+            [".cs"] = "#00CED1", [".js"] = "#00CED1", [".ts"] = "#00CED1", [".py"] = "#00CED1",
+            [".java"] = "#00CED1", [".cpp"] = "#00CED1", [".c"] = "#00CED1", [".h"] = "#00CED1",
+            [".html"] = "#00CED1", [".css"] = "#00CED1", [".xaml"] = "#00CED1", [".xml"] = "#00CED1",
+            [".json"] = "#00CED1", [".sql"] = "#00CED1", [".php"] = "#00CED1",
+        };
         private int _id;
         private string _path;
         private string _name;
@@ -19,6 +58,10 @@ namespace FluxDB.Models
         private string _tagsText;
         private string _note;
         private bool _isFolder;
+        private string _cachedIcon;
+        private string _cachedIconColor;
+        private string _cachedSizeDisplay;
+        private bool _cacheValid;
 
         public int Id
         {
@@ -41,13 +84,13 @@ namespace FluxDB.Models
         public string Extension
         {
             get { return _extension; }
-            set { _extension = value; OnPropertyChanged(); }
+            set { _extension = value; _cacheValid = false; OnPropertyChanged(); }
         }
 
         public long Size
         {
             get { return _size; }
-            set { _size = value; OnPropertyChanged(); }
+            set { _size = value; _cacheValid = false; OnPropertyChanged(); }
         }
 
         public DateTime CreatedAt
@@ -89,7 +132,7 @@ namespace FluxDB.Models
         public bool IsFolder
         {
             get { return _isFolder; }
-            set { _isFolder = value; OnPropertyChanged(); }
+            set { _isFolder = value; _cacheValid = false; OnPropertyChanged(); }
         }
 
         public List<string> Tags { get; set; } = new List<string>();
@@ -98,11 +141,13 @@ namespace FluxDB.Models
         {
             get
             {
-                if (_isFolder) return "";
-                if (_size < 1024) return _size + " B";
-                if (_size < 1024 * 1024) return (_size / 1024.0).ToString("F1") + " KB";
-                if (_size < 1024 * 1024 * 1024) return (_size / (1024.0 * 1024.0)).ToString("F1") + " MB";
-                return (_size / (1024.0 * 1024.0 * 1024.0)).ToString("F2") + " GB";
+                if (_cacheValid && _cachedSizeDisplay != null) return _cachedSizeDisplay;
+                if (_isFolder) { _cachedSizeDisplay = ""; return _cachedSizeDisplay; }
+                if (_size < 1024) _cachedSizeDisplay = _size + " B";
+                else if (_size < 1024 * 1024) _cachedSizeDisplay = (_size / 1024.0).ToString("F1") + " KB";
+                else if (_size < 1024 * 1024 * 1024) _cachedSizeDisplay = (_size / (1024.0 * 1024.0)).ToString("F1") + " MB";
+                else _cachedSizeDisplay = (_size / (1024.0 * 1024.0 * 1024.0)).ToString("F2") + " GB";
+                return _cachedSizeDisplay;
             }
         }
 
@@ -113,46 +158,17 @@ namespace FluxDB.Models
         {
             get
             {
-                if (_isFolder) return "\uE8B7"; // Folder
-                
-                var ext = (_extension ?? "").ToLower();
-                
-                // Images
-                if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".bmp" || ext == ".webp" || ext == ".ico")
-                    return "\uEB9F"; // Photo
-                
-                // Audio
-                if (ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".aac" || ext == ".ogg" || ext == ".wma" || ext == ".m4a")
-                    return "\uE189"; // Audio
-                
-                // Video
-                if (ext == ".mp4" || ext == ".avi" || ext == ".mkv" || ext == ".mov" || ext == ".wmv" || ext == ".flv" || ext == ".webm")
-                    return "\uE116"; // Video
-                
-                // Documents
-                if (ext == ".pdf")
-                    return "\uE162"; // PDF-like icon
-                if (ext == ".doc" || ext == ".docx" || ext == ".rtf" || ext == ".odt" || ext == ".txt" || ext == ".md")
-                    return "\uE132"; // Document
-                if (ext == ".xls" || ext == ".xlsx" || ext == ".csv" || ext == ".ods")
-                    return "\uE1D2"; // Spreadsheet
-                
-                // Archives
-                if (ext == ".zip" || ext == ".rar" || ext == ".7z" || ext == ".tar" || ext == ".gz")
-                    return "\uF012"; // Zip
-                
-                // Executables
-                if (ext == ".exe" || ext == ".msi")
-                    return "\uE71D"; // Executable
-                
-                // Code files
-                if (ext == ".cs" || ext == ".js" || ext == ".ts" || ext == ".py" || ext == ".java" || ext == ".cpp" || ext == ".c" || ext == ".h" ||
-                    ext == ".html" || ext == ".css" || ext == ".xaml" || ext == ".xml" || ext == ".json" || ext == ".sql" || ext == ".php")
-                    return "\uE943"; // Code
-                
-                // Default
-                return "\uE160"; // Generic File
+                if (_cacheValid && _cachedIcon != null) return _cachedIcon;
+                _cachedIcon = ComputeIcon();
+                return _cachedIcon;
             }
+        }
+
+        private string ComputeIcon()
+        {
+            if (_isFolder) return "\uE8B7";
+            var ext = (_extension ?? "").ToLower();
+            return IconMap.TryGetValue(ext, out var icon) ? icon : "\uE160";
         }
 
         /// <summary>
@@ -162,50 +178,17 @@ namespace FluxDB.Models
         {
             get
             {
-                if (_isFolder) return "#DCB67A"; // Gold/Yellow for folders
-                
-                var ext = (_extension ?? "").ToLower();
-                
-                // Images - Purple
-                if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".bmp" || ext == ".webp" || ext == ".ico")
-                    return "#9B59B6";
-                
-                // Audio - Green
-                if (ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".aac" || ext == ".ogg" || ext == ".wma" || ext == ".m4a")
-                    return "#2ECC71";
-                
-                // Video - Red
-                if (ext == ".mp4" || ext == ".avi" || ext == ".mkv" || ext == ".mov" || ext == ".wmv" || ext == ".flv" || ext == ".webm")
-                    return "#E74C3C";
-                
-                // PDF - Red
-                if (ext == ".pdf")
-                    return "#E74C3C";
-                
-                // Documents - Blue
-                if (ext == ".doc" || ext == ".docx" || ext == ".rtf" || ext == ".odt" || ext == ".txt" || ext == ".md")
-                    return "#3498DB";
-                
-                // Excel - Green
-                if (ext == ".xls" || ext == ".xlsx" || ext == ".csv" || ext == ".ods")
-                    return "#27AE60";
-                
-                // Archives - Orange
-                if (ext == ".zip" || ext == ".rar" || ext == ".7z" || ext == ".tar" || ext == ".gz")
-                    return "#E67E22";
-                
-                // Executables - Gray
-                if (ext == ".exe" || ext == ".msi")
-                    return "#95A5A6";
-                
-                // Code - Cyan
-                if (ext == ".cs" || ext == ".js" || ext == ".ts" || ext == ".py" || ext == ".java" || ext == ".cpp" || ext == ".c" || ext == ".h" ||
-                    ext == ".html" || ext == ".css" || ext == ".xaml" || ext == ".xml" || ext == ".json" || ext == ".sql" || ext == ".php")
-                    return "#00CED1";
-                
-                // Default - Gray
-                return "#BDC3C7";
+                if (_cacheValid && _cachedIconColor != null) return _cachedIconColor;
+                _cachedIconColor = ComputeIconColor();
+                return _cachedIconColor;
             }
+        }
+
+        private string ComputeIconColor()
+        {
+            if (_isFolder) return "#DCB67A";
+            var ext = (_extension ?? "").ToLower();
+            return IconColorMap.TryGetValue(ext, out var color) ? color : "#BDC3C7";
         }
 
         public string TypeDisplay

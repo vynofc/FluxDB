@@ -8,9 +8,6 @@ using Newtonsoft.Json;
 
 namespace FluxDB.Services
 {
-    /// <summary>
-    /// Service for exporting index to JSON
-    /// </summary>
     public class ExportService
     {
         private readonly DatabaseService _database;
@@ -22,67 +19,96 @@ namespace FluxDB.Services
             _settings = settings;
         }
 
-        /// <summary>
-        /// Export all files to an IndexExport object
-        /// </summary>
-        public IndexExport CreateExport(string rootFolder)
-        {
-            var files = _database.GetAllFiles();
-            var export = new IndexExport
-            {
-                Version = "1.0",
-                ExportedAt = DateTime.Now,
-                RootFolder = rootFolder,
-                TotalFiles = files.Count
-            };
-
-            foreach (var file in files)
-            {
-                export.Files.Add(new IndexExportItem
-                {
-                    Path = file.Path,
-                    Name = file.Name,
-                    Extension = file.Extension,
-                    CreatedAt = file.CreatedAt,
-                    ModifiedAt = file.ModifiedAt,
-                    Size = file.Size,
-                    Tags = file.Tags ?? new List<string>(),
-                    Note = file.Note
-                });
-            }
-
-            return export;
-        }
-
-        /// <summary>
-        /// Export to JSON file
-        /// </summary>
         public void ExportToJson(string filePath, string rootFolder)
         {
-            var export = CreateExport(rootFolder);
-            var json = JsonConvert.SerializeObject(export, Formatting.Indented);
-            File.WriteAllText(filePath, json, Encoding.UTF8);
-        }
-
-        /// <summary>
-        /// Export to compressed GZIP file
-        /// </summary>
-        public void ExportToGzip(string filePath, string rootFolder)
-        {
-            var export = CreateExport(rootFolder);
-            var json = JsonConvert.SerializeObject(export);
-            var bytes = Encoding.UTF8.GetBytes(json);
-
-            using (var fileStream = File.Create(filePath))
-            using (var gzipStream = new GZipStream(fileStream, CompressionLevel.Optimal))
+            var files = _database.GetAllFiles();
+            using (var writer = new StreamWriter(filePath, false, Encoding.UTF8))
+            using (var jsonWriter = new JsonTextWriter(writer) { Formatting = Formatting.Indented })
             {
-                gzipStream.Write(bytes, 0, bytes.Length);
+                jsonWriter.WriteStartObject();
+                jsonWriter.WritePropertyName("version");
+                jsonWriter.WriteValue("1.0");
+                jsonWriter.WritePropertyName("exportedAt");
+                jsonWriter.WriteValue(DateTime.Now.ToString("o"));
+                jsonWriter.WritePropertyName("rootFolder");
+                jsonWriter.WriteValue(rootFolder);
+                jsonWriter.WritePropertyName("totalFiles");
+                jsonWriter.WriteValue(files.Count);
+                jsonWriter.WritePropertyName("files");
+                jsonWriter.WriteStartArray();
+
+                foreach (var file in files)
+                {
+                    jsonWriter.WriteStartObject();
+                    jsonWriter.WritePropertyName("path"); jsonWriter.WriteValue(file.Path);
+                    jsonWriter.WritePropertyName("name"); jsonWriter.WriteValue(file.Name);
+                    jsonWriter.WritePropertyName("extension"); jsonWriter.WriteValue(file.Extension);
+                    jsonWriter.WritePropertyName("createdAt"); jsonWriter.WriteValue(file.CreatedAt);
+                    jsonWriter.WritePropertyName("modifiedAt"); jsonWriter.WriteValue(file.ModifiedAt);
+                    jsonWriter.WritePropertyName("size"); jsonWriter.WriteValue(file.Size);
+
+                    jsonWriter.WritePropertyName("tags");
+                    jsonWriter.WriteStartArray();
+                    if (file.Tags != null)
+                        foreach (var tag in file.Tags)
+                            jsonWriter.WriteValue(tag);
+                    jsonWriter.WriteEndArray();
+
+                    jsonWriter.WritePropertyName("note"); jsonWriter.WriteValue(file.Note ?? "");
+                    jsonWriter.WriteEndObject();
+                }
+
+                jsonWriter.WriteEndArray();
+                jsonWriter.WriteEndObject();
             }
         }
 
-        /// <summary>
-        /// Get default export path
-        /// </summary>
+        public void ExportToGzip(string filePath, string rootFolder)
+        {
+            var files = _database.GetAllFiles();
+            using (var fileStream = File.Create(filePath))
+            using (var gzipStream = new GZipStream(fileStream, CompressionLevel.Optimal))
+            using (var writer = new StreamWriter(gzipStream, Encoding.UTF8))
+            using (var jsonWriter = new JsonTextWriter(writer))
+            {
+                jsonWriter.WriteStartObject();
+                jsonWriter.WritePropertyName("version");
+                jsonWriter.WriteValue("1.0");
+                jsonWriter.WritePropertyName("exportedAt");
+                jsonWriter.WriteValue(DateTime.Now.ToString("o"));
+                jsonWriter.WritePropertyName("rootFolder");
+                jsonWriter.WriteValue(rootFolder);
+                jsonWriter.WritePropertyName("totalFiles");
+                jsonWriter.WriteValue(files.Count);
+                jsonWriter.WritePropertyName("files");
+                jsonWriter.WriteStartArray();
+
+                foreach (var file in files)
+                {
+                    jsonWriter.WriteStartObject();
+                    jsonWriter.WritePropertyName("path"); jsonWriter.WriteValue(file.Path);
+                    jsonWriter.WritePropertyName("name"); jsonWriter.WriteValue(file.Name);
+                    jsonWriter.WritePropertyName("extension"); jsonWriter.WriteValue(file.Extension);
+                    jsonWriter.WritePropertyName("createdAt"); jsonWriter.WriteValue(file.CreatedAt);
+                    jsonWriter.WritePropertyName("modifiedAt"); jsonWriter.WriteValue(file.ModifiedAt);
+                    jsonWriter.WritePropertyName("size"); jsonWriter.WriteValue(file.Size);
+
+                    jsonWriter.WritePropertyName("tags");
+                    jsonWriter.WriteStartArray();
+                    if (file.Tags != null)
+                        foreach (var tag in file.Tags)
+                            jsonWriter.WriteValue(tag);
+                    jsonWriter.WriteEndArray();
+
+                    jsonWriter.WritePropertyName("note"); jsonWriter.WriteValue(file.Note ?? "");
+                    jsonWriter.WriteEndObject();
+                }
+
+                jsonWriter.WriteEndArray();
+                jsonWriter.WriteEndObject();
+            }
+        }
+
         public string GetDefaultExportPath()
         {
             return Path.Combine(_settings.GetAppDataDirectory(), "index.json");

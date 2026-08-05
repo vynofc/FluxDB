@@ -31,6 +31,7 @@ namespace FluxDB
         private ExportService _exportService;
         
         private CancellationTokenSource _indexCancellation;
+        private CancellationTokenSource _previewCts;
         private FileEntry _selectedFile;
         private string _currentRootFolder;
         private string _currentViewFolder;
@@ -40,6 +41,7 @@ namespace FluxDB
         // Navigation History
         private Stack<string> _backHistory = new Stack<string>();
         private Stack<string> _forwardHistory = new Stack<string>();
+        private const int MaxHistorySize = 50;
 
         // Drag & Drop
         private Point _dragStartPoint;
@@ -53,6 +55,16 @@ namespace FluxDB
         private string _currentFilter = "All Files";
 
         private const string DatabaseFileName = ".fluxdb";
+
+        private static readonly HashSet<string> ImageExtensions = new HashSet<string> { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".ico", ".svg" };
+        private static readonly HashSet<string> AudioExtensions = new HashSet<string> { ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a" };
+        private static readonly HashSet<string> VideoExtensions = new HashSet<string> { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm" };
+        private static readonly HashSet<string> DocumentExtensions = new HashSet<string> { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf", ".odt" };
+        private static readonly HashSet<string> ArchiveExtensions = new HashSet<string> { ".zip", ".rar", ".7z", ".tar", ".gz" };
+        private static readonly HashSet<string> CodeExtensions = new HashSet<string> { ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", ".html", ".css", ".xaml", ".xml", ".json", ".sql" };
+        private static readonly HashSet<string> PreviewTextExtensions = new HashSet<string> { ".txt", ".md", ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", ".html", ".css", ".xaml", ".xml", ".json", ".sql", ".log", ".ini", ".cfg", ".bat", ".ps1", ".sh", ".yml", ".yaml", ".toml", ".config" };
+
+        private static readonly Guid ShellItemIID = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
 
         public MainWindow()
         {
@@ -290,7 +302,7 @@ namespace FluxDB
             }
         }
 
-        private void DeleteSelectedFiles()
+        private async void DeleteSelectedFiles()
         {
             var selected = dgFiles.SelectedItems.Cast<FileEntry>().ToList();
             if (selected.Count == 0) return;
@@ -304,39 +316,42 @@ namespace FluxDB
             if (result != MessageBoxResult.Yes) return;
 
             var deletedCount = 0;
-            foreach (var item in selected)
+            await Task.Run(() =>
             {
-                try
+                foreach (var item in selected)
                 {
-                    if (item.IsFolder && Directory.Exists(item.Path))
+                    try
                     {
-                        if (_databaseService != null && item.Id > 0)
+                        if (item.IsFolder && Directory.Exists(item.Path))
                         {
-                            _databaseService.MarkPathAsDeleted(item.Path);
+                            if (_databaseService != null && item.Id > 0)
+                            {
+                                _databaseService.MarkPathAsDeleted(item.Path);
+                            }
+                            Directory.Delete(item.Path, true);
+                            Interlocked.Increment(ref deletedCount);
                         }
-                        Directory.Delete(item.Path, true);
-                        deletedCount++;
-                    }
-                    else if (File.Exists(item.Path))
-                    {
-                        File.Delete(item.Path);
-                        
-                        // Remove from database
-                        if (_databaseService != null && item.Id > 0)
+                        else if (File.Exists(item.Path))
                         {
-                            _databaseService.MarkFileAsDeleted(item.Id);
-                        }
-                        deletedCount++;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Error deleting {item.Path}: {ex.Message}");
-                    MessageBox.Show($"Could not delete {item.Name}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
+                            File.Delete(item.Path);
 
-            RefreshCurrentFolderView();
+                            if (_databaseService != null && item.Id > 0)
+                            {
+                                _databaseService.MarkFileAsDeleted(item.Id);
+                            }
+                            Interlocked.Increment(ref deletedCount);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error deleting {item.Path}: {ex.Message}");
+                        Dispatcher.BeginInvoke(new Action(() =>
+                            MessageBox.Show($"Could not delete {item.Name}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error)));
+                    }
+                }
+            });
+
+            await RefreshCurrentFolderViewAsync();
             txtStatus.Text = $"Deleted {deletedCount} item(s)";
         }
 
@@ -539,20 +554,13 @@ namespace FluxDB
 
             switch (_currentFilter)
             {
-                case "Images":
-                    return new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".ico", ".svg" }.Contains(ext);
-                case "Audio":
-                    return new[] { ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a" }.Contains(ext);
-                case "Video":
-                    return new[] { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm" }.Contains(ext);
-                case "Documents":
-                    return new[] { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf", ".odt" }.Contains(ext);
-                case "Archives":
-                    return new[] { ".zip", ".rar", ".7z", ".tar", ".gz" }.Contains(ext);
-                case "Code":
-                    return new[] { ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", ".html", ".css", ".xaml", ".xml", ".json", ".sql" }.Contains(ext);
-                default:
-                    return true;
+                case "Images": return ImageExtensions.Contains(ext);
+                case "Audio": return AudioExtensions.Contains(ext);
+                case "Video": return VideoExtensions.Contains(ext);
+                case "Documents": return DocumentExtensions.Contains(ext);
+                case "Archives": return ArchiveExtensions.Contains(ext);
+                case "Code": return CodeExtensions.Contains(ext);
+                default: return true;
             }
         }
 
@@ -560,9 +568,14 @@ namespace FluxDB
 
         #region Preview
 
-        private void UpdatePreview(FileEntry file)
+        private async void UpdatePreview(FileEntry file)
         {
-            // Reset all
+            _previewCts?.Cancel();
+            _previewCts?.Dispose();
+            _previewCts = new CancellationTokenSource();
+            var ct = _previewCts.Token;
+
+            // Reset all UI immediately
             imgPreview.Source = null;
             imgPreview.Visibility = Visibility.Collapsed;
             txtPreviewScroll.Visibility = Visibility.Collapsed;
@@ -580,21 +593,28 @@ namespace FluxDB
             var ext = (file.Extension ?? "").ToLower();
 
             // Image preview
-            if (new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico", ".webp" }.Contains(ext))
+            if (ImageExtensions.Contains(ext))
             {
                 try
                 {
-                    var bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.UriSource = new Uri(file.Path);
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.DecodePixelWidth = 400;
-                    bitmap.EndInit();
-                    bitmap.Freeze(); // Prevent memory leaks
+                    var path = file.Path;
+                    var bitmap = await Task.Run(() =>
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        var bmp = new BitmapImage();
+                        bmp.BeginInit();
+                        bmp.UriSource = new Uri(path);
+                        bmp.CacheOption = BitmapCacheOption.OnLoad;
+                        bmp.DecodePixelWidth = 400;
+                        bmp.EndInit();
+                        bmp.Freeze();
+                        return bmp;
+                    }, ct);
 
                     imgPreview.Source = bitmap;
                     imgPreview.Visibility = Visibility.Visible;
                 }
+                catch (OperationCanceledException) { return; }
                 catch (Exception ex)
                 {
                     LoggingService.Log($"Cannot load image preview: {ex.Message}");
@@ -607,19 +627,19 @@ namespace FluxDB
             {
                 try
                 {
-                    // Try to get a shell-generated thumbnail for the PDF (works if a PDF handler provides thumbnails)
-                    var thumb = GetShellThumbnail(file.Path, 800);
+                    var path = file.Path;
+                    var thumb = await Task.Run(() => GetShellThumbnail(path, 800), ct);
                     if (thumb != null)
                     {
                         SetImageSource(thumb);
                     }
                     else
                     {
-                        // Fall back to opening externally if no thumbnail available
                         txtNoPreview.Text = "No embedded preview available. Open externally to view.";
                         txtNoPreview.Visibility = Visibility.Visible;
                     }
                 }
+                catch (OperationCanceledException) { return; }
                 catch (Exception ex)
                 {
                     LoggingService.Log($"Cannot preview PDF: {ex.Message}");
@@ -628,41 +648,52 @@ namespace FluxDB
                 }
             }
             // Text preview
-            else if (new[] { ".txt", ".md", ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", 
-                           ".html", ".css", ".xaml", ".xml", ".json", ".sql", ".log", ".ini", ".cfg",
-                           ".bat", ".ps1", ".sh", ".yml", ".yaml", ".toml", ".config" }.Contains(ext))
+            else if (PreviewTextExtensions.Contains(ext))
             {
+                var path = file.Path;
+                string content = null;
                 try
                 {
-                    string content;
-                    using (var fs = new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    content = await Task.Run(() =>
                     {
-                        using (var reader = new StreamReader(fs, Encoding.UTF8, true))
+                        ct.ThrowIfCancellationRequested();
+                        try
                         {
-                            content = reader.ReadToEnd();
-                            
-                            // If it looks like it's actually ANSI (contains replacement chars and we didn't find a BOM)
-                            if (reader.CurrentEncoding == Encoding.UTF8 && content.Contains("\ufffd"))
+                            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                            using (var reader = new StreamReader(fs, Encoding.UTF8, true))
                             {
-                                fs.Position = 0;
-                                using (var readerAnsi = new StreamReader(fs, Encoding.Default))
+                                var text = reader.ReadToEnd();
+
+                                if (reader.CurrentEncoding == Encoding.UTF8 && text.Contains("\ufffd"))
                                 {
-                                    content = readerAnsi.ReadToEnd();
+                                    fs.Position = 0;
+                                    using (var readerAnsi = new StreamReader(fs, Encoding.Default))
+                                    {
+                                        text = readerAnsi.ReadToEnd();
+                                    }
                                 }
+
+                                if (text.Length > 5000)
+                                    text = text.Substring(0, 5000) + "\n\n... (truncated)";
+
+                                return text;
                             }
                         }
-                    }
+                        catch
+                        {
+                            return null;
+                        }
+                    }, ct);
+                }
+                catch (OperationCanceledException) { return; }
 
-                    if (content.Length > 5000)
-                    {
-                        content = content.Substring(0, 5000) + "\n\n... (truncated)";
-                    }
+                if (content != null)
+                {
                     txtPreview.Text = content;
                     txtPreviewScroll.Visibility = Visibility.Visible;
                 }
-                catch (Exception ex)
+                else
                 {
-                    LoggingService.Log($"Cannot read file preview: {ex.Message}");
                     txtNoPreview.Text = "Cannot read file";
                     txtNoPreview.Visibility = Visibility.Visible;
                 }
@@ -785,51 +816,20 @@ namespace FluxDB
             
             column.SortDirection = direction;
 
-            var items = dgFiles.ItemsSource as List<FileEntry>;
-            if (items == null) return;
+            var view = CollectionViewSource.GetDefaultView(dgFiles.ItemsSource);
+            if (view == null) return;
 
-            // Always put folders first
-            var folders = items.Where(f => f.IsFolder);
-            var files = items.Where(f => !f.IsFolder);
-
-            IOrderedEnumerable<FileEntry> sortedFolders;
-            IOrderedEnumerable<FileEntry> sortedFiles;
-
-            switch (column.SortMemberPath)
+            using (view.DeferRefresh())
             {
-                case "Name":
-                    sortedFolders = direction == ListSortDirection.Ascending 
-                        ? folders.OrderBy(f => f.Name) 
-                        : folders.OrderByDescending(f => f.Name);
-                    sortedFiles = direction == ListSortDirection.Ascending 
-                        ? files.OrderBy(f => f.Name) 
-                        : files.OrderByDescending(f => f.Name);
-                    break;
-                case "Size":
-                    sortedFolders = folders.OrderBy(f => f.Name);
-                    sortedFiles = direction == ListSortDirection.Ascending 
-                        ? files.OrderBy(f => f.Size) 
-                        : files.OrderByDescending(f => f.Size);
-                    break;
-                case "ModifiedAt":
-                    sortedFolders = direction == ListSortDirection.Ascending 
-                        ? folders.OrderBy(f => f.ModifiedAt) 
-                        : folders.OrderByDescending(f => f.ModifiedAt);
-                    sortedFiles = direction == ListSortDirection.Ascending 
-                        ? files.OrderBy(f => f.ModifiedAt) 
-                        : files.OrderByDescending(f => f.ModifiedAt);
-                    break;
-                case "TypeDisplay":
-                    sortedFolders = folders.OrderBy(f => f.Name);
-                    sortedFiles = direction == ListSortDirection.Ascending 
-                        ? files.OrderBy(f => f.TypeDisplay) 
-                        : files.OrderByDescending(f => f.TypeDisplay);
-                    break;
-                default:
-                    return;
+                view.SortDescriptions.Clear();
+                view.SortDescriptions.Add(new SortDescription("IsFolder", ListSortDirection.Descending));
+                view.SortDescriptions.Add(new SortDescription(column.SortMemberPath, direction));
+                
+                if (column.SortMemberPath == "Size" || column.SortMemberPath == "TypeDisplay")
+                {
+                    view.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
+                }
             }
-
-            dgFiles.ItemsSource = sortedFolders.Concat(sortedFiles).ToList();
         }
 
         #endregion
@@ -922,6 +922,7 @@ namespace FluxDB
             var movedCount = 0;
             var errorCount = 0;
             var skippedCount = 0;
+            var indexedPaths = new List<string>();
 
             await Task.Run(() =>
             {
@@ -953,7 +954,7 @@ namespace FluxDB
                                 copiedCount++;
                             }
 
-                            Dispatcher.BeginInvoke(new Action(() => AddFileToIndex(targetPath)));
+                            indexedPaths.Add(targetPath);
                         }
                         else if (Directory.Exists(sourcePath))
                         {
@@ -972,7 +973,7 @@ namespace FluxDB
                                 copiedCount++;
                             }
 
-                            Dispatcher.BeginInvoke(new Action(() => AddFolderToIndex(targetPath)));
+                            indexedPaths.Add(targetPath);
                         }
                     }
                     catch (Exception ex)
@@ -982,6 +983,14 @@ namespace FluxDB
                     }
                 }
             });
+
+            foreach (var path in indexedPaths)
+            {
+                if (File.Exists(path))
+                    AddFileToIndex(path);
+                else if (Directory.Exists(path))
+                    AddFolderToIndex(path);
+            }
 
             RefreshCurrentFolderView();
 
@@ -1026,39 +1035,30 @@ namespace FluxDB
 
             try
             {
-                var entries = await Task.Run(() =>
-                {
-                    var result = new List<FileEntry>();
-                    var files = Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories);
-                    foreach (var file in files)
-                    {
-                        try
-                        {
-                            var fileInfo = new FileInfo(file);
-                            result.Add(new FileEntry
-                            {
-                                Path = file,
-                                Name = fileInfo.Name,
-                                Extension = fileInfo.Extension,
-                                Size = fileInfo.Length,
-                                CreatedAt = fileInfo.CreationTime,
-                                ModifiedAt = fileInfo.LastWriteTime
-                            });
-                        }
-                        catch (Exception ex)
-                        {
-                            LoggingService.Log($"Error scanning file for index: {ex.Message}");
-                        }
-                    }
-                    return result;
-                });
-
                 using (var transaction = _databaseService.BeginTransaction())
                 {
-                    foreach (var entry in entries)
+                    await Task.Run(() =>
                     {
-                        _databaseService.UpsertFile(entry, transaction);
-                    }
+                        foreach (var file in Directory.EnumerateFiles(folderPath, "*", SearchOption.AllDirectories))
+                        {
+                            try
+                            {
+                                _databaseService.UpsertFile(new FileEntry
+                                {
+                                    Path = file,
+                                    Name = Path.GetFileName(file),
+                                    Extension = Path.GetExtension(file),
+                                    Size = new FileInfo(file).Length,
+                                    CreatedAt = File.GetCreationTime(file),
+                                    ModifiedAt = File.GetLastWriteTime(file)
+                                }, transaction);
+                            }
+                            catch (Exception ex)
+                            {
+                                LoggingService.Log($"Error scanning file for index: {ex.Message}");
+                            }
+                        }
+                    });
                     transaction.Commit();
                 }
             }
@@ -1248,6 +1248,11 @@ namespace FluxDB
             if (addToHistory && !string.IsNullOrEmpty(_currentViewFolder) && _currentViewFolder != folderPath)
             {
                 _backHistory.Push(_currentViewFolder);
+                if (_backHistory.Count > MaxHistorySize)
+                {
+                    var trimmed = _backHistory.ToArray();
+                    _backHistory = new Stack<string>(trimmed.Take(MaxHistorySize));
+                }
                 _forwardHistory.Clear();
             }
 
@@ -1261,6 +1266,11 @@ namespace FluxDB
 
         private void RefreshCurrentFolderView()
         {
+            _ = RefreshCurrentFolderViewAsync();
+        }
+
+        private async Task RefreshCurrentFolderViewAsync()
+        {
             if (_databaseService == null || string.IsNullOrEmpty(_currentViewFolder))
             {
                 dgFiles.ItemsSource = null;
@@ -1268,34 +1278,39 @@ namespace FluxDB
                 return;
             }
 
+            var currentFolder = _currentViewFolder;
             var items = new List<FileEntry>();
 
-            try
+            var directories = await Task.Run(() =>
             {
-                var directories = Directory.GetDirectories(_currentViewFolder)
-                    .Where(d => !Path.GetFileName(d).StartsWith("."))
-                    .OrderBy(d => Path.GetFileName(d));
-
-                foreach (var dir in directories)
+                try
                 {
-                    var dirInfo = new DirectoryInfo(dir);
-                    items.Add(new FileEntry
-                    {
-                        Id = -1,
-                        Path = dir,
-                        Name = dirInfo.Name,
-                        IsFolder = true,
-                        CreatedAt = dirInfo.CreationTime,
-                        ModifiedAt = dirInfo.LastWriteTime
-                    });
+                    return Directory.GetDirectories(currentFolder)
+                        .Where(d => !Path.GetFileName(d).StartsWith("."))
+                        .OrderBy(d => Path.GetFileName(d))
+                        .ToList();
                 }
-            }
-            catch (UnauthorizedAccessException) { }
-            catch (DirectoryNotFoundException) { }
+                catch (UnauthorizedAccessException) { return new List<string>(); }
+                catch (DirectoryNotFoundException) { return new List<string>(); }
+            });
 
-            var allFiles = _databaseService.GetFilesInFolder(_currentViewFolder);
+            foreach (var dir in directories)
+            {
+                var dirInfo = new DirectoryInfo(dir);
+                items.Add(new FileEntry
+                {
+                    Id = -1,
+                    Path = dir,
+                    Name = dirInfo.Name,
+                    IsFolder = true,
+                    CreatedAt = dirInfo.CreationTime,
+                    ModifiedAt = dirInfo.LastWriteTime
+                });
+            }
+
+            var allFiles = await Task.Run(() => _databaseService.GetFilesInFolder(currentFolder));
             var filesInFolder = allFiles
-                .Where(f => Path.GetDirectoryName(f.Path) == _currentViewFolder)
+                .Where(f => Path.GetDirectoryName(f.Path) == currentFolder)
                 .Where(MatchesFilter)
                 .OrderBy(f => f.Name);
 
@@ -1432,7 +1447,7 @@ namespace FluxDB
             ShowRefreshDialog();
         }
 
-        private void BtnExport_Click(object sender, RoutedEventArgs e)
+        private async void BtnExport_Click(object sender, RoutedEventArgs e)
         {
             if (_exportService == null)
             {
@@ -1451,11 +1466,17 @@ namespace FluxDB
             {
                 try
                 {
-                    if (dialog.FileName.EndsWith(".gz"))
-                        _exportService.ExportToGzip(dialog.FileName, _currentRootFolder);
-                    else
-                        _exportService.ExportToJson(dialog.FileName, _currentRootFolder);
+                    var fileName = dialog.FileName;
+                    var rootFolder = _currentRootFolder;
+                    await Task.Run(() =>
+                    {
+                        if (fileName.EndsWith(".gz"))
+                            _exportService.ExportToGzip(fileName, rootFolder);
+                        else
+                            _exportService.ExportToJson(fileName, rootFolder);
+                    });
 
+                    GC.Collect();
                     txtStatus.Text = $"Exported to {dialog.FileName}";
                     MessageBox.Show($"Export complete:\n{dialog.FileName}", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
@@ -1496,7 +1517,7 @@ namespace FluxDB
                 PerformSearch();
         }
 
-        private void PerformSearch()
+        private async void PerformSearch()
         {
             if (_databaseService == null)
             {
@@ -1508,12 +1529,13 @@ namespace FluxDB
             if (string.IsNullOrEmpty(query))
             {
                 _isSearchMode = false;
-                RefreshCurrentFolderView();
+                await RefreshCurrentFolderViewAsync();
                 return;
             }
 
             _isSearchMode = true;
-            List<FileEntry> results = _databaseService.SearchFiles(query, _currentViewFolder ?? _currentRootFolder);
+            var folder = _currentViewFolder ?? _currentRootFolder;
+            List<FileEntry> results = await Task.Run(() => _databaseService.SearchFiles(query, folder));
 
             dgFiles.ItemsSource = results.Where(MatchesFilter).ToList();
             txtFileCount.Text = $"{results.Count} found";
@@ -1644,6 +1666,7 @@ namespace FluxDB
                 _indexCancellation?.Dispose();
                 _indexCancellation = null;
 
+                GC.Collect();
                 NavigateToFolder(_currentViewFolder, addToHistory: false);
             }
         }
@@ -1747,6 +1770,7 @@ namespace FluxDB
             {
                 _isIndexing = false;
                 pnlProgress.Visibility = Visibility.Collapsed;
+                _indexCancellation?.Dispose();
                 _indexCancellation = null;
             }
         }
@@ -1783,6 +1807,7 @@ namespace FluxDB
         {
             _indexCancellation?.Cancel();
             _databaseService?.Dispose();
+            LoggingService.Shutdown();
             base.OnClosed(e);
         }
 
@@ -1819,7 +1844,7 @@ namespace FluxDB
         {
             try
             {
-                var iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
+                var iid = ShellItemIID;
                 var hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out var factory);
                 if (hr != 0 || factory == null) return null;
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FluxDB.Models;
@@ -41,25 +42,41 @@ namespace FluxDB.Services
                 return result;
             }
 
-            var existingPaths = new HashSet<string>();
-            var files = new List<string>();
-
             LoggingService.LogDebug($"ScanFolderAsync started: root={rootPath}");
-            StatusChanged?.Invoke(this, "Scanning folders...");
-            await Task.Run(() => CollectFiles(rootPath, files, cancellationToken), cancellationToken);
 
-            result.TotalFiles = files.Count;
-            LoggingService.LogDebug($"File collection complete: {files.Count} files found under {rootPath}");
-            StatusChanged?.Invoke(this, $"Found {files.Count} files. Indexing...");
+            // Phase 1: Count files (iterative, no recursion)
+            StatusChanged?.Invoke(this, "Counting files...");
+            await Task.Run(() =>
+            {
+                try
+                {
+                    result.FilesIndexed = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories).Count();
+                }
+                catch (UnauthorizedAccessException) { }
+                catch (DirectoryNotFoundException) { }
+            }, cancellationToken);
+            result.TotalFiles = result.FilesIndexed;
+            result.FilesIndexed = 0;
 
-            // Index files
+            LoggingService.LogDebug($"File count complete: {result.TotalFiles} files found under {rootPath}");
+            StatusChanged?.Invoke(this, $"Found {result.TotalFiles} files. Indexing...");
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                result.Cancelled = true;
+                result.EndTime = DateTime.Now;
+                return result;
+            }
+
+            // Phase 2: Index files (streaming enumeration, no intermediate list)
+            var existingPaths = new HashSet<string>();
             int processed = 0;
             const int BatchSize = 1000;
             var currentTransaction = _database.BeginTransaction();
-            
+
             try
             {
-                foreach (var filePath in files)
+                foreach (var filePath in EnumerateAllFiles(rootPath, cancellationToken))
                 {
                     if (cancellationToken.IsCancellationRequested)
                     {
@@ -69,47 +86,44 @@ namespace FluxDB.Services
 
                     try
                     {
-                        var fileInfo = new FileInfo(filePath);
+                        var fi = new FileInfo(filePath);
                         var fileEntry = new FileEntry
                         {
                             Path = filePath,
-                            Name = fileInfo.Name,
-                            Extension = fileInfo.Extension,
-                            Size = fileInfo.Length,
-                            CreatedAt = fileInfo.CreationTime,
-                            ModifiedAt = fileInfo.LastWriteTime,
+                            Name = fi.Name,
+                            Extension = fi.Extension,
+                            Size = fi.Length,
+                            CreatedAt = fi.CreationTime,
+                            ModifiedAt = fi.LastWriteTime,
                             Deleted = false,
                             LastIndexedAt = DateTime.Now
                         };
 
-                        LoggingService.LogDebug($"UpsertFile: {filePath} | size={fileInfo.Length} | ext={fileInfo.Extension} | modified={fileInfo.LastWriteTime:o}");
                         _database.UpsertFile(fileEntry, currentTransaction);
                         existingPaths.Add(filePath);
                         result.FilesIndexed++;
                     }
                     catch (Exception ex)
                     {
-                        LoggingService.LogDebug($"UpsertFile FAILED: {filePath} — {ex.GetType().Name}: {ex.Message}");
                         result.Errors.Add($"{filePath}: {ex.Message}");
                     }
 
                     processed++;
-                    
+
                     if (processed % BatchSize == 0)
                     {
-                        LoggingService.LogDebug($"Committing batch at {processed}/{files.Count} files");
-                        CommitBatchWithRetry(currentTransaction);
+                        await CommitBatchWithRetry(currentTransaction);
                         currentTransaction.Dispose();
                         currentTransaction = _database.BeginTransaction();
                     }
 
-                    if (processed % 100 == 0 || processed == files.Count)
+                    if (processed % 100 == 0 || processed == result.TotalFiles)
                     {
-                        var progress = (double)processed / files.Count * 100;
+                        var progress = (double)processed / result.TotalFiles * 100;
                         ProgressChanged?.Invoke(this, new IndexProgressEventArgs
                         {
                             Current = processed,
-                            Total = files.Count,
+                            Total = result.TotalFiles,
                             Percentage = progress,
                             CurrentFile = filePath
                         });
@@ -118,22 +132,25 @@ namespace FluxDB.Services
 
                 if (!result.Cancelled)
                 {
-                    LoggingService.LogDebug($"Final batch commit: {result.FilesIndexed} files indexed");
-                    CommitBatchWithRetry(currentTransaction);
+                    await CommitBatchWithRetry(currentTransaction);
                 }
                 else
                 {
-                    LoggingService.LogDebug("Scan cancelled — rolling back current transaction");
-                    try { currentTransaction.Rollback(); } catch (Exception ex) { LoggingService.LogDebug($"Rollback failed: {ex.Message}"); }
+                    try { currentTransaction.Rollback(); } catch { }
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                result.Cancelled = true;
+                try { currentTransaction.Rollback(); } catch { }
             }
             finally
             {
-                try { currentTransaction.Dispose(); } catch (Exception ex) { LoggingService.LogDebug($"Transaction dispose failed: {ex.Message}"); }
+                try { currentTransaction.Dispose(); } catch { }
             }
 
             // Mark deleted files
-            if (!cancellationToken.IsCancellationRequested)
+            if (!cancellationToken.IsCancellationRequested && !result.Cancelled)
             {
                 StatusChanged?.Invoke(this, "Checking for deleted files...");
                 _database.MarkDeletedFiles(existingPaths, rootPath);
@@ -142,15 +159,12 @@ namespace FluxDB.Services
             result.EndTime = DateTime.Now;
             result.Success = !result.Cancelled;
             LoggingService.LogDebug($"ScanFolderAsync done: success={result.Success} cancelled={result.Cancelled} indexed={result.FilesIndexed}/{result.TotalFiles} errors={result.Errors.Count} duration={result.Duration.TotalSeconds:F2}s");
-            if (result.Errors.Count > 0)
-                foreach (var err in result.Errors)
-                    LoggingService.LogDebug($"  IndexError: {err}");
             StatusChanged?.Invoke(this, result.Cancelled ? "Cancelled" : "Indexing complete!");
 
             return result;
         }
 
-        private void CommitBatchWithRetry(SQLiteTransaction transaction)
+        private async Task CommitBatchWithRetry(SQLiteTransaction transaction)
         {
             const int maxRetries = 3;
             int delayMs = 100;
@@ -159,50 +173,54 @@ namespace FluxDB.Services
                 try
                 {
                     transaction.Commit();
-                    LoggingService.LogDebug($"CommitBatchWithRetry: success on attempt {attempt + 1}");
                     return;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    LoggingService.LogDebug($"CommitBatchWithRetry: attempt {attempt + 1} failed — {ex.Message}, retryDelayMs={delayMs}");
                     if (attempt < maxRetries - 1)
                     {
-                        Thread.Sleep(delayMs);
+                        await Task.Delay(delayMs);
                         delayMs *= 2;
                     }
                     else
                     {
-                        LoggingService.LogDebug("CommitBatchWithRetry: all retries exhausted, rolling back");
-                        try { transaction.Rollback(); } catch (Exception rollbackEx) { LoggingService.LogDebug($"Retry rollback failed: {rollbackEx.Message}"); }
+                        try { transaction.Rollback(); } catch { }
                         throw;
                     }
                 }
             }
         }
 
-        private void CollectFiles(string path, List<string> files, CancellationToken cancellationToken)
+        private IEnumerable<string> EnumerateAllFiles(string path, CancellationToken cancellationToken)
         {
-            try
+            var stack = new Stack<string>();
+            stack.Push(path);
+
+            while (stack.Count > 0 && !cancellationToken.IsCancellationRequested)
             {
-                foreach (var file in Directory.EnumerateFiles(path))
+                var current = stack.Pop();
+                string[] files;
+                string[] dirs;
+
+                try
                 {
-                    if (cancellationToken.IsCancellationRequested) return;
-                    files.Add(file);
+                    files = Directory.GetFiles(current);
+                    dirs = Directory.GetDirectories(current);
+                }
+                catch (UnauthorizedAccessException) { continue; }
+                catch (DirectoryNotFoundException) { continue; }
+
+                foreach (var file in files)
+                {
+                    if (cancellationToken.IsCancellationRequested) yield break;
+                    yield return file;
                 }
 
-                foreach (var dir in Directory.EnumerateDirectories(path))
+                for (int i = dirs.Length - 1; i >= 0; i--)
                 {
-                    if (cancellationToken.IsCancellationRequested) return;
-                    
-                    try
-                    {
-                        CollectFiles(dir, files, cancellationToken);
-                    }
-                    catch (UnauthorizedAccessException) { LoggingService.LogDebug($"Skipping inaccessible directory: {dir}"); }
-                    catch (DirectoryNotFoundException) { LoggingService.LogDebug($"Skipping missing directory: {dir}"); }
+                    stack.Push(dirs[i]);
                 }
             }
-            catch (UnauthorizedAccessException) { LoggingService.LogDebug($"Skipping inaccessible root: {path}"); }
         }
     }
 

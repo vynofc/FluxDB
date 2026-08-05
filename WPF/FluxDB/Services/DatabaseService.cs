@@ -19,6 +19,10 @@ namespace FluxDB.Services
             LoggingService.LogDebug($"DatabaseService: opening DB at {databasePath}");
             _connection = new SQLiteConnection(string.Format("Data Source={0};Version=3;", databasePath));
             _connection.Open();
+            using (var pragmaCmd = new SQLiteCommand("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-8000;", _connection))
+            {
+                pragmaCmd.ExecuteNonQuery();
+            }
             InitDb();
             LoggingService.LogDebug("DatabaseService: DB opened and schema initialized");
         }
@@ -30,6 +34,9 @@ namespace FluxDB.Services
                 CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL);
                 CREATE TABLE IF NOT EXISTS file_tags (file_id INTEGER, tag_id INTEGER, PRIMARY KEY (file_id, tag_id));
                 CREATE TABLE IF NOT EXISTS notes (file_id INTEGER PRIMARY KEY, note TEXT);
+                CREATE INDEX IF NOT EXISTS idx_files_deleted ON files(deleted);
+                CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
+                CREATE INDEX IF NOT EXISTS idx_files_extension ON files(extension);
             ";
             using (var transaction = _connection.BeginTransaction())
             {
@@ -292,27 +299,16 @@ namespace FluxDB.Services
 
                 if (toDelete.Count > 0)
                 {
-                    using (var cmd = new SQLiteCommand("UPDATE files SET deleted=1 WHERE id=@id", _connection, transaction))
+                    var ids = string.Join(",", toDelete);
+                    using (var cmd = new SQLiteCommand($"UPDATE files SET deleted=1 WHERE id IN ({ids})", _connection, transaction))
                     {
-                        var param = cmd.Parameters.Add("@id", System.Data.DbType.Int32);
-                        foreach (var id in toDelete)
-                        {
-                            param.Value = id;
-                            cmd.ExecuteNonQuery();
-                        }
+                        cmd.ExecuteNonQuery();
                     }
                 }
                 transaction.Commit();
             }
 
             LoggingService.LogDebug($"MarkDeletedFiles: marked {toDelete.Count} files as deleted");
-            if (toDelete.Count > 0)
-            {
-                using (var cmd = new SQLiteCommand("VACUUM", _connection))
-                {
-                    cmd.ExecuteNonQuery();
-                }
-            }
         }
 
         public int GetFileCount()
@@ -374,7 +370,7 @@ namespace FluxDB.Services
             if (string.IsNullOrWhiteSpace(query))
             {
                 LoggingService.LogDebug($"SearchFiles: empty query, returning all files under {folderPath}");
-                return GetAllFiles().Where(f => f.Path.StartsWith(folderPath, StringComparison.OrdinalIgnoreCase)).ToList();
+                return GetFilesInFolder(folderPath);
             }
 
             LoggingService.LogDebug($"SearchFiles: query=\"{query}\" folderPath={folderPath}");
@@ -430,6 +426,7 @@ namespace FluxDB.Services
         {
             _connection?.Close();
             _connection?.Dispose();
+            _connection = null;
         }
     }
 }
