@@ -85,6 +85,11 @@ namespace FluxDB
         private void InitializeDatabaseForFolder(string folderPath)
         {
             _databaseService?.Dispose();
+            if (_indexerService != null)
+            {
+                _indexerService.ProgressChanged -= IndexerService_ProgressChanged;
+                _indexerService.StatusChanged -= IndexerService_StatusChanged;
+            }
             var dbPath = Path.Combine(folderPath, DatabaseFileName);
             _databaseService = new DatabaseService(dbPath);
             _indexerService = new IndexerService(_databaseService);
@@ -459,7 +464,7 @@ namespace FluxDB
 
             // Show Windows properties dialog
             var info = new ProcessStartInfo("explorer.exe", $"/select,\"{selected.Path}\"");
-            Process.Start(info);
+            using (var proc = Process.Start(info)) { }
         }
 
         #endregion
@@ -590,8 +595,9 @@ namespace FluxDB
                     imgPreview.Source = bitmap;
                     imgPreview.Visibility = Visibility.Visible;
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    LoggingService.Log($"Cannot load image preview: {ex.Message}");
                     txtNoPreview.Text = "Cannot load image";
                     txtNoPreview.Visibility = Visibility.Visible;
                 }
@@ -614,8 +620,9 @@ namespace FluxDB
                         txtNoPreview.Visibility = Visibility.Visible;
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    LoggingService.Log($"Cannot preview PDF: {ex.Message}");
                     txtNoPreview.Text = "Cannot preview PDF";
                     txtNoPreview.Visibility = Visibility.Visible;
                 }
@@ -653,8 +660,9 @@ namespace FluxDB
                     txtPreview.Text = content;
                     txtPreviewScroll.Visibility = Visibility.Visible;
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    LoggingService.Log($"Cannot read file preview: {ex.Message}");
                     txtNoPreview.Text = "Cannot read file";
                     txtNoPreview.Visibility = Visibility.Visible;
                 }
@@ -1177,11 +1185,11 @@ namespace FluxDB
             {
                 try
                 {
-                    Process.Start(new ProcessStartInfo
+                    using (var proc = Process.Start(new ProcessStartInfo
                     {
                         FileName = selectedItem.Path,
                         UseShellExecute = true
-                    });
+                    })) { }
                 }
                 catch (Exception ex)
                 {
@@ -1581,7 +1589,7 @@ namespace FluxDB
             {
                 var directory = Path.GetDirectoryName(_selectedFile.Path);
                 if (Directory.Exists(directory))
-                    Process.Start("explorer.exe", $"/select,\"{_selectedFile.Path}\"");
+                    using (var proc = Process.Start("explorer.exe", $"/select,\"{_selectedFile.Path}\"")) { }
                 else
                     MessageBox.Show("Location not found.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }

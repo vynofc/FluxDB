@@ -124,7 +124,7 @@ namespace FluxDB.Services
             lock (_lock)
             {
                 _buffer.Clear();
-                try { File.WriteAllText(_logFilePath, string.Empty); } catch { }
+                try { File.WriteAllText(_logFilePath, string.Empty); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"LoggingService.Clear: {ex.Message}"); }
             }
         }
 

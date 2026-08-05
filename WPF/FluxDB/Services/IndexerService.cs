@@ -124,12 +124,12 @@ namespace FluxDB.Services
                 else
                 {
                     LoggingService.LogDebug("Scan cancelled — rolling back current transaction");
-                    try { currentTransaction.Rollback(); } catch { }
+                    try { currentTransaction.Rollback(); } catch (Exception ex) { LoggingService.LogDebug($"Rollback failed: {ex.Message}"); }
                 }
             }
             finally
             {
-                try { currentTransaction.Dispose(); } catch { }
+                try { currentTransaction.Dispose(); } catch (Exception ex) { LoggingService.LogDebug($"Transaction dispose failed: {ex.Message}"); }
             }
 
             // Mark deleted files
@@ -173,7 +173,7 @@ namespace FluxDB.Services
                     else
                     {
                         LoggingService.LogDebug("CommitBatchWithRetry: all retries exhausted, rolling back");
-                        try { transaction.Rollback(); } catch { }
+                        try { transaction.Rollback(); } catch (Exception ex) { LoggingService.LogDebug($"Retry rollback failed: {ex.Message}"); }
                         throw;
                     }
                 }
@@ -198,11 +198,11 @@ namespace FluxDB.Services
                     {
                         CollectFiles(dir, files, cancellationToken);
                     }
-                    catch (UnauthorizedAccessException) { }
-                    catch (DirectoryNotFoundException) { }
+                    catch (UnauthorizedAccessException) { LoggingService.LogDebug($"Skipping inaccessible directory: {dir}"); }
+                    catch (DirectoryNotFoundException) { LoggingService.LogDebug($"Skipping missing directory: {dir}"); }
                 }
             }
-            catch (UnauthorizedAccessException) { }
+            catch (UnauthorizedAccessException) { LoggingService.LogDebug($"Skipping inaccessible root: {path}"); }
         }
     }
 

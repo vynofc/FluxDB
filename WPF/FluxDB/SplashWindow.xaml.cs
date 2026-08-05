@@ -175,7 +175,7 @@ namespace FluxDB
                     WorkingDirectory = exeDir,
                     UseShellExecute = true
                 };
-                Process.Start(startInfo);
+                using (var proc = Process.Start(startInfo)) { }
                 return false;
             }
             catch (Exception ex)

@@ -56,12 +56,12 @@ $shortcut.Save()
 }
 
 func findExe(dir string) string {
-	matches, _ := filepath.Glob(filepath.Join(dir, "*.exe"))
-	if len(matches) > 0 {
+	matches, err := filepath.Glob(filepath.Join(dir, "*.exe"))
+	if err == nil && len(matches) > 0 {
 		return matches[0]
 	}
-	matches, _ = filepath.Glob(filepath.Join(dir, "*", "*.exe"))
-	if len(matches) > 0 {
+	matches, err = filepath.Glob(filepath.Join(dir, "*", "*.exe"))
+	if err == nil && len(matches) > 0 {
 		return matches[0]
 	}
 	return ""

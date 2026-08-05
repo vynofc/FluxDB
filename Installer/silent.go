@@ -7,7 +7,13 @@ import (
 
 func init() {
 	if os.Getenv("LOCALAPPDATA") == "" {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = os.Getenv("USERPROFILE")
+		}
+		if home == "" {
+			return
+		}
 		os.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 	}
 }

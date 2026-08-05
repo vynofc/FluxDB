@@ -42,9 +42,13 @@ func extractCmd(zipPath, customPath string) tea.Cmd {
 		versionFile := filepath.Join(installDir, "version.txt")
 		tag := strings.TrimPrefix(filepath.Base(zipPath), "FluxDB-")
 		tag = strings.TrimSuffix(tag, ".zip")
-		os.WriteFile(versionFile, []byte(tag), 0644)
+		if err := os.WriteFile(versionFile, []byte(tag), 0644); err != nil {
+			return errMsg{err: fmt.Errorf("version datei schreiben fehlgeschlagen: %w", err)}
+		}
 
-		os.Remove(zipPath)
+		if err := os.Remove(zipPath); err != nil {
+			return errMsg{err: fmt.Errorf("temporaere ZIP entfernen fehlgeschlagen: %w", err)}
+		}
 
 		return extractCompleteMsg{installDir: installDir}
 	}
@@ -59,7 +63,9 @@ func extractFile(f *zip.File, destDir string) error {
 
 	targetPath := filepath.Join(destDir, f.Name)
 
-	if !strings.HasPrefix(targetPath, filepath.Clean(destDir)+string(os.PathSeparator)) {
+	cleanDest := filepath.Clean(destDir) + string(os.PathSeparator)
+	cleanTarget := filepath.Clean(targetPath) + string(os.PathSeparator)
+	if !strings.HasPrefix(cleanTarget, cleanDest) {
 		return fmt.Errorf("illegaler dateipfad: %s", targetPath)
 	}
 
@@ -74,8 +80,9 @@ func extractFile(f *zip.File, destDir string) error {
 	// Rename locked files (e.g. running .exe) before overwriting
 	if _, statErr := os.Stat(targetPath); statErr == nil {
 		oldPath := targetPath + ".old"
-		os.Remove(oldPath)
-		os.Rename(targetPath, oldPath)
+		if err := os.Rename(targetPath, oldPath); err != nil {
+			_ = os.Remove(oldPath)
+		}
 	}
 
 	out, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())

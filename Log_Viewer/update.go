@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"log"
 	"os"
 	"strings"
 
@@ -84,6 +85,9 @@ func (m *model) tail() {
 		raw := scanner.Text()
 		m.lines = append(m.lines, raw)
 		m.styledLines = append(m.styledLines, styleLogLine(raw))
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("Fehler beim Lesen der Logdatei: %v", err)
 	}
 	m.lastSize = info.Size()
 	m.viewport.SetContent(strings.Join(m.styledLines, "\n"))
