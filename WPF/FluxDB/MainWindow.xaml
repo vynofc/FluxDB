@@ -257,12 +257,6 @@
                             <TextBlock Text="Refresh" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="btnExport" Style="{StaticResource SecondaryButtonStyle}" Click="BtnExport_Click" Margin="0,0,10,0" IsEnabled="False">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE78C;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" VerticalAlignment="Center"/>
-                            <TextBlock Text="Export" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
                     <Button x:Name="btnSettings" Style="{StaticResource SecondaryButtonStyle}" Click="BtnSettings_Click">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface" VerticalAlignment="Center"/>

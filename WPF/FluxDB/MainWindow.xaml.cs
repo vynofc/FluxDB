@@ -132,7 +132,6 @@ namespace FluxDB
                 _currentViewFolder = _currentRootFolder;
                 txtCurrentFolder.Text = _currentRootFolder;
                 btnRefresh.IsEnabled = true;
-                btnExport.IsEnabled = true;
 
                 InitializeDatabaseForFolder(_currentRootFolder);
                 
@@ -1208,7 +1207,6 @@ namespace FluxDB
             _forwardHistory.Clear();
             
             btnRefresh.IsEnabled = true;
-            btnExport.IsEnabled = true;
 
             InitializeDatabaseForFolder(_currentRootFolder);
             
@@ -1443,46 +1441,6 @@ namespace FluxDB
         {
             // Open the refresh options dialog instead of immediate full refresh
             ShowRefreshDialog();
-        }
-
-        private async void BtnExport_Click(object sender, RoutedEventArgs e)
-        {
-            if (_exportService == null)
-            {
-                MessageBox.Show("Please select a folder first.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            
-            var dialog = new SaveFileDialog
-            {
-                Filter = "JSON Files (*.json)|*.json|Compressed JSON (*.json.gz)|*.json.gz",
-                DefaultExt = ".json",
-                FileName = "index.json"
-            };
-
-            if (dialog.ShowDialog() == true)
-            {
-                try
-                {
-                    var fileName = dialog.FileName;
-                    var rootFolder = _currentRootFolder;
-                    await Task.Run(() =>
-                    {
-                        if (fileName.EndsWith(".gz"))
-                            _exportService.ExportToGzip(fileName, rootFolder);
-                        else
-                            _exportService.ExportToJson(fileName, rootFolder);
-                    });
-
-                    GC.Collect();
-                    txtStatus.Text = $"Exported to {dialog.FileName}";
-                    MessageBox.Show($"Export complete:\n{dialog.FileName}", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Export failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
         }
 
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
