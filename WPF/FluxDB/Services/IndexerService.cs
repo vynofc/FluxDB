@@ -173,7 +173,7 @@ namespace FluxDB.Services
                     else
                     {
                         LoggingService.LogDebug("CommitBatchWithRetry: all retries exhausted, rolling back");
-                        try { transaction.Rollback(); } catch (Exception ex) { LoggingService.LogDebug($"Retry rollback failed: {ex.Message}"); }
+                        try { transaction.Rollback(); } catch (Exception rollbackEx) { LoggingService.LogDebug($"Retry rollback failed: {rollbackEx.Message}"); }
                         throw;
                     }
                 }
