@@ -6,6 +6,11 @@ namespace FluxDB.ViewModels
         private Stack<string> _forwardHistory = new();
         private const int MaxHistorySize = 50;
 
+        public NavigationViewModel()
+        {
+            LoggingService.Log("NavigationViewModel: constructor");
+        }
+
         [ObservableProperty]
         private bool _canGoBack;
 
@@ -45,7 +50,8 @@ namespace FluxDB.ViewModels
             UpdateBreadcrumbs();
         }
 
-        public void GoBack()
+        [RelayCommand]
+        private void GoBack()
         {
             if (_backHistory.Count > 0)
             {
@@ -53,10 +59,12 @@ namespace FluxDB.ViewModels
                 CurrentViewFolder = _backHistory.Pop();
                 UpdateNavigationState();
                 UpdateBreadcrumbs();
+                NotifyNavigated();
             }
         }
 
-        public void GoForward()
+        [RelayCommand]
+        private void GoForward()
         {
             if (_forwardHistory.Count > 0)
             {
@@ -64,10 +72,12 @@ namespace FluxDB.ViewModels
                 CurrentViewFolder = _forwardHistory.Pop();
                 UpdateNavigationState();
                 UpdateBreadcrumbs();
+                NotifyNavigated();
             }
         }
 
-        public void GoUp()
+        [RelayCommand]
+        private void GoUp()
         {
             if (string.IsNullOrEmpty(CurrentViewFolder) || CurrentViewFolder == CurrentRootFolder)
                 return;
@@ -76,7 +86,15 @@ namespace FluxDB.ViewModels
             if (parent != null)
             {
                 NavigateTo(parent);
+                NotifyNavigated();
             }
+        }
+
+        public event Action Navigated;
+
+        private void NotifyNavigated()
+        {
+            Navigated?.Invoke();
         }
 
         public void SetRootFolder(string rootFolder)

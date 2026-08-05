@@ -110,10 +110,17 @@ namespace FluxDB.ViewModels
             _settingsService = settingsService;
             Navigation = navigationViewModel;
 
+            Navigation.Navigated += OnNavigationChanged;
+
             WeakReferenceMessenger.Default.Register<FolderOpenedMessage>(this, (r, m) =>
             {
                 _ = OpenFolderAsync(m.FolderPath);
             });
+        }
+
+        private void OnNavigationChanged()
+        {
+            _ = RefreshCurrentFolderViewAsync();
         }
 
         public void InitializeServices(DatabaseService db, IndexerService indexer, ExportService export, ImportService import)
@@ -346,6 +353,104 @@ namespace FluxDB.ViewModels
         {
             SearchText = "";
             _ = RefreshCurrentFolderViewAsync();
+        }
+
+        [RelayCommand]
+        private void FilterChanged(string filter)
+        {
+            CurrentFilter = filter ?? "All Files";
+            _ = RefreshCurrentFolderViewAsync();
+        }
+
+        [RelayCommand]
+        private void NavigateToBreadcrumb(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            Navigation.NavigateTo(path);
+            _ = RefreshCurrentFolderViewAsync();
+        }
+
+        [RelayCommand]
+        private void Copy()
+        {
+            if (SelectedFile == null) return;
+            _clipboardFiles = new List<string> { SelectedFile.Path };
+            _clipboardIsCut = false;
+            StatusMessage = "Copied to clipboard";
+        }
+
+        [RelayCommand]
+        private void Cut()
+        {
+            if (SelectedFile == null) return;
+            _clipboardFiles = new List<string> { SelectedFile.Path };
+            _clipboardIsCut = true;
+            StatusMessage = "Cut to clipboard";
+        }
+
+        [RelayCommand]
+        private async Task Paste()
+        {
+            if (_clipboardFiles.Count == 0 || string.IsNullOrEmpty(Navigation.CurrentViewFolder)) return;
+
+            try
+            {
+                foreach (var srcPath in _clipboardFiles)
+                {
+                    var destPath = Path.Combine(Navigation.CurrentViewFolder, Path.GetFileName(srcPath));
+                    if (_clipboardIsCut)
+                    {
+                        if (Directory.Exists(srcPath))
+                        {
+                            Directory.Move(srcPath, destPath);
+                            _databaseService?.UpdateFolderPath(srcPath, destPath);
+                        }
+                        else if (File.Exists(srcPath))
+                        {
+                            destPath = GetUniqueFilePath(destPath);
+                            File.Move(srcPath, destPath);
+                            var allFiles = _databaseService?.GetAllFiles();
+                            var existing = allFiles?.FirstOrDefault(f => f.Path == srcPath);
+                            if (existing != null)
+                                _databaseService?.UpdateFilePathAndName(existing.Id, destPath, Path.GetFileName(destPath));
+                        }
+                    }
+                    else
+                    {
+                        destPath = GetUniqueFilePath(destPath);
+                        if (Directory.Exists(srcPath))
+                        {
+                            CopyDirectoryRecursive(srcPath, destPath);
+                        }
+                        else if (File.Exists(srcPath))
+                        {
+                            File.Copy(srcPath, destPath);
+                        }
+                    }
+                }
+
+                if (_clipboardIsCut)
+                {
+                    _clipboardFiles.Clear();
+                    _clipboardIsCut = false;
+                }
+
+                await RefreshCurrentFolderViewAsync();
+                StatusMessage = _clipboardIsCut ? "Moved" : "Copied";
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(ex.Message, "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        private void CopyDirectoryRecursive(string sourceDir, string destDir)
+        {
+            Directory.CreateDirectory(destDir);
+            foreach (var file in Directory.GetFiles(sourceDir))
+                File.Copy(file, Path.Combine(destDir, Path.GetFileName(file)));
+            foreach (var dir in Directory.GetDirectories(sourceDir))
+                CopyDirectoryRecursive(dir, Path.Combine(destDir, Path.GetFileName(dir)));
         }
 
         [RelayCommand]
