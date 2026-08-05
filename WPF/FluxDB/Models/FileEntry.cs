@@ -7,44 +7,24 @@ namespace FluxDB.Models
 {
     public class FileEntry : INotifyPropertyChanged
     {
-        private static readonly Dictionary<string, string> IconMap = new Dictionary<string, string>
+        private static readonly Dictionary<string, (string Icon, string Color)> IconLookup = new Dictionary<string, (string, string)>
         {
-            [".jpg"] = "\uEB9F", [".jpeg"] = "\uEB9F", [".png"] = "\uEB9F", [".gif"] = "\uEB9F",
-            [".bmp"] = "\uEB9F", [".webp"] = "\uEB9F", [".ico"] = "\uEB9F",
-            [".mp3"] = "\uE189", [".wav"] = "\uE189", [".flac"] = "\uE189", [".aac"] = "\uE189",
-            [".ogg"] = "\uE189", [".wma"] = "\uE189", [".m4a"] = "\uE189",
-            [".mp4"] = "\uE116", [".avi"] = "\uE116", [".mkv"] = "\uE116", [".mov"] = "\uE116",
-            [".wmv"] = "\uE116", [".flv"] = "\uE116", [".webm"] = "\uE116",
-            [".pdf"] = "\uE162",
-            [".doc"] = "\uE132", [".docx"] = "\uE132", [".rtf"] = "\uE132", [".odt"] = "\uE132",
-            [".txt"] = "\uE132", [".md"] = "\uE132",
-            [".xls"] = "\uE1D2", [".xlsx"] = "\uE1D2", [".csv"] = "\uE1D2", [".ods"] = "\uE1D2",
-            [".zip"] = "\uF012", [".rar"] = "\uF012", [".7z"] = "\uF012", [".tar"] = "\uF012", [".gz"] = "\uF012",
-            [".exe"] = "\uE71D", [".msi"] = "\uE71D",
-            [".cs"] = "\uE943", [".js"] = "\uE943", [".ts"] = "\uE943", [".py"] = "\uE943",
-            [".java"] = "\uE943", [".cpp"] = "\uE943", [".c"] = "\uE943", [".h"] = "\uE943",
-            [".html"] = "\uE943", [".css"] = "\uE943", [".xaml"] = "\uE943", [".xml"] = "\uE943",
-            [".json"] = "\uE943", [".sql"] = "\uE943", [".php"] = "\uE943",
-        };
-
-        private static readonly Dictionary<string, string> IconColorMap = new Dictionary<string, string>
-        {
-            [".jpg"] = "#9B59B6", [".jpeg"] = "#9B59B6", [".png"] = "#9B59B6", [".gif"] = "#9B59B6",
-            [".bmp"] = "#9B59B6", [".webp"] = "#9B59B6", [".ico"] = "#9B59B6",
-            [".mp3"] = "#2ECC71", [".wav"] = "#2ECC71", [".flac"] = "#2ECC71", [".aac"] = "#2ECC71",
-            [".ogg"] = "#2ECC71", [".wma"] = "#2ECC71", [".m4a"] = "#2ECC71",
-            [".mp4"] = "#E74C3C", [".avi"] = "#E74C3C", [".mkv"] = "#E74C3C", [".mov"] = "#E74C3C",
-            [".wmv"] = "#E74C3C", [".flv"] = "#E74C3C", [".webm"] = "#E74C3C",
-            [".pdf"] = "#E74C3C",
-            [".doc"] = "#3498DB", [".docx"] = "#3498DB", [".rtf"] = "#3498DB", [".odt"] = "#3498DB",
-            [".txt"] = "#3498DB", [".md"] = "#3498DB",
-            [".xls"] = "#27AE60", [".xlsx"] = "#27AE60", [".csv"] = "#27AE60", [".ods"] = "#27AE60",
-            [".zip"] = "#E67E22", [".rar"] = "#E67E22", [".7z"] = "#E67E22", [".tar"] = "#E67E22", [".gz"] = "#E67E22",
-            [".exe"] = "#95A5A6", [".msi"] = "#95A5A6",
-            [".cs"] = "#00CED1", [".js"] = "#00CED1", [".ts"] = "#00CED1", [".py"] = "#00CED1",
-            [".java"] = "#00CED1", [".cpp"] = "#00CED1", [".c"] = "#00CED1", [".h"] = "#00CED1",
-            [".html"] = "#00CED1", [".css"] = "#00CED1", [".xaml"] = "#00CED1", [".xml"] = "#00CED1",
-            [".json"] = "#00CED1", [".sql"] = "#00CED1", [".php"] = "#00CED1",
+            [".jpg"] = ("\uEB9F", "#9B59B6"), [".jpeg"] = ("\uEB9F", "#9B59B6"), [".png"] = ("\uEB9F", "#9B59B6"), [".gif"] = ("\uEB9F", "#9B59B6"),
+            [".bmp"] = ("\uEB9F", "#9B59B6"), [".webp"] = ("\uEB9F", "#9B59B6"), [".ico"] = ("\uEB9F", "#9B59B6"),
+            [".mp3"] = ("\uE189", "#2ECC71"), [".wav"] = ("\uE189", "#2ECC71"), [".flac"] = ("\uE189", "#2ECC71"), [".aac"] = ("\uE189", "#2ECC71"),
+            [".ogg"] = ("\uE189", "#2ECC71"), [".wma"] = ("\uE189", "#2ECC71"), [".m4a"] = ("\uE189", "#2ECC71"),
+            [".mp4"] = ("\uE116", "#E74C3C"), [".avi"] = ("\uE116", "#E74C3C"), [".mkv"] = ("\uE116", "#E74C3C"), [".mov"] = ("\uE116", "#E74C3C"),
+            [".wmv"] = ("\uE116", "#E74C3C"), [".flv"] = ("\uE116", "#E74C3C"), [".webm"] = ("\uE116", "#E74C3C"),
+            [".pdf"] = ("\uE162", "#E74C3C"),
+            [".doc"] = ("\uE132", "#3498DB"), [".docx"] = ("\uE132", "#3498DB"), [".rtf"] = ("\uE132", "#3498DB"), [".odt"] = ("\uE132", "#3498DB"),
+            [".txt"] = ("\uE132", "#3498DB"), [".md"] = ("\uE132", "#3498DB"),
+            [".xls"] = ("\uE1D2", "#27AE60"), [".xlsx"] = ("\uE1D2", "#27AE60"), [".csv"] = ("\uE1D2", "#27AE60"), [".ods"] = ("\uE1D2", "#27AE60"),
+            [".zip"] = ("\uF012", "#E67E22"), [".rar"] = ("\uF012", "#E67E22"), [".7z"] = ("\uF012", "#E67E22"), [".tar"] = ("\uF012", "#E67E22"), [".gz"] = ("\uF012", "#E67E22"),
+            [".exe"] = ("\uE71D", "#95A5A6"), [".msi"] = ("\uE71D", "#95A5A6"),
+            [".cs"] = ("\uE943", "#00CED1"), [".js"] = ("\uE943", "#00CED1"), [".ts"] = ("\uE943", "#00CED1"), [".py"] = ("\uE943", "#00CED1"),
+            [".java"] = ("\uE943", "#00CED1"), [".cpp"] = ("\uE943", "#00CED1"), [".c"] = ("\uE943", "#00CED1"), [".h"] = ("\uE943", "#00CED1"),
+            [".html"] = ("\uE943", "#00CED1"), [".css"] = ("\uE943", "#00CED1"), [".xaml"] = ("\uE943", "#00CED1"), [".xml"] = ("\uE943", "#00CED1"),
+            [".json"] = ("\uE943", "#00CED1"), [".sql"] = ("\uE943", "#00CED1"), [".php"] = ("\uE943", "#00CED1"),
         };
         private int _id;
         private string _path;
@@ -159,7 +139,7 @@ namespace FluxDB.Models
             get
             {
                 if (_cacheValid && _cachedIcon != null) return _cachedIcon;
-                return _cachedIcon = ComputeIconValue(IconMap, "\uE8B7", "\uE160");
+                return _cachedIcon = _isFolder ? "\uE8B7" : GetExtLookup().Icon;
             }
         }
 
@@ -171,15 +151,14 @@ namespace FluxDB.Models
             get
             {
                 if (_cacheValid && _cachedIconColor != null) return _cachedIconColor;
-                return _cachedIconColor = ComputeIconValue(IconColorMap, "#DCB67A", "#BDC3C7");
+                return _cachedIconColor = _isFolder ? "#DCB67A" : GetExtLookup().Color;
             }
         }
 
-        private string ComputeIconValue(Dictionary<string, string> map, string folderDefault, string fileDefault)
+        private (string Icon, string Color) GetExtLookup()
         {
-            if (_isFolder) return folderDefault;
             var ext = (_extension ?? "").ToLower();
-            return map.TryGetValue(ext, out var value) ? value : fileDefault;
+            return IconLookup.TryGetValue(ext, out var value) ? value : ("\uE160", "#BDC3C7");
         }
 
         public string TypeDisplay
