@@ -1,0 +1,32 @@
+name: Build WPF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "WPF/**"
+      - ".github/workflows/build-wpf.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "WPF/**"
+      - ".github/workflows/build-wpf.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore packages
+        run: dotnet restore WPF/FluxDB/FluxDB.csproj
+
+      - name: Build
+        run: |
+          if (-not (Test-Path bin)) { New-Item -ItemType Directory -Path bin -Force | Out-Null }
+          msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutDir="${{ github.workspace }}\bin\"

@@ -1,0 +1,32 @@
+name: Build Log Viewer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Log_Viewer/**"
+      - ".github/workflows/build-log-viewer.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Log_Viewer/**"
+      - ".github/workflows/build-log-viewer.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build Log Viewer
+        run: |
+          if (-not (Test-Path bin/components)) { New-Item -ItemType Directory -Path bin/components -Force | Out-Null }
+          cd "Log_Viewer"
+          go build -ldflags="-s -w" -o ../bin/components/Log_Viewer.exe .
