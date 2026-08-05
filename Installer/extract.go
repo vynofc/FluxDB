@@ -52,6 +52,9 @@ func extractCmd(zipPath, customPath string) tea.Cmd {
 			return errMsg{err: fmt.Errorf("version datei schreiben fehlgeschlagen: %w", err)}
 		}
 
+		// Close the ZIP reader before removing the file (Windows file locking)
+		reader.Close()
+
 		if err := os.Remove(zipPath); err != nil {
 			return errMsg{err: fmt.Errorf("temporaere ZIP entfernen fehlgeschlagen: %w", err)}
 		}
