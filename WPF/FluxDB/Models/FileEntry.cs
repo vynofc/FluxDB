@@ -112,16 +112,24 @@ namespace FluxDB.Models
         partial void OnExtensionChanged(string value)
         {
             _cacheValid = false;
+            OnPropertyChanged(nameof(Icon));
+            OnPropertyChanged(nameof(IconColor));
+            OnPropertyChanged(nameof(TypeDisplay));
         }
 
         partial void OnSizeChanged(long value)
         {
             _cacheValid = false;
+            OnPropertyChanged(nameof(SizeDisplay));
         }
 
         partial void OnIsFolderChanged(bool value)
         {
             _cacheValid = false;
+            OnPropertyChanged(nameof(Icon));
+            OnPropertyChanged(nameof(IconColor));
+            OnPropertyChanged(nameof(SizeDisplay));
+            OnPropertyChanged(nameof(TypeDisplay));
         }
 
         private (SymbolRegular Symbol, string Color) GetExtLookup()

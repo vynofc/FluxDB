@@ -32,32 +32,236 @@
             <ui:TitleBar.CenterContent>
                 <ui:AutoSuggestBox x:Name="txtSearch" Width="300"
                                    PlaceholderText="Search files... (Ctrl+F)"
-                                   Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                   Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
             </ui:TitleBar.CenterContent>
+            <ui:TitleBar.TrailingContent>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <ComboBox x:Name="cmbFilter" Width="120"
+                              SelectionChanged="CmbFilter_SelectionChanged">
+                        <ComboBoxItem Content="All Files" IsSelected="True"/>
+                        <ComboBoxItem Content="Images"/>
+                        <ComboBoxItem Content="Audio"/>
+                        <ComboBoxItem Content="Video"/>
+                        <ComboBoxItem Content="Documents"/>
+                        <ComboBoxItem Content="Archives"/>
+                        <ComboBoxItem Content="Code"/>
+                    </ComboBox>
+                </StackPanel>
+            </ui:TitleBar.TrailingContent>
         </ui:TitleBar>
 
         <!-- Main Content -->
         <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-            <!-- Navigation Sidebar -->
-            <ui:NavigationView
-                x:Name="navView"
-                Grid.Column="0"
-                IsPaneOpen="True"
-                PaneDisplayMode="LeftCompact"
-                IsBackButtonVisible="Collapsed"
-                MenuItemsSource="{Binding NavigationItems}"
-                FooterMenuItemsSource="{Binding FooterNavigationItems}">
-            </ui:NavigationView>
+            <!-- Toolbar Row -->
+            <Border Grid.Row="0" Padding="12,6" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button x:Name="btnBack" Margin="0,0,4,0" ToolTip="Back (Alt+Left)"
+                                   Command="{Binding Navigation.GoBackCommand}"
+                                   IsEnabled="{Binding Navigation.CanGoBack}"/>
+                        <ui:Button x:Name="btnForward" Margin="0,0,4,0" ToolTip="Forward (Alt+Right)"
+                                   Command="{Binding Navigation.GoForwardCommand}"
+                                   IsEnabled="{Binding Navigation.CanGoForward}"/>
+                        <ui:Button x:Name="btnUp" Margin="0,0,8,0" ToolTip="Up (Alt+Up)"
+                                   Command="{Binding Navigation.GoUpCommand}"
+                                   IsEnabled="{Binding Navigation.CanGoUp}"/>
+                        <ui:Button x:Name="btnOpenFolder" Content="Open Folder" Margin="0,0,4,0"
+                                   Command="{Binding SelectFolderCommand}"/>
+                        <ui:Button x:Name="btnRefresh" Content="Refresh" Margin="0,0,4,0"
+                                   Command="{Binding RefreshCommand}"/>
+                        <ui:Button x:Name="btnNewFolder" Content="New Folder" Margin="0,0,4,0"
+                                   Command="{Binding NewFolderCommand}"/>
+                        <ui:Button x:Name="btnSettings" Content="Settings"
+                                   Click="BtnSettings_Click"/>
+                    </StackPanel>
+
+                    <!-- Breadcrumbs -->
+                    <ItemsControl Grid.Column="1" ItemsSource="{Binding Navigation.Breadcrumbs}" Margin="16,0,0,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text=">" VerticalAlignment="Center" Margin="4,0"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.5"
+                                               FontSize="12"/>
+                                    <TextBlock VerticalAlignment="Center" FontSize="12" Cursor="Hand"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               TextDecorations="Underline"
+                                               MouseLeftButtonDown="Breadcrumb_Click">
+                                        <TextBlock.Text>
+                                            <Binding Path="Name"/>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+            </Border>
+
+            <!-- Indexing Progress -->
+            <Border Grid.Row="1" Padding="12,4" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                    Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="{Binding StatusMessage}" FontSize="12"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <ProgressBar Height="6" Margin="0,4,0,0"
+                                     Value="{Binding IndexProgress}" Maximum="100"/>
+                    </StackPanel>
+                    <ui:Button Grid.Column="1" Content="Cancel" Margin="12,0,0,0"
+                               Command="{Binding CancelIndexCommand}"/>
+                </Grid>
+            </Border>
 
             <!-- Content Area -->
-            <Frame Grid.Column="1" 
-                   x:Name="RootFrame"
-                   NavigationUIVisibility="Hidden" />
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="400"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition Width="520" MinWidth="300"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- File List -->
+                <Border Margin="12,8,0,8" CornerRadius="8"
+                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                    <ListView x:Name="dgFiles"
+                              ItemsSource="{Binding Files}"
+                              SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                              VirtualizingStackPanel.IsVirtualizing="True"
+                              VirtualizingStackPanel.VirtualizationMode="Recycling"
+                              MouseDoubleClick="DgFiles_MouseDoubleClick"
+                              BorderThickness="0"
+                              Background="Transparent"
+                              Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="" Width="35">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Icon}"
+                                                       FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Global User Interface"
+                                                       Foreground="{Binding IconColor}"
+                                                       FontSize="14"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Center"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Name" Width="220" DisplayMemberBinding="{Binding Name}"/>
+                                <GridViewColumn Header="Type" Width="80" DisplayMemberBinding="{Binding TypeDisplay}"/>
+                                <GridViewColumn Header="Size" Width="100" DisplayMemberBinding="{Binding SizeDisplay}"/>
+                                <GridViewColumn Header="Tags" Width="120" DisplayMemberBinding="{Binding TagsText}"/>
+                                <GridViewColumn Header="Modified" Width="140" DisplayMemberBinding="{Binding ModifiedAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </Border>
+
+                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"/>
+
+                <!-- Detail Panel -->
+                <Border Grid.Column="2" Margin="0,8,12,8" CornerRadius="8"
+                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                        Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibility}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
+                        <StackPanel>
+                            <Border Height="220" CornerRadius="6" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
+                                    Visibility="{Binding IsPreviewPanelVisible, Converter={StaticResource BoolToVisibility}}">
+                                <Grid>
+                                    <Image x:Name="imgPreview" Source="{Binding PreviewImage}" Stretch="Uniform"
+                                           Visibility="{Binding IsImagePreviewVisible, Converter={StaticResource BoolToVisibility}}"/>
+                                    <TextBox IsReadOnly="True" Text="{Binding PreviewText}" BorderThickness="0"
+                                             Background="Transparent" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                             FontFamily="Consolas" FontSize="11"
+                                             TextWrapping="Wrap" AcceptsReturn="True"
+                                             Visibility="{Binding IsTextPreviewVisible, Converter={StaticResource BoolToVisibility}}"/>
+                                    <TextBlock Text="No Preview Available" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.5"
+                                               Visibility="{Binding IsNoPreviewVisible, Converter={StaticResource BoolToVisibility}}"/>
+                                </Grid>
+                            </Border>
+
+                            <TextBlock Text="Details" FontSize="16" FontWeight="Bold" Margin="0,16,0,12"
+                                       Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+
+                            <TextBlock Text="Name" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <TextBlock Text="{Binding SelectedFile.Name}" FontSize="13" Margin="0,0,0,12" TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Path" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <TextBox Text="{Binding SelectedFile.Path}" IsReadOnly="True" BorderThickness="0"
+                                     Background="Transparent" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                     FontSize="11" Margin="0,0,0,12" TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Size" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <TextBlock Text="{Binding SelectedFile.SizeDisplay}" FontSize="13" Margin="0,0,0,12"/>
+
+                            <TextBlock Text="Created" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <TextBlock Text="{Binding SelectedFile.CreatedAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" FontSize="13" Margin="0,0,0,12"/>
+
+                            <TextBlock Text="Modified" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <TextBlock Text="{Binding SelectedFile.ModifiedAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" FontSize="13" Margin="0,0,0,16"/>
+
+                            <Separator Margin="0,0,0,16" Opacity="0.3"/>
+
+                            <TextBlock Text="Tags" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <TextBox Text="{Binding TagsText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"
+                                     FontSize="12" TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Notes" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <TextBox Text="{Binding NoteText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"
+                                     FontSize="12" AcceptsReturn="True" Height="80" TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"/>
+
+                            <ui:Button Content="Save Tags &amp; Notes" Command="{Binding SaveTagsCommand}" Margin="0,0,0,8"/>
+                            <ui:Button Content="Open File Location" Command="{Binding OpenFileLocationCommand}" Margin="0,0,0,16"/>
+
+                            <Border CornerRadius="4" Padding="10" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+                                <TextBlock Text="Ctrl+C Copy | Ctrl+X Cut | Ctrl+V Paste | Del Delete | F2 Rename | F5 Refresh | Ctrl+N New Folder"
+                                           FontSize="10" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.5"
+                                           TextWrapping="Wrap" TextAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <!-- Status Bar -->
+            <Border Grid.Row="3" Padding="12,8" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center" FontSize="12"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock Grid.Column="1" Text="{Binding FileCountText}" VerticalAlignment="Center" FontSize="12"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                </Grid>
+            </Border>
         </Grid>
 
         <ui:SnackbarPresenter x:Name="snackbarPresenter" Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" />

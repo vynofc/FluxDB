@@ -60,8 +60,8 @@ namespace FluxDB.Views
             }
             catch (Exception ex)
             {
-                LoggingService.Log($"Startup CRITICAL failure: {ex.Message}");
-                System.Windows.MessageBox.Show("Startup failed: " + ex.Message, "Error",
+                LoggingService.Log($"Startup CRITICAL failure: {ex}");
+                System.Windows.MessageBox.Show("Startup failed: " + ex, "Error",
                     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
                 Application.Current.Shutdown();
             }

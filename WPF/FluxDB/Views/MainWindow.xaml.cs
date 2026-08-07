@@ -20,7 +20,10 @@ namespace FluxDB.Views
             _settingsService = settingsService;
             _serviceProvider = serviceProvider;
 
-            DataContext = viewModel;
+                DataContext = viewModel;
+                LoggingService.Log("MainWindow: DataContext set, calling InitializeComponent");
+                InitializeComponent();
+                LoggingService.Log("MainWindow: InitializeComponent done");
 
             WindowBackdropType = WindowBackdropType.Mica;
             ExtendsContentIntoTitleBar = true;
@@ -28,9 +31,9 @@ namespace FluxDB.Views
 
             snackbarService.SetSnackbarPresenter(snackbarPresenter);
 
-            Loaded += OnLoaded;
-            Drop += Window_Drop;
-            DragOver += Window_DragOver;
+                Loaded += OnLoaded;
+                Drop += Window_Drop;
+                DragOver += Window_DragOver;
 
             navView.SelectionChanged += NavView_SelectionChanged;
         }
@@ -93,6 +96,10 @@ namespace FluxDB.Views
                 return;
             }
 
+            var ctrl = Keyboard.Modifiers == ModifierKeys.Control;
+            var shift = Keyboard.Modifiers == ModifierKeys.Shift;
+            var alt = Keyboard.Modifiers == ModifierKeys.Alt;
+
             switch (e.Key)
             {
                 case Key.F5:
@@ -107,20 +114,36 @@ namespace FluxDB.Views
                     _viewModel.DeleteCommand.Execute(null);
                     e.Handled = true;
                     break;
-                case Key.F when Keyboard.Modifiers == ModifierKeys.Control:
+                case Key.F when ctrl:
                     txtSearch.Focus();
                     e.Handled = true;
                     break;
-                case Key.Left when Keyboard.Modifiers == ModifierKeys.Alt:
-                    _viewModel.Navigation.GoBack();
+                case Key.C when ctrl && !shift:
+                    _viewModel.CopyCommand.Execute(null);
                     e.Handled = true;
                     break;
-                case Key.Right when Keyboard.Modifiers == ModifierKeys.Alt:
-                    _viewModel.Navigation.GoForward();
+                case Key.X when ctrl:
+                    _viewModel.CutCommand.Execute(null);
                     e.Handled = true;
                     break;
-                case Key.Up when Keyboard.Modifiers == ModifierKeys.Alt:
-                    _viewModel.Navigation.GoUp();
+                case Key.V when ctrl:
+                    _viewModel.PasteCommand.Execute(null);
+                    e.Handled = true;
+                    break;
+                case Key.N when ctrl:
+                    _viewModel.NewFolderCommand.Execute(null);
+                    e.Handled = true;
+                    break;
+                case Key.Left when alt:
+                    _viewModel.Navigation.GoBackCommand.Execute(null);
+                    e.Handled = true;
+                    break;
+                case Key.Right when alt:
+                    _viewModel.Navigation.GoForwardCommand.Execute(null);
+                    e.Handled = true;
+                    break;
+                case Key.Up when alt:
+                    _viewModel.Navigation.GoUpCommand.Execute(null);
                     e.Handled = true;
                     break;
                 case Key.Enter:
@@ -128,7 +151,7 @@ namespace FluxDB.Views
                     e.Handled = true;
                     break;
                 case Key.Back:
-                    _viewModel.Navigation.GoUp();
+                    _viewModel.Navigation.GoUpCommand.Execute(null);
                     e.Handled = true;
                     break;
             }
