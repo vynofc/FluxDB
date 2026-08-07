@@ -9,12 +9,16 @@ namespace FluxDB.Views
     {
         private readonly MainViewModel _viewModel;
         private readonly SettingsService _settingsService;
+        private readonly IServiceProvider _serviceProvider;
 
-        public MainWindow(MainViewModel viewModel, SettingsService settingsService)
+        private FileBrowserPage _fileBrowserPage;
+
+        public MainWindow(MainViewModel viewModel, SettingsService settingsService, IServiceProvider serviceProvider, ISnackbarService snackbarService)
         {
             InitializeComponent();
             _viewModel = viewModel;
             _settingsService = settingsService;
+            _serviceProvider = serviceProvider;
 
             DataContext = viewModel;
 
@@ -22,17 +26,13 @@ namespace FluxDB.Views
             ExtendsContentIntoTitleBar = true;
             WindowCornerPreference = WindowCornerPreference.Round;
 
+            snackbarService.SetSnackbarPresenter(snackbarPresenter);
+
             Loaded += OnLoaded;
             Drop += Window_Drop;
             DragOver += Window_DragOver;
 
-            // Set icons via code-behind
-            btnBack.Icon = new SymbolIcon(SymbolRegular.ArrowLeft24);
-            btnForward.Icon = new SymbolIcon(SymbolRegular.ArrowRight24);
-            btnUp.Icon = new SymbolIcon(SymbolRegular.ArrowUp24);
-            btnOpenFolder.Icon = new SymbolIcon(SymbolRegular.FolderOpen24);
-            btnRefresh.Icon = new SymbolIcon(SymbolRegular.ArrowSync24);
-            btnSettings.Icon = new SymbolIcon(SymbolRegular.Settings24);
+            navView.SelectionChanged += NavView_SelectionChanged;
         }
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -51,13 +51,43 @@ namespace FluxDB.Views
             await _viewModel.LoadInitialData();
         }
 
+        private void NavView_SelectionChanged(NavigationView sender, RoutedEventArgs args)
+        {
+            var selectedItem = navView.SelectedItem as NavigationViewItem;
+            if (selectedItem?.Tag == null) return;
+
+            var tag = selectedItem.Tag.ToString();
+
+            if (tag == "dashboard")
+            {
+                var dashboardPage = _serviceProvider.GetRequiredService<DashboardPage>();
+                RootFrame.Navigate(dashboardPage);
+            }
+            else if (tag == "fileBrowser")
+            {
+                if (_fileBrowserPage == null)
+                    _fileBrowserPage = _serviceProvider.GetRequiredService<FileBrowserPage>();
+                RootFrame.Navigate(_fileBrowserPage);
+            }
+            else if (tag == "settings")
+            {
+                var settingsWindow = _serviceProvider.GetRequiredService<SettingsWindow>();
+                settingsWindow.Owner = this;
+                settingsWindow.ShowDialog();
+            }
+            else if (tag == "theme")
+            {
+                App.ToggleTheme();
+            }
+        }
+
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.OriginalSource is System.Windows.Controls.TextBox)
             {
                 if (e.Key == Key.Escape)
                 {
-                    dgFiles.Focus();
+                    navView.Focus();
                     e.Handled = true;
                 }
                 return;
@@ -102,18 +132,6 @@ namespace FluxDB.Views
                     e.Handled = true;
                     break;
             }
-        }
-
-        private void DgFiles_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-        {
-            _viewModel.OpenItemCommand.Execute(_viewModel.SelectedFile);
-        }
-
-        private void BtnSettings_Click(object sender, RoutedEventArgs e)
-        {
-            var settingsWindow = App.Host.Services.GetRequiredService<SettingsWindow>();
-            settingsWindow.Owner = this;
-            settingsWindow.ShowDialog();
         }
 
         private void Window_DragOver(object sender, DragEventArgs e)

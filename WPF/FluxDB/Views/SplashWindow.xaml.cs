@@ -1,13 +1,12 @@
 using System.Diagnostics;
 using System.Net.Http;
 using System.Reflection;
-using System.Windows.Media.Imaging;
 using Newtonsoft.Json;
 using Wpf.Ui.Controls;
 
 namespace FluxDB.Views
 {
-    public partial class SplashWindow : Window
+    public partial class SplashWindow : FluentWindow
     {
         private readonly SettingsService _settingsService = new Services.SettingsService();
 
@@ -19,40 +18,6 @@ namespace FluxDB.Views
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                var exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                var icoPath = Path.Combine(exeDir ?? string.Empty, "FluxDB-icon.ico");
-                var pngPath = Path.Combine(exeDir ?? string.Empty, "FluxDB-icon.png");
-
-                if (File.Exists(icoPath))
-                {
-                    var bmp = new BitmapImage();
-                    bmp.BeginInit();
-                    bmp.UriSource = new Uri(icoPath);
-                    bmp.DecodePixelWidth = 120;
-                    bmp.DecodePixelHeight = 120;
-                    bmp.CacheOption = BitmapCacheOption.OnLoad;
-                    bmp.EndInit();
-                    imgLogo.Source = bmp;
-                }
-                else if (File.Exists(pngPath))
-                {
-                    var bmp = new BitmapImage();
-                    bmp.BeginInit();
-                    bmp.UriSource = new Uri(pngPath);
-                    bmp.DecodePixelWidth = 120;
-                    bmp.DecodePixelHeight = 120;
-                    bmp.CacheOption = BitmapCacheOption.OnLoad;
-                    bmp.EndInit();
-                    imgLogo.Source = bmp;
-                }
-            }
-            catch (Exception ex)
-            {
-                LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}");
-            }
-
             txtVersion.Text = App.GetLocalVersion();
             _ = InitializeAsync();
         }

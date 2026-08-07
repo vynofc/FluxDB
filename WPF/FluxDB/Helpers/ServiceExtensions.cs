@@ -25,9 +25,15 @@ namespace FluxDB.Helpers
             services.AddSingleton<NavigationViewModel>();
             services.AddSingleton<DashboardViewModel>();
 
-            // Windows
+            // Windows & Pages
             services.AddSingleton<MainWindow>();
             services.AddSingleton<SettingsWindow>();
+            services.AddSingleton<DashboardPage>();
+            services.AddSingleton<FileBrowserPage>();
+
+            // WPF-UI Services
+            services.AddSingleton<ISnackbarService, SnackbarService>();
+            services.AddSingleton<IContentDialogService, ContentDialogService>();
 
             return services;
         }

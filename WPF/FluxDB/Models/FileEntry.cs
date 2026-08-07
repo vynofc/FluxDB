@@ -1,27 +1,29 @@
 using System.Runtime.CompilerServices;
+using System.Windows.Media;
+using Wpf.Ui.Controls;
 
 namespace FluxDB.Models
 {
     public partial class FileEntry : ObservableObject
     {
-        private static readonly Dictionary<string, (string Icon, string Color)> IconLookup = new Dictionary<string, (string, string)>
+        private static readonly Dictionary<string, (SymbolRegular Symbol, string Color)> IconLookup = new()
         {
-            [".jpg"] = ("\uEB9F", "#9B59B6"), [".jpeg"] = ("\uEB9F", "#9B59B6"), [".png"] = ("\uEB9F", "#9B59B6"), [".gif"] = ("\uEB9F", "#9B59B6"),
-            [".bmp"] = ("\uEB9F", "#9B59B6"), [".webp"] = ("\uEB9F", "#9B59B6"), [".ico"] = ("\uEB9F", "#9B59B6"),
-            [".mp3"] = ("\uE189", "#2ECC71"), [".wav"] = ("\uE189", "#2ECC71"), [".flac"] = ("\uE189", "#2ECC71"), [".aac"] = ("\uE189", "#2ECC71"),
-            [".ogg"] = ("\uE189", "#2ECC71"), [".wma"] = ("\uE189", "#2ECC71"), [".m4a"] = ("\uE189", "#2ECC71"),
-            [".mp4"] = ("\uE116", "#E74C3C"), [".avi"] = ("\uE116", "#E74C3C"), [".mkv"] = ("\uE116", "#E74C3C"), [".mov"] = ("\uE116", "#E74C3C"),
-            [".wmv"] = ("\uE116", "#E74C3C"), [".flv"] = ("\uE116", "#E74C3C"), [".webm"] = ("\uE116", "#E74C3C"),
-            [".pdf"] = ("\uE162", "#E74C3C"),
-            [".doc"] = ("\uE132", "#3498DB"), [".docx"] = ("\uE132", "#3498DB"), [".rtf"] = ("\uE132", "#3498DB"), [".odt"] = ("\uE132", "#3498DB"),
-            [".txt"] = ("\uE132", "#3498DB"), [".md"] = ("\uE132", "#3498DB"),
-            [".xls"] = ("\uE1D2", "#27AE60"), [".xlsx"] = ("\uE1D2", "#27AE60"), [".csv"] = ("\uE1D2", "#27AE60"), [".ods"] = ("\uE1D2", "#27AE60"),
-            [".zip"] = ("\uF012", "#E67E22"), [".rar"] = ("\uF012", "#E67E22"), [".7z"] = ("\uF012", "#E67E22"), [".tar"] = ("\uF012", "#E67E22"), [".gz"] = ("\uF012", "#E67E22"),
-            [".exe"] = ("\uE71D", "#95A5A6"), [".msi"] = ("\uE71D", "#95A5A6"),
-            [".cs"] = ("\uE943", "#00CED1"), [".js"] = ("\uE943", "#00CED1"), [".ts"] = ("\uE943", "#00CED1"), [".py"] = ("\uE943", "#00CED1"),
-            [".java"] = ("\uE943", "#00CED1"), [".cpp"] = ("\uE943", "#00CED1"), [".c"] = ("\uE943", "#00CED1"), [".h"] = ("\uE943", "#00CED1"),
-            [".html"] = ("\uE943", "#00CED1"), [".css"] = ("\uE943", "#00CED1"), [".xaml"] = ("\uE943", "#00CED1"), [".xml"] = ("\uE943", "#00CED1"),
-            [".json"] = ("\uE943", "#00CED1"), [".sql"] = ("\uE943", "#00CED1"), [".php"] = ("\uE943", "#00CED1"),
+            [".jpg"] = (SymbolRegular.Image24, "#9B59B6"), [".jpeg"] = (SymbolRegular.Image24, "#9B59B6"), [".png"] = (SymbolRegular.Image24, "#9B59B6"), [".gif"] = (SymbolRegular.Image24, "#9B59B6"),
+            [".bmp"] = (SymbolRegular.Image24, "#9B59B6"), [".webp"] = (SymbolRegular.Image24, "#9B59B6"), [".ico"] = (SymbolRegular.Image24, "#9B59B6"),
+            [".mp3"] = (SymbolRegular.MusicNote224, "#2ECC71"), [".wav"] = (SymbolRegular.MusicNote224, "#2ECC71"), [".flac"] = (SymbolRegular.MusicNote224, "#2ECC71"), [".aac"] = (SymbolRegular.MusicNote224, "#2ECC71"),
+            [".ogg"] = (SymbolRegular.MusicNote224, "#2ECC71"), [".wma"] = (SymbolRegular.MusicNote224, "#2ECC71"), [".m4a"] = (SymbolRegular.MusicNote224, "#2ECC71"),
+            [".mp4"] = (SymbolRegular.Video24, "#E74C3C"), [".avi"] = (SymbolRegular.Video24, "#E74C3C"), [".mkv"] = (SymbolRegular.Video24, "#E74C3C"), [".mov"] = (SymbolRegular.Video24, "#E74C3C"),
+            [".wmv"] = (SymbolRegular.Video24, "#E74C3C"), [".flv"] = (SymbolRegular.Video24, "#E74C3C"), [".webm"] = (SymbolRegular.Video24, "#E74C3C"),
+            [".pdf"] = (SymbolRegular.DocumentPdf24, "#E74C3C"),
+            [".doc"] = (SymbolRegular.Document24, "#3498DB"), [".docx"] = (SymbolRegular.Document24, "#3498DB"), [".rtf"] = (SymbolRegular.Document24, "#3498DB"), [".odt"] = (SymbolRegular.Document24, "#3498DB"),
+            [".txt"] = (SymbolRegular.Document24, "#3498DB"), [".md"] = (SymbolRegular.Document24, "#3498DB"),
+            [".xls"] = (SymbolRegular.DocumentData24, "#27AE60"), [".xlsx"] = (SymbolRegular.DocumentData24, "#27AE60"), [".csv"] = (SymbolRegular.DocumentData24, "#27AE60"), [".ods"] = (SymbolRegular.DocumentData24, "#27AE60"),
+            [".zip"] = (SymbolRegular.Box24, "#E67E22"), [".rar"] = (SymbolRegular.Box24, "#E67E22"), [".7z"] = (SymbolRegular.Box24, "#E67E22"), [".tar"] = (SymbolRegular.Box24, "#E67E22"), [".gz"] = (SymbolRegular.Box24, "#E67E22"),
+            [".exe"] = (SymbolRegular.WindowConsole20, "#95A5A6"), [".msi"] = (SymbolRegular.WindowConsole20, "#95A5A6"),
+            [".cs"] = (SymbolRegular.Code24, "#00CED1"), [".js"] = (SymbolRegular.Code24, "#00CED1"), [".ts"] = (SymbolRegular.Code24, "#00CED1"), [".py"] = (SymbolRegular.Code24, "#00CED1"),
+            [".java"] = (SymbolRegular.Code24, "#00CED1"), [".cpp"] = (SymbolRegular.Code24, "#00CED1"), [".c"] = (SymbolRegular.Code24, "#00CED1"), [".h"] = (SymbolRegular.Code24, "#00CED1"),
+            [".html"] = (SymbolRegular.Code24, "#00CED1"), [".css"] = (SymbolRegular.Code24, "#00CED1"), [".xaml"] = (SymbolRegular.Code24, "#00CED1"), [".xml"] = (SymbolRegular.Code24, "#00CED1"),
+            [".json"] = (SymbolRegular.Code24, "#00CED1"), [".sql"] = (SymbolRegular.Code24, "#00CED1"), [".php"] = (SymbolRegular.Code24, "#00CED1"),
         };
 
         [ObservableProperty]
@@ -60,8 +62,7 @@ namespace FluxDB.Models
         [ObservableProperty]
         private bool _isFolder;
 
-        private string _cachedIcon;
-        private string _cachedIconColor;
+        private SymbolRegular _cachedIconSymbol;
         private string _cachedSizeDisplay;
         private bool _cacheValid;
 
@@ -81,21 +82,21 @@ namespace FluxDB.Models
             }
         }
 
-        public string Icon
+        public SymbolRegular IconSymbol
         {
             get
             {
-                if (_cacheValid && _cachedIcon != null) return _cachedIcon;
-                return _cachedIcon = _isFolder ? "\uE8B7" : GetExtLookup().Icon;
+                if (_cacheValid && _cachedIconSymbol != default) return _cachedIconSymbol;
+                return _cachedIconSymbol = _isFolder ? SymbolRegular.Folder24 : GetExtLookup().Symbol;
             }
         }
 
-        public string IconColor
+        public Brush IconColorBrush
         {
             get
             {
-                if (_cacheValid && _cachedIconColor != null) return _cachedIconColor;
-                return _cachedIconColor = _isFolder ? "#DCB67A" : GetExtLookup().Color;
+                var color = _isFolder ? "#DCB67A" : GetExtLookup().Color;
+                return new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
             }
         }
 
@@ -123,10 +124,10 @@ namespace FluxDB.Models
             _cacheValid = false;
         }
 
-        private (string Icon, string Color) GetExtLookup()
+        private (SymbolRegular Symbol, string Color) GetExtLookup()
         {
             var ext = (_extension ?? "").ToLower();
-            return IconLookup.TryGetValue(ext, out var value) ? value : ("\uE160", "#BDC3C7");
+            return IconLookup.TryGetValue(ext, out var value) ? value : (SymbolRegular.Document24, "#BDC3C7");
         }
     }
 }

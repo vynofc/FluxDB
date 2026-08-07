@@ -1,0 +1,20 @@
+<UserControl x:Class="FluxDB.Views.Controls.PreviewPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:conv="clr-namespace:FluxDB.Converters">
+    <Border Height="220" CornerRadius="6" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+        <Grid>
+            <Image x:Name="imgPreview" Source="{Binding PreviewImage}" Stretch="Uniform"
+                   Visibility="{Binding IsImagePreviewVisible, Converter={StaticResource BoolToVisibility}}"/>
+            <TextBox IsReadOnly="True" Text="{Binding PreviewText}" BorderThickness="0"
+                     Background="Transparent" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                     FontFamily="Consolas" FontSize="11"
+                     TextWrapping="Wrap" AcceptsReturn="True"
+                     Visibility="{Binding IsTextPreviewVisible, Converter={StaticResource BoolToVisibility}}"/>
+            <TextBlock Text="No Preview Available" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.5"
+                       Visibility="{Binding IsNoPreviewVisible, Converter={StaticResource BoolToVisibility}}"/>
+        </Grid>
+    </Border>
+</UserControl>

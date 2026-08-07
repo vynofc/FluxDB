@@ -33,8 +33,36 @@ namespace FluxDB
                 })
                 .Build();
 
+            ApplyTheme();
+
             var splash = new SplashWindow();
             splash.Show();
+        }
+
+        private void ApplyTheme()
+        {
+            var settingsService = _host.Services.GetRequiredService<Services.SettingsService>();
+            var settings = settingsService.Load();
+            var theme = settings.Theme switch
+            {
+                "Light" => ApplicationTheme.Light,
+                "Dark" => ApplicationTheme.Dark,
+                _ => ApplicationTheme.Dark
+            };
+            ApplicationThemeManager.Apply(theme);
+            ApplicationThemeManager.ApplySystemTheme();
+        }
+
+        public static void ToggleTheme()
+        {
+            var currentTheme = ApplicationThemeManager.GetAppTheme();
+            var newTheme = currentTheme == ApplicationTheme.Dark ? ApplicationTheme.Light : ApplicationTheme.Dark;
+            ApplicationThemeManager.Apply(newTheme);
+
+            var settingsService = Host.Services.GetRequiredService<Services.SettingsService>();
+            var settings = settingsService.Load();
+            settings.Theme = newTheme == ApplicationTheme.Light ? "Light" : "Dark";
+            settingsService.Save(settings);
         }
 
         private void OnExit(object sender, ExitEventArgs e)

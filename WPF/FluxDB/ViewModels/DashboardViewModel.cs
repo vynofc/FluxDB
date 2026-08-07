@@ -7,6 +7,9 @@ namespace FluxDB.ViewModels
         [ObservableProperty]
         private ObservableCollection<string> _recentFolders = new();
 
+        [ObservableProperty]
+        private bool _hasRecentFolders;
+
         public DashboardViewModel(SettingsService settingsService)
         {
             _settingsService = settingsService;
@@ -19,6 +22,7 @@ namespace FluxDB.ViewModels
             if (settings.RecentFolders != null)
             {
                 RecentFolders = new ObservableCollection<string>(settings.RecentFolders);
+                HasRecentFolders = RecentFolders.Count > 0;
             }
         }
 

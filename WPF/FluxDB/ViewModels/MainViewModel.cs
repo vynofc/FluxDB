@@ -3,6 +3,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Wpf.Ui.Controls;
 
 namespace FluxDB.ViewModels
 {
@@ -36,6 +37,12 @@ namespace FluxDB.ViewModels
 
         // Navigation
         public NavigationViewModel Navigation { get; }
+
+        [ObservableProperty]
+        private ObservableCollection<NavigationViewItem> _navigationItems = new();
+
+        [ObservableProperty]
+        private ObservableCollection<NavigationViewItem> _footerNavigationItems = new();
 
         // Files
         [ObservableProperty]
@@ -109,6 +116,18 @@ namespace FluxDB.ViewModels
         {
             _settingsService = settingsService;
             Navigation = navigationViewModel;
+
+            NavigationItems = new ObservableCollection<NavigationViewItem>
+            {
+                new() { Content = "Home", Icon = new SymbolIcon(SymbolRegular.Home24), Tag = "dashboard" },
+                new() { Content = "File Browser", Icon = new SymbolIcon(SymbolRegular.Folder24), Tag = "fileBrowser" },
+            };
+
+            FooterNavigationItems = new ObservableCollection<NavigationViewItem>
+            {
+                new() { Content = "Theme", Icon = new SymbolIcon(SymbolRegular.WeatherSunny24), Tag = "theme" },
+                new() { Content = "Settings", Icon = new SymbolIcon(SymbolRegular.Settings24), Tag = "settings" },
+            };
 
             WeakReferenceMessenger.Default.Register<FolderOpenedMessage>(this, (r, m) =>
             {
@@ -324,6 +343,23 @@ namespace FluxDB.ViewModels
             {
                 IsDetailOpen = false;
             }
+        }
+
+        partial void OnSearchTextChanged(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                _ = RefreshCurrentFolderViewAsync();
+            }
+            else
+            {
+                Search();
+            }
+        }
+
+        partial void OnCurrentFilterChanged(string value)
+        {
+            _ = RefreshCurrentFolderViewAsync();
         }
 
         [RelayCommand]
