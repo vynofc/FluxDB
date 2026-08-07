@@ -13,6 +13,7 @@
     <Deterministic>true</Deterministic>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
+    <NoWarn>CA1416;MVVMTK0034;CS0169</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
