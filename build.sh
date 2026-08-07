@@ -8,6 +8,36 @@ WPF_PROJECT="$ROOT_DIR/WPF/FluxDB/FluxDB.csproj"
 INSTALLER_DIR="$ROOT_DIR/Installer"
 LOG_VIEWER_DIR="$ROOT_DIR/Log_Viewer"
 
+install_requirements() {
+  echo "=== FluxDB Requirements Setup ==="
+  echo ""
+
+  echo "[1/4] Checking for .NET SDK..."
+  if ! command -v dotnet >/dev/null 2>&1; then
+    echo ".NET SDK is not installed or not available in PATH."
+    echo "Install from https://dotnet.microsoft.com/download"
+    exit 1
+  fi
+
+  echo "[2/4] Restoring WPF dependencies..."
+  dotnet restore "$WPF_PROJECT"
+
+  echo "[3/4] Checking Go toolchain..."
+  if ! command -v go >/dev/null 2>&1; then
+    echo "Go is not installed or not available in PATH."
+    exit 1
+  fi
+
+  echo "[4/4] Installing Go dependencies for Installer and Log Viewer..."
+  (cd "$INSTALLER_DIR" && go mod download)
+  (cd "$LOG_VIEWER_DIR" && go mod download)
+
+  echo ""
+  echo "✓ Requirements setup completed."
+  echo "  WPF packages restored via dotnet restore"
+  echo "  Go modules downloaded for Installer and Log_Viewer"
+}
+
 ensure_bin_dir() {
   mkdir -p "$BIN_DIR"
 }
@@ -57,6 +87,14 @@ build_full() {
   echo "  FluxDB.zip"
 }
 
+clean() {
+  echo ""
+  echo "Cleaning build artifacts..."
+  rm -rf "$BIN_DIR"
+  rm -f "$ROOT_DIR/FluxDB.zip"
+  echo "✓ Clean completed."
+}
+
 show_menu() {
   echo "=== FluxDB Build Menu ==="
   echo ""
@@ -65,9 +103,10 @@ show_menu() {
   echo "3) Build Installer"
   echo "4) Build Log Viewer"
   echo "5) Build full release package"
-  echo "6) Exit"
+  echo "6) Clean"
+  echo "7) Exit"
   echo ""
-  read -r -p "Choose an option [1-6]: " choice
+  read -r -p "Choose an option [1-7]: " choice
 }
 
 choice="${1:-}"
@@ -77,7 +116,7 @@ if [ -z "$choice" ]; then
 
     case "$choice" in
       1)
-        bash install-requirements.sh
+        install_requirements
         ;;
       2)
         build_wpf
@@ -92,6 +131,9 @@ if [ -z "$choice" ]; then
         build_full
         ;;
       6)
+        clean
+        ;;
+      7)
         exit 0
         ;;
       *)
@@ -106,7 +148,7 @@ if [ -z "$choice" ]; then
 else
   case "$choice" in
     1)
-      bash install-requirements.sh
+      install_requirements
       ;;
     2)
       build_wpf
@@ -121,6 +163,9 @@ else
       build_full
       ;;
     6)
+      clean
+      ;;
+    7)
       exit 0
       ;;
     *)
