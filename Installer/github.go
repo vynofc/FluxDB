@@ -15,7 +15,13 @@ const (
 )
 
 type githubRelease struct {
-	TagName string `json:"tag_name"`
+	TagName    string `json:"tag_name"`
+	Prerelease bool   `json:"prerelease"`
+}
+
+type releaseInfo struct {
+	tag        string
+	prerelease bool
 }
 
 func fetchReleasesCmd() tea.Cmd {
@@ -51,19 +57,19 @@ func fetchReleasesCmd() tea.Cmd {
 			return errMsg{err: fmt.Errorf("keine Releases gefunden")}
 		}
 
-		tags := make([]string, len(releases))
-		for i, r := range releases {
-			tags[i] = r.TagName
+		var infos []releaseInfo
+		for _, r := range releases {
+			infos = append(infos, releaseInfo{tag: r.TagName, prerelease: r.Prerelease})
 		}
 
-		return releasesFetchedMsg{releases: tags}
+		return releasesFetchedMsg{releases: infos}
 	}
 }
 
-func fetchLatestTagCmd() tea.Cmd {
+func fetchLatestTagCmd(includeBeta bool) tea.Cmd {
 	return func() tea.Msg {
 		client := &http.Client{Timeout: 15 * time.Second}
-		req, err := http.NewRequest("GET", githubAPIURL+"/latest", nil)
+		req, err := http.NewRequest("GET", githubAPIURL+"?per_page=20", nil)
 		if err != nil {
 			return errMsg{err: fmt.Errorf("request erstellen fehlgeschlagen: %w", err)}
 		}
@@ -84,16 +90,26 @@ func fetchLatestTagCmd() tea.Cmd {
 			return errMsg{err: fmt.Errorf("GitHub API Fehler: %s", resp.Status)}
 		}
 
-		var rel githubRelease
-		if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+		var allReleases []githubRelease
+		if err := json.NewDecoder(resp.Body).Decode(&allReleases); err != nil {
 			return errMsg{err: fmt.Errorf("JSON-Dekodierung fehlgeschlagen: %w", err)}
 		}
 
-		if rel.TagName == "" {
-			return errMsg{err: fmt.Errorf("kein Release-Tag gefunden")}
+		if len(allReleases) == 0 {
+			return errMsg{err: fmt.Errorf("keine Releases gefunden")}
 		}
 
-		return tagFetchedMsg{tag: rel.TagName}
+		if includeBeta {
+			return tagFetchedMsg{tag: allReleases[0].TagName}
+		}
+
+		for _, r := range allReleases {
+			if !r.Prerelease {
+				return tagFetchedMsg{tag: r.TagName}
+			}
+		}
+
+		return errMsg{err: fmt.Errorf("keine Stable-Releases gefunden")}
 	}
 }
 

@@ -6,14 +6,17 @@ import (
 	"github.com/charmbracelet/huh"
 )
 
-func buildVersionForm(releases []string, selected *string) *huh.Form {
+func buildVersionForm(releases []releaseInfo, selected *string) *huh.Form {
 	options := make([]huh.Option[string], len(releases))
 	for i, r := range releases {
-		label := r
+		label := r.tag
 		if i == 0 {
-			label = fmt.Sprintf("%s  (neueste)", r)
+			label = fmt.Sprintf("%s  (neueste)", r.tag)
 		}
-		options[i] = huh.NewOption(label, r)
+		if r.prerelease {
+			label = fmt.Sprintf("%s  ⚠ Beta", label)
+		}
+		options[i] = huh.NewOption(label, r.tag)
 	}
 
 	form := huh.NewForm(

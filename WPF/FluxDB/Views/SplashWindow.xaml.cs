@@ -129,31 +129,60 @@ namespace FluxDB.Views
 
                 LoggingService.LogDebug($"CheckForUpdatesAsync: localVersion={localVersionStr} exeDir={exeDir} skipUpdate={skipUpdate} autoInstall={autoInstall}");
 
-                var latestTag = await FetchLatestReleaseTagAsync();
-                if (latestTag == null) return true;
+                var releases = await FetchAllReleasesAsync();
+                if (releases == null || releases.Count == 0) return true;
 
-                var remoteVersion = VersionHelper.NormalizeVersion(latestTag);
                 var localVersion = VersionHelper.NormalizeVersion(localVersionStr);
-                var cmp = VersionHelper.CompareVersions(remoteVersion, localVersion);
 
-                if (cmp <= 0) return true;
+                string latestStableTag = null;
+                string latestStableVersion = null;
+                string latestBetaTag = null;
+                string latestBetaVersion = null;
 
-                bool isBeta = latestTag.Contains("-beta", StringComparison.OrdinalIgnoreCase);
+                foreach (var rel in releases)
+                {
+                    var tag = rel.TagName;
+                    var ver = VersionHelper.NormalizeVersion(tag);
+                    var isPrerelease = rel.Prerelease;
+
+                    if (!isPrerelease)
+                    {
+                        if (latestStableVersion == null || VersionHelper.CompareVersions(ver, latestStableVersion) > 0)
+                        {
+                            latestStableVersion = ver;
+                            latestStableTag = tag;
+                        }
+                    }
+                    else
+                    {
+                        if (latestBetaVersion == null || VersionHelper.CompareVersions(ver, latestBetaVersion) > 0)
+                        {
+                            latestBetaVersion = ver;
+                            latestBetaTag = tag;
+                        }
+                    }
+                }
+
+                bool stableNewer = latestStableVersion != null && VersionHelper.CompareVersions(latestStableVersion, localVersion) > 0;
+                bool betaNewer = latestBetaVersion != null && VersionHelper.CompareVersions(latestBetaVersion, localVersion) > 0;
+
+                if (!stableNewer && !betaNewer) return true;
 
                 App.IsUpdateAvailable = true;
-                App.AvailableVersion = remoteVersion;
-                App.AvailableTag = latestTag;
-                App.IsBetaUpdate = isBeta;
+                App.AvailableVersion = stableNewer ? latestStableVersion : latestBetaVersion;
+                App.AvailableTag = stableNewer ? latestStableTag : latestBetaTag;
+                App.IsBetaUpdate = !stableNewer && betaNewer;
+                App.AvailableBetaVersion = betaNewer ? latestBetaVersion : null;
 
                 if (!autoInstall)
                 {
-                    LoggingService.Log($"Update available ({latestTag}) but auto-install is disabled.");
+                    LoggingService.Log($"Update available ({App.AvailableTag}) but auto-install is disabled.");
                     return true;
                 }
 
-                if (isBeta)
+                if (App.IsBetaUpdate)
                 {
-                    LoggingService.Log($"Beta update available ({latestTag}), skipping auto-install.");
+                    LoggingService.Log($"Beta update available ({latestBetaTag}), skipping auto-install.");
                     return true;
                 }
 
@@ -166,7 +195,7 @@ namespace FluxDB.Views
                 var installerPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
                 if (!File.Exists(installerPath))
                 {
-                    var ok = await DownloadInstallerAsync(exeDir, latestTag);
+                    var ok = await DownloadInstallerAsync(exeDir, latestStableTag);
                     if (!ok) return true;
                 }
 
@@ -185,7 +214,7 @@ namespace FluxDB.Views
             }
         }
 
-        private async Task<string> FetchLatestReleaseTagAsync()
+        private async Task<List<GitHubRelease>> FetchAllReleasesAsync()
         {
             try
             {
@@ -195,17 +224,16 @@ namespace FluxDB.Views
                     http.DefaultRequestHeaders.UserAgent.ParseAdd("FluxDB");
                     http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 
-                    var response = await http.GetAsync("https://api.github.com/repos/vynofc/FluxDB/releases/latest");
+                    var response = await http.GetAsync("https://api.github.com/repos/vynofc/FluxDB/releases?per_page=20");
                     if (!response.IsSuccessStatusCode) return null;
 
                     var json = await response.Content.ReadAsStringAsync();
-                    var release = JsonConvert.DeserializeObject<GitHubRelease>(json);
-                    return release?.TagName;
+                    return JsonConvert.DeserializeObject<List<GitHubRelease>>(json);
                 }
             }
             catch (Exception ex)
             {
-                LoggingService.Log($"FetchLatestReleaseTagAsync failed: {ex.Message}");
+                LoggingService.Log($"FetchAllReleasesAsync failed: {ex.Message}");
                 return null;
             }
         }

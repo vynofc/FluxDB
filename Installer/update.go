@@ -78,7 +78,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case releasesFetchedMsg:
 		m.releases = msg.releases
 		if m.detail {
-			m.addLog(fmt.Sprintf("✅ %d Releases gefunden", len(msg.releases)))
+			stableCount := 0
+			betaCount := 0
+			for _, r := range msg.releases {
+				if r.prerelease {
+					betaCount++
+				} else {
+					stableCount++
+				}
+			}
+			m.addLog(fmt.Sprintf("✅ %d Releases gefunden (%d stable, %d beta)", len(msg.releases), stableCount, betaCount))
+			if betaCount > 0 {
+				m.addLog("⚠ Beta-Versionen verfuegbar — mit Vorsicht verwenden")
+			}
 		}
 		m.nextStep()
 		m.state = stateSelectVersion
@@ -170,7 +182,7 @@ func (m *model) handleVersionForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if m.versionForm.State == huh.StateCompleted {
 		if m.selectedVersion == "" && len(m.releases) > 0 {
-			m.selectedVersion = m.releases[0]
+			m.selectedVersion = m.releases[0].tag
 		}
 		m.tag = m.selectedVersion
 		if m.detail {

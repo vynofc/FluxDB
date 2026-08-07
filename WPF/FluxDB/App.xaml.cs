@@ -10,6 +10,7 @@ namespace FluxDB
         public static bool IsUpdateAvailable { get; set; } = false;
         public static string AvailableVersion { get; set; } = "";
         public static string AvailableTag { get; set; } = "";
+        public static string AvailableBetaVersion { get; set; } = null;
         public static bool IsUpdateSkipped { get; set; } = false;
         public static bool IsBetaUpdate { get; set; } = false;
 

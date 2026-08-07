@@ -25,7 +25,7 @@ const (
 )
 
 type releasesFetchedMsg struct {
-	releases []string
+	releases []releaseInfo
 }
 
 type downloadProgressMsg float64
@@ -59,7 +59,7 @@ type model struct {
 	progress        float64
 	err             error
 	zipPath         string
-	releases        []string
+	releases        []releaseInfo
 	spinner         spinner.Model
 	progressBar     progress.Model
 	viewport        viewport.Model
@@ -77,9 +77,10 @@ type model struct {
 	selectedVersion string
 	createShortcut  bool
 	detail          bool
+	beta            bool
 }
 
-func initialModel(customTag, customPath string, detail bool) model {
+func initialModel(customTag, customPath string, detail bool, beta bool) model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C5CE7"))
@@ -132,6 +133,7 @@ func initialModel(customTag, customPath string, detail bool) model {
 		steps:       steps,
 		activeStep:  0,
 		detail:      detail,
+		beta:        beta,
 	}
 }
 
@@ -158,7 +160,7 @@ func (m *model) Init() tea.Cmd {
 
 	return tea.Batch(
 		m.spinner.Tick,
-		fetchLatestTagCmd(),
+		fetchLatestTagCmd(m.beta),
 	)
 }
 

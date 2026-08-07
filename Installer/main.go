@@ -17,17 +17,18 @@ func main() {
 	silent := flag.Bool("silent", false, "Keine TUI, nur Text-Output")
 	silentStart := flag.Bool("silent-start", false, "Wie --silent, startet FluxDB nach der Installation automatisch")
 	detail := flag.Bool("detail", false, "Detailmodus: Versionsauswahl + ausfuehrliches Log")
+	beta := flag.Bool("beta", false, "Beta-Releases einschliessen (neueste Version inkl. Beta)")
 	flag.Parse()
 
 	logger := log.New(os.Stderr)
 	logger.SetLevel(log.DebugLevel)
 
 	if *silent || *silentStart {
-		runSilent(*customTag, *customPath, *silentStart, logger)
+		runSilent(*customTag, *customPath, *silentStart, *beta, logger)
 		return
 	}
 
-	m := initialModel(*customTag, *customPath, *detail)
+	m := initialModel(*customTag, *customPath, *detail, *beta)
 	p := tea.NewProgram(&m, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
@@ -45,12 +46,12 @@ func launchFluxDB(installDir string, logger *log.Logger) {
 	}
 }
 
-func runSilent(customTag, customPath string, startAfter bool, logger *log.Logger) {
+func runSilent(customTag, customPath string, startAfter bool, includeBeta bool, logger *log.Logger) {
 	var tag string
 	if customTag != "" {
 		tag = customTag
 	} else {
-		msg := fetchLatestTagCmd()()
+		msg := fetchLatestTagCmd(includeBeta)()
 		switch m := msg.(type) {
 		case tagFetchedMsg:
 			tag = m.tag

@@ -48,13 +48,24 @@ namespace FluxDB.Views
         {
             if (App.IsUpdateAvailable)
             {
-                txtUpdateStatus.Text = $"Update available: {App.AvailableVersion}";
-                txtUpdateStatus.Foreground = Brushes.Orange;
-                btnDownloadUpdate.Visibility = Visibility.Visible;
-
                 if (App.IsBetaUpdate)
                 {
+                    txtUpdateStatus.Text = $"Beta available: {App.AvailableVersion}";
+                    txtUpdateStatus.Foreground = Brushes.Orange;
                     txtBetaWarning.Visibility = Visibility.Visible;
+                    btnDownloadUpdate.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    txtUpdateStatus.Text = $"Update available: {App.AvailableVersion}";
+                    txtUpdateStatus.Foreground = Brushes.Orange;
+                    btnDownloadUpdate.Visibility = Visibility.Visible;
+                }
+
+                if (App.AvailableBetaVersion != null && !App.IsBetaUpdate)
+                {
+                    txtUpdateDetails.Text = $"Also: Beta {App.AvailableBetaVersion} available";
+                    txtUpdateDetails.Visibility = Visibility.Visible;
                 }
             }
             else
@@ -69,7 +80,7 @@ namespace FluxDB.Views
                 txtUpdateDetails.Text = "Program started with --noupdate. Auto-update was skipped.";
                 txtUpdateDetails.Visibility = Visibility.Visible;
             }
-            else
+            else if (App.AvailableBetaVersion == null || App.IsBetaUpdate)
             {
                 txtUpdateDetails.Visibility = Visibility.Collapsed;
             }
@@ -123,7 +134,13 @@ namespace FluxDB.Views
 
                 btnDownloadUpdate.Content = "Starting installer...";
 
-                var startInfo = new System.Diagnostics.ProcessStartInfo(installerPath, "--silent-start")
+                var args = "--silent-start";
+                if (App.IsBetaUpdate)
+                {
+                    args += " --beta";
+                }
+
+                var startInfo = new System.Diagnostics.ProcessStartInfo(installerPath, args)
                 {
                     WorkingDirectory = exeDir,
                     UseShellExecute = true
