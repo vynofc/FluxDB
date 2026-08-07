@@ -25,6 +25,12 @@ namespace FluxDB.ViewModels
         [ObservableProperty]
         private string _availableVersion;
 
+        [ObservableProperty]
+        private bool _isBetaUpdate;
+
+        [ObservableProperty]
+        private string _betaWarning = "";
+
         public SettingsViewModel(SettingsService settingsService, ExportService exportService,
             DatabaseService databaseService, ImportService importService)
         {
@@ -40,6 +46,8 @@ namespace FluxDB.ViewModels
 
             IsUpdateAvailable = App.IsUpdateAvailable;
             AvailableVersion = App.AvailableVersion;
+            IsBetaUpdate = App.IsBetaUpdate;
+            BetaWarning = IsBetaUpdate ? "⚠ This is a beta update!" : "";
             UpdateStatus = IsUpdateAvailable
                 ? $"Update available: {AvailableVersion}"
                 : "Your version is up to date.";
@@ -56,9 +64,12 @@ namespace FluxDB.ViewModels
         [RelayCommand]
         private void DownloadUpdate()
         {
+            var url = App.IsBetaUpdate && !string.IsNullOrEmpty(App.AvailableTag)
+                ? $"https://github.com/vynofc/FluxDB/releases/tag/{App.AvailableTag}"
+                : "https://github.com/vynofc/FluxDB/releases/latest";
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
-                FileName = "https://github.com/vynofc/FluxDB/releases/latest",
+                FileName = url,
                 UseShellExecute = true
             });
         }

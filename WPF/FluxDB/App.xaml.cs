@@ -9,7 +9,9 @@ namespace FluxDB
     {
         public static bool IsUpdateAvailable { get; set; } = false;
         public static string AvailableVersion { get; set; } = "";
+        public static string AvailableTag { get; set; } = "";
         public static bool IsUpdateSkipped { get; set; } = false;
+        public static bool IsBetaUpdate { get; set; } = false;
 
         protected override void OnStartup(StartupEventArgs e)
         {

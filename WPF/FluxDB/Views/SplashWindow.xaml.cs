@@ -74,32 +74,9 @@ namespace FluxDB.Views
             try
             {
                 var settings = _settingsService.Load();
-                if (settings.AutoUpdateCheck)
-                {
-                    try
-                    {
-                        txtMessage.Text = "Checking for updates...";
-                        LoggingService.Log("Startup: Checking for updates");
-                        var ok = await CheckForUpdatesAsync();
-                        if (!ok)
-                        {
-                            LoggingService.Log("Startup: Installer started, shutting down app");
-                            Application.Current.Shutdown();
-                            return;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LoggingService.Log($"Update check failed: {ex.Message}");
-                    }
-                }
-                else
-                {
-                    LoggingService.Log("Startup: AutoUpdateCheck disabled, skipping update check");
-                }
 
                 txtMessage.Text = "Starting application...";
-                await Task.Delay(250);
+                await Task.Delay(150);
 
                 var main = new MainWindow();
                 Application.Current.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
@@ -108,6 +85,27 @@ namespace FluxDB.Views
                 Close();
                 Application.Current.MainWindow = main;
                 Application.Current.ShutdownMode = System.Windows.ShutdownMode.OnMainWindowClose;
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        LoggingService.Log("Startup: Checking for updates (background)");
+                        var ok = await CheckForUpdatesAsync(autoInstall: settings.AutoUpdateCheck);
+                        if (!ok)
+                        {
+                            Dispatcher.Invoke(() =>
+                            {
+                                LoggingService.Log("Startup: Installer started, shutting down app");
+                                Application.Current.Shutdown();
+                            });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LoggingService.Log($"Update check failed: {ex.Message}");
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -117,7 +115,7 @@ namespace FluxDB.Views
             }
         }
 
-        private async Task<bool> CheckForUpdatesAsync()
+        private async Task<bool> CheckForUpdatesAsync(bool autoInstall = true)
         {
             try
             {
@@ -129,7 +127,7 @@ namespace FluxDB.Views
                 var assembly = Assembly.GetExecutingAssembly();
                 var exeDir = Path.GetDirectoryName(assembly.Location) ?? ".";
 
-                LoggingService.LogDebug($"CheckForUpdatesAsync: localVersion={localVersionStr} exeDir={exeDir} skipUpdate={skipUpdate}");
+                LoggingService.LogDebug($"CheckForUpdatesAsync: localVersion={localVersionStr} exeDir={exeDir} skipUpdate={skipUpdate} autoInstall={autoInstall}");
 
                 var latestTag = await FetchLatestReleaseTagAsync();
                 if (latestTag == null) return true;
@@ -140,8 +138,24 @@ namespace FluxDB.Views
 
                 if (cmp <= 0) return true;
 
+                bool isBeta = latestTag.Contains("-beta", StringComparison.OrdinalIgnoreCase);
+
                 App.IsUpdateAvailable = true;
                 App.AvailableVersion = remoteVersion;
+                App.AvailableTag = latestTag;
+                App.IsBetaUpdate = isBeta;
+
+                if (!autoInstall)
+                {
+                    LoggingService.Log($"Update available ({latestTag}) but auto-install is disabled.");
+                    return true;
+                }
+
+                if (isBeta)
+                {
+                    LoggingService.Log($"Beta update available ({latestTag}), skipping auto-install.");
+                    return true;
+                }
 
                 if (skipUpdate)
                 {
@@ -177,7 +191,7 @@ namespace FluxDB.Views
             {
                 using (var http = new HttpClient())
                 {
-                    http.Timeout = TimeSpan.FromSeconds(15);
+                    http.Timeout = TimeSpan.FromSeconds(8);
                     http.DefaultRequestHeaders.UserAgent.ParseAdd("FluxDB");
                     http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 

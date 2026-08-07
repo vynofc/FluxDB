@@ -60,9 +60,11 @@
                                     <TextBlock x:Name="txtUpdateStatus" Text="Checking for updates..." FontSize="14"/>
                                     <TextBlock x:Name="txtUpdateDetails" FontSize="11" Opacity="0.6"
                                                Margin="0,5,0,0" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="txtBetaWarning" FontSize="11" Foreground="Orange"
+                                               Text="⚠ This is a beta update!" Margin="0,5,0,0" Visibility="Collapsed"/>
                                 </StackPanel>
                                 <ui:Button Grid.Column="1" x:Name="btnDownloadUpdate"
-                                           Content="Download Update" Appearance="Primary"
+                                           Content="Update Now" Appearance="Primary"
                                            Visibility="Collapsed" Click="BtnDownloadUpdate_Click"/>
                             </Grid>
                         </StackPanel>

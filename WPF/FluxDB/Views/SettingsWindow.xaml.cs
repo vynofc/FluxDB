@@ -7,6 +7,8 @@ using Microsoft.Win32;
 using System.Threading.Tasks;
 using System.IO.Compression;
 using System.IO;
+using System.Net.Http;
+using System.Reflection;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 
@@ -49,6 +51,11 @@ namespace FluxDB.Views
                 txtUpdateStatus.Text = $"Update available: {App.AvailableVersion}";
                 txtUpdateStatus.Foreground = Brushes.Orange;
                 btnDownloadUpdate.Visibility = Visibility.Visible;
+
+                if (App.IsBetaUpdate)
+                {
+                    txtBetaWarning.Visibility = Visibility.Visible;
+                }
             }
             else
             {
@@ -81,9 +88,104 @@ namespace FluxDB.Views
             Close();
         }
 
-        private void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
+        private async void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
         {
-            System.Diagnostics.Process.Start("https://github.com/vynofc/FluxDB/releases/latest");
+            try
+            {
+                btnDownloadUpdate.IsEnabled = false;
+                btnDownloadUpdate.Content = "Downloading...";
+
+                var tag = App.AvailableTag;
+                if (string.IsNullOrEmpty(tag))
+                {
+                    var latestTag = await FetchLatestReleaseTagAsync();
+                    if (latestTag == null)
+                    {
+                        MessageBox.Show("Could not fetch latest release information.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                    tag = latestTag;
+                }
+
+                var assembly = Assembly.GetExecutingAssembly();
+                var exeDir = Path.GetDirectoryName(assembly.Location) ?? ".";
+                var installerPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
+
+                if (!File.Exists(installerPath))
+                {
+                    var downloaded = await DownloadInstallerAsync(exeDir, tag);
+                    if (!downloaded)
+                    {
+                        MessageBox.Show("Failed to download installer.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                }
+
+                btnDownloadUpdate.Content = "Starting installer...";
+
+                var startInfo = new System.Diagnostics.ProcessStartInfo(installerPath, "--silent-start")
+                {
+                    WorkingDirectory = exeDir,
+                    UseShellExecute = true
+                };
+                using (var proc = System.Diagnostics.Process.Start(startInfo)) { }
+
+                Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Log($"BtnDownloadUpdate_Click failed: {ex.Message}");
+                MessageBox.Show("Update failed: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                btnDownloadUpdate.IsEnabled = true;
+                btnDownloadUpdate.Content = "Update Now";
+            }
+        }
+
+        private async Task<string> FetchLatestReleaseTagAsync()
+        {
+            try
+            {
+                using (var http = new HttpClient())
+                {
+                    http.Timeout = TimeSpan.FromSeconds(8);
+                    http.DefaultRequestHeaders.UserAgent.ParseAdd("FluxDB");
+                    http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+
+                    var response = await http.GetAsync("https://api.github.com/repos/vynofc/FluxDB/releases/latest");
+                    if (!response.IsSuccessStatusCode) return null;
+
+                    var json = await response.Content.ReadAsStringAsync();
+                    var release = JsonConvert.DeserializeObject<GitHubRelease>(json);
+                    return release?.TagName;
+                }
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Log($"FetchLatestReleaseTagAsync failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        private async Task<bool> DownloadInstallerAsync(string exeDir, string tag)
+        {
+            try
+            {
+                var url = $"https://github.com/vynofc/FluxDB/releases/download/{tag}/FluxDB-Installer.exe";
+                var destPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
+
+                using (var http = new HttpClient())
+                {
+                    http.Timeout = TimeSpan.FromMinutes(5);
+                    var bytes = await http.GetByteArrayAsync(url);
+                    await File.WriteAllBytesAsync(destPath, bytes);
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Log($"DownloadInstallerAsync failed: {ex.Message}");
+                return false;
+            }
         }
 
         private async void BtnExport_Click(object sender, RoutedEventArgs e)
