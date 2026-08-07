@@ -87,7 +87,7 @@
 
             <!-- Navigation Bar -->
             <Border Grid.Row="1" Padding="20,10"
-                    Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -124,6 +124,7 @@
                             <ComboBoxItem Content="Documents"/>
                             <ComboBoxItem Content="Archives"/>
                             <ComboBoxItem Content="Code"/>
+                            <ComboBoxItem Content="Tags"/>
                         </ComboBox>
                     </StackPanel>
                 </Grid>
@@ -131,7 +132,7 @@
 
             <!-- Search Bar -->
             <Border Grid.Row="2" Padding="20,10"
-                    Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>

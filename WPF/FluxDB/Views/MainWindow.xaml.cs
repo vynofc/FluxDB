@@ -534,6 +534,7 @@ namespace FluxDB.Views
                 case "Documents": return DocumentExtensions.Contains(ext);
                 case "Archives": return ArchiveExtensions.Contains(ext);
                 case "Code": return CodeExtensions.Contains(ext);
+                case "Tags": return entry.Tags.Count > 0;
                 default: return true;
             }
         }
@@ -1224,6 +1225,12 @@ namespace FluxDB.Views
             var items = new List<FileEntry>();
             var currentFolder = _currentViewFolder;
 
+            HashSet<string> taggedDirectories = null;
+            if (_currentFilter == "Tags")
+            {
+                taggedDirectories = await Task.Run(() => _databaseService.GetDirectoriesWithTaggedFiles(currentFolder));
+            }
+
             var directories = await Task.Run(() =>
             {
                 try
@@ -1238,6 +1245,9 @@ namespace FluxDB.Views
 
             foreach (var dir in directories)
             {
+                if (taggedDirectories != null && !taggedDirectories.Contains(dir))
+                    continue;
+
                 var dirInfo = new DirectoryInfo(dir);
                 items.Add(new FileEntry
                 {

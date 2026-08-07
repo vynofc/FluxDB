@@ -335,6 +335,36 @@ namespace FluxDB.Services
             return files;
         }
 
+        public HashSet<string> GetDirectoriesWithTaggedFiles(string folderPath)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
+            var sql = @"
+                SELECT DISTINCT f.path
+                FROM files f
+                INNER JOIN file_tags ft ON f.id = ft.file_id
+                WHERE f.deleted = 0 AND f.path LIKE @folderPrefix";
+
+            using (var cmd = new SQLiteCommand(sql, _connection))
+            {
+                cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        var fullPath = r.GetString(0);
+                        var relative = fullPath.Substring(prefix.Length);
+                        var slashIdx = relative.IndexOf('\\');
+                        if (slashIdx > 0)
+                        {
+                            result.Add(prefix + relative.Substring(0, slashIdx));
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
         public void UpdateFilePathAndName(int fileId, string newPath, string newName)
         {
             using (var cmd = new SQLiteCommand("UPDATE files SET path=@p,name=@n,extension=@e WHERE id=@id", _connection))
