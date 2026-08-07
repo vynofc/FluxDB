@@ -4,15 +4,15 @@
 
 FluxDB besteht aus drei Komponenten:
 
-1. **WPF-App** unter [WPF/FluxDB](WPF/FluxDB/) – Windows-Desktopanwendung mit Dateisuche, Indizierung, Tags, Vorschau und Einstellungen. Nutzt MVVM mit `CommunityToolkit.Mvvm`, DI über `Microsoft.Extensions.Hosting`, und `WPF-UI` (wpfui) für Fluent-Design.
-2. **Installer** unter [Installer](Installer/) – Go-basierter TUI-Installer für die Verteilung.
-3. **Log-Viewer** unter [Log_Viewer](Log_Viewer/) – separater Viewer für Anwendungs- und Indexierungs-Logs.
+1. **WPF-App** unter `WPF/FluxDB/` — Windows-Desktopanwendung mit Dateisuche, Indizierung, Tags, Vorschau und Einstellungen. Nutzt MVVM mit `CommunityToolkit.Mvvm`, `WPF-UI` (wpfui) für Fluent-Design, und SQLite via `System.Data.SQLite.Core`.
+2. **Installer** unter `Installer/` — Go-basierter TUI-Installer (Bubble Tea) für die Verteilung.
+3. **Log-Viewer** unter `Log_Viewer/` — Go-basierter TUI-Viewer (Bubble Tea) für Anwendungs- und Indexierungs-Logs.
 
 **Wichtige Einschränkung:** Das Projekt ist Windows-only und verwendet WPF, COM-Interop sowie feste Pfade wie `C:\NSCE\FluxDB`.
 
 **Anmerkung zur Ordnerstruktur:** Der `FluxDB/` Ordner auf Repo-Root-Ebene (nicht `WPF/FluxDB/`) enthält nur Icon-Dateien und eine `packages.config` — das sind Artefakte der alten Struktur. Die eigentliche WPF-App liegt unter `WPF/FluxDB/`.
 
-**Devcontainer:** Es gibt eine `.devcontainer/devcontainer.json` Konfiguration mit einem Universal-Image, PowerShell-Extensions und dotnet SDKs (8.0, 9.0, 10.0). Diese kann für VS Code Remote Development verwendet werden.
+**Devcontainer:** `.devcontainer/devcontainer.json` konfiguriert ein Universal-Image mit PowerShell-Extensions und dotnet SDKs (8.0, 9.0, 10.0). Kann für VS Code Remote Development verwendet werden.
 
 ---
 
@@ -37,7 +37,7 @@ build.bat 2        # Build WPF only
 build.bat 5        # Full release package (WPF + Installer + Log Viewer + ZIP)
 ```
 
-Ausgabe: [bin](bin/) mit `FluxDB.exe`, `FluxDB-Installer.exe`, `components/Log_Viewer.exe`, `x64/SQLite.Interop.dll`, `x86/SQLite.Interop.dll` und `FluxDB.zip` nach dem Full-Build.
+Ausgabe: `bin/` mit `FluxDB.exe`, `FluxDB-Installer.exe`, `components/Log_Viewer.exe`, `x64/SQLite.Interop.dll`, `x86/SQLite.Interop.dll` und `FluxDB.zip` nach dem Full-Build.
 
 ### Installer (Go)
 
@@ -64,7 +64,7 @@ go build -ldflags="-s -w" -o ..\bin\components\Log_Viewer.exe .
 | `build-wpf.yml` | Push/PR auf `main` (Änderungen in `WPF/`) | `dotnet publish` der WPF-App |
 | `build-installer.yml` | Push/PR auf `main` (Änderungen in `Installer/`) | Baut den Go-Installer |
 | `build-log-viewer.yml` | Push/PR auf `main` (Änderungen in `Log_Viewer/`) | Baut den Go Log-Viewer |
-| `release.yml` | Veröffentlichtes Release | Baut WPF-App, Installer und Log-Viewer, erzeugt `FluxDB.zip` |
+| `release.yml` | Veröffentlichtes Release | Baut WPF-App, Installer und Log-Viewer, erzeugt `FluxDB.zip` und `FluxDB-Installer.exe` als Release-Assets |
 | `issue-triage.yml` | Issue-Opening | Auto-labeling of issues |
 | `issue-cleanup.yml` | Issue-Closing | Löscht alle Branches des Issues |
 
@@ -77,70 +77,100 @@ go build -ldflags="-s -w" -o ..\bin\components\Log_Viewer.exe .
 | Komponente | Paket |
 |---|---|
 | MVVM-Toolkit | `CommunityToolkit.Mvvm` 8.4.0 |
-| DI/Hosting | `Microsoft.Extensions.Hosting` 10.0.0 |
+| DI/Hosting | `Microsoft.Extensions.DependencyInjection` + `Microsoft.Extensions.Hosting` 10.0.0 |
 | UI-Framework | `WPF-UI` (wpfui) 4.2.0 |
 | JSON | `Newtonsoft.Json` 13.0.3 |
 | SQLite | `System.Data.SQLite.Core` 1.0.119.0 |
 | Target | `net10.0-windows7.0` (SDK-style `.csproj`) |
+| Runtime | `win-x64`, `SelfContained=false` |
 
-### Startup-Flow
+### Wichtiger Architektur-Hinweis: DI ist definiert, aber nicht verwendet
 
-1. `App.OnStartup` (App.xaml.cs:21) — erstellt `IHost` via `Microsoft.Extensions.Hosting`, ruft `AddFluxDB()` auf, setzt Theme via `ApplicationThemeManager.Apply()`, zeigt `SplashWindow`
-2. `SplashWindow.OnLoaded` — prüft auf Updates (GitHub Releases API), startet `MainWindow` per DI (`App.Host.Services.GetRequiredService<MainWindow>()`)
-3. `MainWindow` — `FluentWindow` mit `NavigationView`-Sidebar, lädt initialen Ordner via `MainViewModel.LoadInitialData()`
+`ServiceExtensions.AddFluxDB()` registriert alle Services, ViewModels, und Pages als Singletons. **Diese Registrierung wird jedoch aktuell nicht von `App.OnStartup` aufgerufen.** Das `App.xaml.cs` überschreibt `OnStartup` nur für Debug-Mode-Erkennung — es erstellt keinen `IHost`.
 
-### Dependency Injection (ServiceExtensions.cs)
+Der tatsächliche Startup-Flow arbeitet komplett ohne DI:
 
-`ServiceExtensions.AddFluxDB()` registriert alle Services, ViewModels, und Pages als Singletons:
+1. `App.xaml` hat `StartupUri="Views/SplashWindow.xaml"` — WPF instanziiert `SplashWindow` direkt
+2. `SplashWindow` erstellt `new SettingsService()` direkt im Konstruktor
+3. `SplashWindow_Loaded` erstellt `new MainWindow()` direkt (nicht via DI)
+4. `MainWindow`-Konstruktor erstellt `new SettingsService()`, `new DatabaseService()`, etc. selbst
 
+**Das bedeutet:** `ServiceExtensions`, `MainViewModel`, `NavigationViewModel`, `DashboardViewModel`, `SettingsViewModel` sind im Code vorhanden und korrekt strukturiert, werden aber aktuell nicht vom tatsächlichen Startup-Pfad verwendet. `MainWindow` hat seine eigene Navigation, Clipboard- und Indexing-Logik im Code-Behind.
+
+Falls in Zukunft auf DI umgestellt wird, muss `App.OnStartup` einen `IHost` erstellen:
+```csharp
+Host = Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
+    .ConfigureServices((ctx, services) => services.AddFluxDB())
+    .Build();
 ```
-Services: SettingsService, DatabaseService, IndexerService, ExportService, ImportService
-ViewModels: MainViewModel, SettingsViewModel, NavigationViewModel, DashboardViewModel
-Windows/Pages: MainWindow, SettingsWindow, DashboardPage, FileBrowserPage
-WPF-UI: ISnackbarService, IContentDialogService
-```
+Und `SplashWindow` muss `MainWindow` via `Host.Services.GetRequiredService<MainWindow>()` auflösen.
 
-`DatabaseService` wird per Factory erstellt — der DB-Pfad kommt aus `SettingsService.Load().LastRootFolder` (oder fallback `MyDocuments`).
+### Tatsächlicher Startup-Flow
 
-### Navigation
+1. `App.OnStartup` (App.xaml.cs) — erkennt Debug-Mode (`-debug` suffix in version.txt), setzt `LoggingService.SetDebugMode()`
+2. `SplashWindow` — lädt Icon, prüft auf Updates (GitHub Releases API), erstellt `new MainWindow()` und zeigt es
+3. `MainWindow`-Konstruktor — erstellt Services selbst, lädt Icons, ruft `InitializeServices()` und `LoadInitialData()` auf
+4. `LoadInitialData()` — liest `LastRootFolder` aus `SettingsService`, öffnet den zuletzt verwendeten Ordner mit existierendem Index oder zeigt "Ready"
 
-- `MainWindow` enthält ein `NavigationView` mit Sidebar-Items: **Home** (DashboardPage), **File Browser** (FileBrowserPage), **Theme** (Toggle), **Settings** (SettingsWindow als Dialog)
-- `NavigationViewModel` verwaltet Back/Forward/Up-History (max 50 Einträge) und Breadcrumbs
-- `DashboardViewModel` sendet `FolderOpenedMessage` via `WeakReferenceMessenger` — `MainViewModel` subscribed und ruft `OpenFolderAsync` auf
-- `MainViewModel` hält die `NavigationViewModel`-Instanz und delegiert `SetRootFolder`/`NavigateTo`
+### MainWindow Struktur
 
-### ViewModels
+`MainWindow` ist ein `FluentWindow` mit folgendem Layout (alles im Code-Behind, nicht via MVVM-DataBinding):
+
+- **Header** — "FluxDB" Titel, aktueller Ordner-Pfad, Select Folder / Refresh / Settings Buttons
+- **Navigation Bar** — Back/Forward/Up Buttons (mit `IsEnabled`-Steuerung), Breadcrumbs (dynamisch generiertes `StackPanel`), Filter-ComboBox
+- **Search Bar** — TextBox + Search/Clear Buttons
+- **Main Content** — links `DataGrid` für Dateien (mit `SelectionMode="Extended"`), rechts Detail-Panel (Tags, Notes, Preview)
+- **Status Bar** — Status-Text, File-Count, Indexing-Progress
+
+### Navigation (Code-Behind)
+
+`MainWindow` verwaltet Navigation **selbst** (nicht über `NavigationViewModel`):
+
+- `_backHistory` / `_forwardHistory` als `Stack<string>` (max 50 Einträge)
+- `_currentRootFolder` / `_currentViewFolder` für den aktuellen Zustand
+- `NavigateToFolder()` aktualisiert History, Breadcrumbs, und lädt die Dateiliste neu
+- Breadcrumbs werden als `TextBlock`-Elemente mit `Click`-Handler dynamisch ins `pnlBreadcrumbs`-StackPanel eingefügt
+- Keyboard-Shortcuts: Alt+Left/Right/Up, Backspace, Enter, F5, Ctrl+F, F8 (Log-Viewer)
+
+### Clipboard & File Operations (Code-Behind)
+
+Alle Datei-Operationen sind im `MainWindow.xaml.cs` implementiert:
+
+- **Ctrl+C/X/V** — Copy/Cut/Paste mit Windows `Clipboard` API und `StringCollection`/`FileDropList`
+- **Delete** — Löscht Dateien (mit Bestätigungsdialog) und markiert sie in der DB als `deleted=1`
+- **F2** — Rename über `RenameDialog`
+- **Drag & Drop** — `Window_Drop` Handler öffnet Ordner per Drag & Drop
+- **New Folder** — Erstellt Ordner im aktuellen Verzeichnis
+
+### ViewModels (derzeit nicht vom UI verwendet)
+
+Diese ViewModels sind vollständig implementiert, aber nicht mit dem aktuellen `MainWindow` verdrahtet:
 
 | ViewModel | Responsibility |
 |---|---|
-| `MainViewModel` | Primäres VM: Dateiliste, Suche, Filter, Preview, Tags/Notes, Indexing, Clipboard-Operationen. Enthält `NavigationViewModel` als Property. |
-| `NavigationViewModel` | Back/Forward/Up-Navigation, Breadcrumbs, History-Stacks |
-| `DashboardViewModel` | Recent Folders, "Open Folder"-Button, sendet `FolderOpenedMessage` |
+| `MainViewModel` | Dateiliste, Suche, Filter, Preview, Tags/Notes, Indexing, Clipboard-Operationen. Enthält `NavigationViewModel` als Property. |
+| `NavigationViewModel` | Back/Forward/Up-Navigation (Stacks), Breadcrumbs, `Navigated` Event |
+| `DashboardViewModel` | Recent Folders, "Open Folder"-Button, sendet `FolderOpenedMessage` via `WeakReferenceMessenger` |
 | `SettingsViewModel` | Update-Check, Auto-Update-Toggle, Export/Import |
 
-### Pages
+### Pages und Controls
 
-| Page | Description |
+| Component | Description |
 |---|---|
 | `DashboardPage` | Startseite mit "Open Folder"-Button und Recent-Folders-Liste |
-| `FileBrowserPage` | Dateiliste mit Filter-ComboBox, Toolbar, Back/Forward/Up. Nutzt `MainViewModel` als DataContext. |
-
-### Views (Windows)
-
-| Window | Description |
-|---|---|
-| `MainWindow` | `FluentWindow` mit `NavigationView`, TitleBar-Suche, Drag&Drop. Delegiert Tastatur-Shortcuts an `MainViewModel`-Commands. |
-| `SettingsWindow` | `FluentWindow`-Dialog mit Update-Prüfung, Export/Import, Theme-Toggle |
-| `SplashWindow` | `FluentWindow`-Splash mit Update-Check und Übergang zu `MainWindow` |
+| `FileBrowserPage` | Dateiliste mit Filter-ComboBox, Toolbar, Back/Forward/Up |
+| `PreviewPanel` | UserControl für Image/Text/No-Preview Anzeige |
+| `RefreshDialog` | Dialog zum Bestätigen der Index-Aktualisierung |
+| `RenameDialog` | Dialog zum Umbenennen von Dateien |
 
 ### WPF Services
 
 | File | Responsibility |
 |---|---|
-| `DatabaseService.cs` | SQLite CRUD: file index, tags, notes, folder path updates, search, batch delete marking. Nutzt WAL-Mode, NORMAL synchronous, 8MB cache. |
-| `IndexerService.cs` | File system scanning, batched indexing (1000 files/batch), progress reporting, deleted file detection |
-| `LoggingService.cs` | Static logger with in-memory buffer (max 2000 lines), background file writes via `ThreadPool`, debug mode toggle |
-| `SettingsService.cs` | JSON settings (`%LOCALAPPDATA%\FluxDB\settings.json`): recent folders, theme, auto-update, device ID. Max 10 recent folders. |
+| `DatabaseService.cs` | SQLite CRUD: file index, tags, notes, folder path updates, search, batch delete marking. Nutzt WAL-Mode, `synchronous=NORMAL`, 8MB cache. |
+| `IndexerService.cs` | File system scanning, batched indexing (1000 files/batch), progress reporting, deleted file detection. Verwendet iterative `Stack<string>`-Enumeration statt Rekursion. |
+| `LoggingService.cs` | **Static** logger mit in-memory buffer (max 2000 lines), background file writes via `ThreadPool` und dedizierter `_writeQueue` mit `ProcessWriteQueue`-Loop. Logs nach `%LOCALAPPDATA%\FluxDB\logs.txt`. |
+| `SettingsService.cs` | JSON settings (`%LOCALAPPDATA%\FluxDB\settings.json`): recent folders (max 10), theme, auto-update, device ID, per-folder filter state. |
 | `ExportService.cs` | Export index to JSON or GZIP via `Newtonsoft.Json` |
 | `ImportService.cs` | Import index from JSON or GZIP, upserts files/tags/notes in a transaction |
 
@@ -148,9 +178,9 @@ WPF-UI: ISnackbarService, IContentDialogService
 
 | Model | Description |
 |---|---|
-| `FileEntry` | ObservableObject mit Icon-Lookup, Size-Display, Type-Display. Cached `IconSymbol` und `SizeDisplay`. |
-| `AppSettings` | `LastRootFolder`, `AutoUpdateCheck`, `Theme` (Dark/Light), `RecentFolders`, `FolderFilters` (per-folder filter state) |
-| `GitHubRelease` | JSON deserialization target for GitHub API |
+| `FileEntry` | `ObservableObject` mit `IconSymbol` (WPF-UI `SymbolRegular`), `SizeDisplay` (human-readable), `TypeDisplay`, `IconColorBrush`. Cached icon/size mit `_cacheValid` flag. `Tags` als `List<string>`, `TagsText` als nullbyte-separierter String. |
+| `AppSettings` | `LastRootFolder`, `AutoUpdateCheck` (default `false`), `Theme` (Dark/Light), `RecentFolders`, `FolderFilters` (per-folder filter state) |
+| `GitHubRelease` | JSON deserialization target for GitHub API (`TagName`) |
 
 ### Converters
 
@@ -172,16 +202,16 @@ SQLite database file named `.fluxdb` lives in the root of the indexed folder:
 
 ### Version handling
 
-- `version.txt` at repo root (currently `1.1.0`) drives the assembly version via an MSBuild `BeforeBuild` target that generates `Properties/AssemblyVersion.cs`
+- `version.txt` at repo root (currently `1.0.5`) drives the assembly version via an MSBuild `BeforeBuild` target that generates `Properties/AssemblyVersion.cs`
 - `App.GetLocalVersion()` reads `version.txt` from the app directory, falls back to `AssemblyInformationalVersionAttribute`
 - Debug mode is auto-detected: if the local version ends with `-debug`, `LoggingService.SetDebugMode(true)` is called
 - Version strings use `VersionHelper.CompareVersions` for comparison — strips `v` prefix, `!beta` suffix, handles `x.y.z-suffix` semver
 
 ### Theme handling
 
-- `App.ApplyTheme()` reads `settings.Theme` ("Dark"/"Light") and calls `ApplicationThemeManager.Apply()`
-- `App.ToggleTheme()` switches between Dark/Light and persists to settings
 - `App.xaml` merges WPF-UI resource dictionaries: `<ui:ThemesDictionary Theme="Dark" />` and `<ui:ControlsDictionary />`
+- `ApplicationThemeManager.Apply()` is the only way to change themes. Do not manipulate `ResourceDictionary` directly.
+- `SettingsService` speichert `Theme` ("Dark"/"Light") in `settings.json`
 
 ---
 
@@ -256,6 +286,11 @@ stateDownloading → stateExtracting → stateAskShortcut → stateDone
 | `github.com/charmbracelet/lipgloss` | Terminal styling |
 | `github.com/charmbracelet/log` | Structured logging |
 
+### Go version
+
+- Installer: `go 1.26.1` (module path: `github.com/vynofc/FluxDB/Installer`)
+- Log-Viewer: `go 1.24.0` (module path: `github.com/vynofc/FluxDB/LogViewer`)
+
 ### What the installer does NOT do
 
 - No auto-update (FluxDB handles this via `SplashWindow`)
@@ -272,6 +307,7 @@ stateDownloading → stateExtracting → stateAskShortcut → stateDone
 | `model.go` | Model struct, state, message types |
 | `update.go` | Update function, key handling, log tailing |
 | `view.go` | Rendering, log line parsing/styling |
+| `styles.go` | Lipgloss styles |
 
 ### Tail behavior
 
@@ -290,11 +326,11 @@ stateDownloading → stateExtracting → stateAskShortcut → stateDone
 
 ### Database file location
 
-The database file `.fluxdb` is stored **inside the indexed folder**, not in `%LocalAppData%`. This means each root folder has its own independent index. `SettingsService` does not store the DB path — `MainViewModel.OpenFolderAsync` constructs it as `Path.Combine(folderPath, ".fluxdb")` and creates a new `DatabaseService` instance each time a folder is opened.
+The database file `.fluxdb` is stored **inside the indexed folder**, not in `%LocalAppData%`. This means each root folder has its own independent index. `DatabaseService` gets the DB path directly from the folder path.
 
 ### Database lifecycle
 
-When opening a new folder, `MainViewModel.OpenFolderAsync` **disposes the old `DatabaseService`** and creates a new one. It also re-subscribes `IndexerService` events. This means any code that holds a reference to `DatabaseService` or `IndexerService` will have stale references after a folder switch. Always re-resolve from DI or use the `MainViewModel.InitializeServices()` pattern.
+When opening a new folder, `MainWindow.InitializeDatabaseForFolder()` **disposes the old `DatabaseService`** and creates a new one. It also re-subscribes `IndexerService` events. Any code that holds a reference to `DatabaseService` or `IndexerService` will have stale references after a folder switch.
 
 ### Batch commits in IndexerService
 
@@ -302,7 +338,7 @@ When opening a new folder, `MainViewModel.OpenFolderAsync` **disposes the old `D
 
 ### Thread safety
 
-- `LoggingService` uses a `lock` and `ThreadPool.QueueUserWorkItem` for background file writes. It also has a `_writeQueue` with a dedicated processing loop.
+- `LoggingService` is a **static class** with a `lock` and `ThreadPool.QueueUserWorkItem` for background file writes. It uses a `_writeQueue` with a dedicated `ProcessWriteQueue` processing loop.
 - `DatabaseService` has a single `SQLiteConnection` — all DB access is serial (no connection pooling). SQLite writes are not thread-safe; ensure all DB operations happen on the same thread or serialize access.
 
 ### SQLite interop DLLs
@@ -320,15 +356,26 @@ When opening a new folder, `MainViewModel.OpenFolderAsync` **disposes the old `D
 
 - Windows extend `FluentWindow` (not `Window`). This provides Mica backdrop, rounded corners, and titlebar integration.
 - `ApplicationThemeManager.Apply()` is the only way to change themes. Do not manipulate `ResourceDictionary` directly.
-- `NavigationView` is used for sidebar navigation. `NavigationViewItem.Tag` is a string used for routing in `NavView_SelectionChanged`.
-- `ISnackbarService` and `IContentDialogService` are available via DI.
+- XAML namespace: `xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"`
+- `ISnackbarService` and `IContentDialogService` are available via DI, but DI is not currently wired.
+- `SymbolRegular` enum values can change between wpfui versions. Verify the symbol exists in the version you're targeting (e.g., `FolderAdd24` doesn't exist in 4.2.0 — use `Folder24` instead).
 
-### DI and service lifetime
+### Code-behind pattern (current architecture)
 
-All services, ViewModels, and Pages are registered as **singletons** in `ServiceExtensions.AddFluxDB()`. This means:
-- `DatabaseService` is a singleton but gets replaced at runtime when a new folder is opened (not via DI re-resolution, but via `MainViewModel` creating a new instance directly).
-- `MainWindow` is a singleton — it's created once and shown/hidden, never recreated.
-- `SettingsWindow` is a singleton but shown as a modal dialog — don't store state between shows.
+The current `MainWindow` uses a **code-behind** pattern, not pure MVVM data-binding:
+- Button clicks use `Click="BtnBack_Click"` handlers, not `Command` bindings
+- Navigation state (`_backHistory`, `_forwardHistory`) is in the Window class, not a ViewModel
+- `DataGrid` has `SelectionChanged`, `MouseDoubleClick`, `Sorting` event handlers in code-behind
+- `DataContext` is not set to any ViewModel — the Window manages its own state
+- Filter changes are handled via `CmbFilter_SelectionChanged` event, not a binding
+
+### FileEntry icon caching
+
+`FileEntry` has a manually managed cache (`_cacheValid`, `_cachedIconSymbol`, `_cachedSizeDisplay`) that is invalidated in `OnExtensionChanged`, `OnSizeChanged`, and `OnIsFolderChanged` partial methods. These partial methods are called by the CommunityToolkit source generator when the corresponding properties change. The computed properties (`IconSymbol`, `SizeDisplay`, `TypeDisplay`, `IconColorBrush`) use these caches for performance.
+
+### MVVMTK0034 warnings
+
+The computed properties in `FileEntry` reference the backing fields (`_isFolder`, `_extension`, `_size`) directly instead of the generated properties (`IsFolder`, `Extension`, `Size`). This generates compiler warnings but works correctly. The fields are used because the partial methods are triggered by the generated property setters, and the computed getters need the current value — using the generated properties would cause infinite recursion in some paths.
 
 ### Folder rename / delete must update DB
 
@@ -345,6 +392,22 @@ When renaming or deleting folders, the DB entries for all files under that path 
 - Skip with `--noupdate` CLI flag.
 - `App.IsUpdateAvailable` and `App.AvailableVersion` are static properties set by `SplashWindow`.
 
+### Logging
+
+- `LoggingService` is a **static** class. Use `LoggingService.Log(message)` for general logging, `LoggingService.LogDebug(message)` for debug-only messages.
+- Logs go to `%LOCALAPPDATA%\FluxDB\logs.txt`
+- `LoggingService.SetDebugMode(true)` is called when the version string ends with `-debug`
+- `LoggingService.GetLogs()` returns the in-memory buffer
+- `LoggingService.Shutdown()` flushes and disposes the writer — call on app exit
+
+### Settings
+
+- Settings file: `%LOCALAPPDATA%\FluxDB\settings.json`
+- `AutoUpdateCheck` defaults to `false`
+- `Theme` defaults to `"Dark"`
+- `RecentFolders` max 10, case-insensitive dedup
+- `FolderFilters` is a `Dictionary<string, string>` for per-folder filter persistence
+
 ---
 
 ## Conventions
@@ -352,7 +415,7 @@ When renaming or deleting folders, the DB entries for all files under that path 
 ### FluxDB (C# / WPF)
 
 - **Namespace**: `FluxDB` for UI/root, `FluxDB.Models` for models, `FluxDB.Services` for services, `FluxDB.ViewModels` for ViewModels, `FluxDB.Views` for windows, `FluxDB.Views.Pages` for pages, `FluxDB.Views.Controls` for controls, `FluxDB.Converters` for value converters, `FluxDB.Helpers` for helpers.
-- **Naming**: PascalCase for public, `_camelCase` for private fields. Controls use Hungarian-like prefixes (`txtSearch`, `btnRefresh`, `dgFiles`, `pnlProgress`).
+- **Naming**: PascalCase for public, `_camelCase` for private fields. Controls use Hungarian-like prefixes (`txtSearch`, `btnRefresh`, `dgFiles`, `pnlBreadcrumbs`, `cmbFilter`).
 - **Error handling**: Broad try-catch with silent swallowing is common. `LoggingService.Log()` is used to record errors.
 - **German UI**: Some UI strings and comments are in German (the project is German-authored).
 - **No async/await in constructors**: Services are initialized synchronously; async work is fire-and-forget or triggered by UI events.
@@ -366,3 +429,9 @@ When renaming or deleting folders, the DB entries for all files under that path 
 - **Error handling**: Errors propagated as Bubble Tea messages (`errMsg`), surfaced in TUI or stderr.
 - **German UI**: All user-facing strings are in German.
 - **Build**: `-ldflags="-s -w"` for stripped release binaries. Cross-compiled with `GOOS=windows GOARCH=amd64`.
+
+### Log-Viewer (Go)
+
+- **Package**: Single `main` package (no sub-packages).
+- **Naming**: Standard Go conventions.
+- **Build**: `-ldflags="-s -w"` for stripped release binaries.
