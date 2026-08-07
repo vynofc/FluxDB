@@ -112,8 +112,8 @@ namespace FluxDB.Models
         partial void OnExtensionChanged(string value)
         {
             _cacheValid = false;
-            OnPropertyChanged(nameof(Icon));
-            OnPropertyChanged(nameof(IconColor));
+            OnPropertyChanged(nameof(IconSymbol));
+            OnPropertyChanged(nameof(IconColorBrush));
             OnPropertyChanged(nameof(TypeDisplay));
         }
 
@@ -126,8 +126,8 @@ namespace FluxDB.Models
         partial void OnIsFolderChanged(bool value)
         {
             _cacheValid = false;
-            OnPropertyChanged(nameof(Icon));
-            OnPropertyChanged(nameof(IconColor));
+            OnPropertyChanged(nameof(IconSymbol));
+            OnPropertyChanged(nameof(IconColorBrush));
             OnPropertyChanged(nameof(SizeDisplay));
             OnPropertyChanged(nameof(TypeDisplay));
         }

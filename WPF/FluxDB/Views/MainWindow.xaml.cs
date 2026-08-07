@@ -20,10 +20,8 @@ namespace FluxDB.Views
             _settingsService = settingsService;
             _serviceProvider = serviceProvider;
 
-                DataContext = viewModel;
-                LoggingService.Log("MainWindow: DataContext set, calling InitializeComponent");
-                InitializeComponent();
-                LoggingService.Log("MainWindow: InitializeComponent done");
+            DataContext = viewModel;
+            LoggingService.Log("MainWindow: DataContext set");
 
             WindowBackdropType = WindowBackdropType.Mica;
             ExtendsContentIntoTitleBar = true;
@@ -31,10 +29,12 @@ namespace FluxDB.Views
 
             snackbarService.SetSnackbarPresenter(snackbarPresenter);
 
-                Loaded += OnLoaded;
-                Drop += Window_Drop;
-                DragOver += Window_DragOver;
+            Loaded += OnLoaded;
+            Drop += Window_Drop;
+            DragOver += Window_DragOver;
 
+            navView.SetCurrentValue(NavigationView.MenuItemsProperty, _viewModel.NavigationItems);
+            navView.SetCurrentValue(NavigationView.FooterMenuItemsProperty, _viewModel.FooterNavigationItems);
             navView.SelectionChanged += NavView_SelectionChanged;
         }
 
@@ -115,7 +115,7 @@ namespace FluxDB.Views
                     e.Handled = true;
                     break;
                 case Key.F when ctrl:
-                    txtSearch.Focus();
+                    Keyboard.Focus(navView);
                     e.Handled = true;
                     break;
                 case Key.C when ctrl && !shift:
