@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -114,5 +115,5 @@ func fetchLatestTagCmd(includeBeta bool) tea.Cmd {
 }
 
 func buildDownloadURL(tag string) string {
-	return fmt.Sprintf(downloadBaseURL, tag)
+	return fmt.Sprintf(downloadBaseURL, url.PathEscape(tag))
 }

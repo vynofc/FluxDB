@@ -187,7 +187,7 @@ namespace FluxDB.Views
         {
             try
             {
-                var url = $"https://github.com/vynofc/FluxDB/releases/download/{tag}/FluxDB-Installer.exe";
+                var url = $"https://github.com/vynofc/FluxDB/releases/download/{Uri.EscapeDataString(tag)}/FluxDB-Installer.exe";
                 var destPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
 
                 using (var http = new HttpClient())
