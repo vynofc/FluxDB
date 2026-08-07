@@ -9,15 +9,368 @@
     Title="FluxDB - File Database Manager"
     Height="750" Width="1400"
     WindowStartupLocation="CenterScreen"
+    WindowBackdropType="Mica"
+    ExtendsContentIntoTitleBar="True"
+    WindowCornerPreference="Round"
     AllowDrop="True"
+    Drop="Window_Drop"
+    DragOver="Window_DragOver"
     PreviewKeyDown="Window_PreviewKeyDown">
+
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
-        <ui:NavigationView x:Name="navView" Grid.Column="0"/>
-        <Frame x:Name="RootFrame" Grid.Column="1"/>
-        <ui:SnackbarPresenter x:Name="snackbarPresenter" />
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" />
+
+        <Grid Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Drop Overlay -->
+            <Border x:Name="dropOverlay" Grid.RowSpan="6"
+                    Background="#80000000" Visibility="Collapsed" Panel.ZIndex="100">
+                <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                        BorderThickness="3" CornerRadius="16" Margin="50" Padding="40">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="[+]" FontSize="64" HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" FontWeight="Bold"/>
+                        <TextBlock x:Name="txtDropHint" Text="Drop folder here to index"
+                                   FontSize="24" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                   HorizontalAlignment="Center" Margin="0,20,0,0"/>
+                        <TextBlock Text="Hold SHIFT to move instead of copy"
+                                   FontSize="14" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Opacity="0.7" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                    </StackPanel>
+                </Border>
+            </Border>
+
+            <!-- Header -->
+            <Border Grid.Row="0" Padding="20,15"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="Database24" FontSize="24"
+                                       Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+                        <TextBlock Text=" FluxDB" FontSize="24" FontWeight="Bold"
+                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}"
+                                   VerticalAlignment="Center" Margin="5,0,0,0"/>
+                        <TextBlock x:Name="txtCurrentFolder" Text="" FontSize="14"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   VerticalAlignment="Center" Margin="20,0,0,0" Opacity="0.7"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <ui:Button x:Name="btnSelectFolder" Content="Select Folder"
+                                   Margin="0,0,10,0" Appearance="Primary"
+                                   Click="BtnSelectFolder_Click" />
+                        <ui:Button x:Name="btnRefresh" Content="Refresh" Margin="0,0,10,0"
+                                   IsEnabled="False" Click="BtnRefresh_Click" />
+                        <ui:Button x:Name="btnSettings" Content="Settings"
+                                   Click="BtnSettings_Click" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Navigation Bar -->
+            <Border Grid.Row="1" Padding="20,10"
+                    Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <ui:Button x:Name="btnBack" ToolTip="Back (Alt+Left)"
+                               IsEnabled="False" Click="BtnBack_Click"
+                               Appearance="Transparent" />
+                    <ui:Button x:Name="btnForward" Grid.Column="1" ToolTip="Forward (Alt+Right)"
+                               IsEnabled="False" Click="BtnForward_Click" Margin="5,0,0,0"
+                               Appearance="Transparent" />
+                    <ui:Button x:Name="btnUp" Grid.Column="2" ToolTip="Up (Alt+Up)"
+                               IsEnabled="False" Click="BtnUp_Click" Margin="5,0,15,0"
+                               Appearance="Transparent" />
+
+                    <ScrollViewer Grid.Column="3" HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="pnlBreadcrumbs" Orientation="Horizontal"/>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="15,0,0,0">
+                        <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <ComboBox x:Name="cmbFilter" Width="120"
+                                  SelectionChanged="CmbFilter_SelectionChanged">
+                            <ComboBoxItem Content="All Files" IsSelected="True"/>
+                            <ComboBoxItem Content="Images"/>
+                            <ComboBoxItem Content="Audio"/>
+                            <ComboBoxItem Content="Video"/>
+                            <ComboBoxItem Content="Documents"/>
+                            <ComboBoxItem Content="Archives"/>
+                            <ComboBoxItem Content="Code"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Search Bar -->
+            <Border Grid.Row="2" Padding="20,10"
+                    Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="txtSearch" KeyUp="TxtSearch_KeyUp"
+                             FontSize="14" Padding="10,8"/>
+                    <ui:Button Grid.Column="1" x:Name="btnSearch" Content="Search"
+                               Appearance="Primary" Click="BtnSearch_Click" Margin="10,0,0,0"/>
+                    <ui:Button Grid.Column="2" x:Name="btnClearSearch" Content="Clear"
+                               Click="BtnClearSearch_Click" Margin="10,0,0,0"/>
+                </Grid>
+            </Border>
+
+            <!-- Main Content -->
+            <Grid Grid.Row="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="400"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition Width="520" MinWidth="300"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Files DataGrid -->
+                <Border Margin="20,10,0,10" CornerRadius="8"
+                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                    <DataGrid x:Name="dgFiles"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              SelectionMode="Extended"
+                              SelectionChanged="DgFiles_SelectionChanged"
+                              MouseDoubleClick="DgFiles_MouseDoubleClick"
+                              Sorting="DgFiles_Sorting"
+                              Background="Transparent"
+                              Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                              BorderThickness="0"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
+                              CanUserResizeRows="False"
+                              CanUserSortColumns="True"
+                              FontSize="13"
+                              VirtualizingStackPanel.IsVirtualizing="True"
+                              VirtualizingStackPanel.VirtualizationMode="Recycling"
+                              EnableRowVirtualization="True"
+                              RowHeight="32">
+
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Open" Click="ContextMenu_Open" FontWeight="Bold"/>
+                                <MenuItem Header="Open File Location" Click="ContextMenu_OpenLocation"/>
+                                <Separator/>
+                                <MenuItem Header="Copy (Ctrl+C)" Click="ContextMenu_Copy"/>
+                                <MenuItem Header="Cut (Ctrl+X)" Click="ContextMenu_Cut"/>
+                                <MenuItem Header="Paste (Ctrl+V)" Click="ContextMenu_Paste"/>
+                                <Separator/>
+                                <MenuItem Header="Rename (F2)" Click="ContextMenu_Rename"/>
+                                <MenuItem Header="Delete (Del)" Click="ContextMenu_Delete" Foreground="#f44336"/>
+                                <Separator/>
+                                <MenuItem Header="New Folder" Click="ContextMenu_NewFolder"/>
+                                <Separator/>
+                                <MenuItem Header="Properties" Click="ContextMenu_Properties"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="" Width="35" CanUserSort="False">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Icon}"
+                                                   FontFamily="Segoe MDL2 Assets"
+                                                   Foreground="{Binding IconColor}"
+                                                   FontSize="14" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200" SortMemberPath="Name"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding TypeDisplay}" Width="80" SortMemberPath="TypeDisplay"/>
+                            <DataGridTextColumn Header="Size" Binding="{Binding SizeDisplay}" Width="100" SortMemberPath="Size"/>
+                            <DataGridTextColumn Header="Tags" Binding="{Binding TagsText}" Width="120" CanUserSort="False"/>
+                            <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Width="140" SortMemberPath="ModifiedAt"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Border>
+
+                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                              Background="Transparent" Cursor="SizeWE"/>
+
+                <!-- Details & Preview Panel -->
+                <Border Grid.Column="2" Margin="0,10,20,10" CornerRadius="8"
+                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" Padding="15">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="3*"/>
+                            <RowDefinition Height="2*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Preview Panel -->
+                        <Border x:Name="pnlPreview" Grid.Row="0" CornerRadius="6" Margin="0,0,0,15"
+                                Visibility="Collapsed"
+                                Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+                            <Grid>
+                                <ScrollViewer x:Name="imgPreviewContainer" Margin="10"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto"
+                                              PreviewMouseWheel="ImgPreviewContainer_PreviewMouseWheel">
+                                    <Image x:Name="imgPreview" Stretch="Uniform" Visibility="Collapsed"
+                                           HorizontalAlignment="Center" VerticalAlignment="Top"
+                                           RenderTransformOrigin="0.5,0">
+                                        <Image.RenderTransform>
+                                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                        </Image.RenderTransform>
+                                    </Image>
+                                </ScrollViewer>
+                                <WebBrowser x:Name="webPdfPreview" Visibility="Collapsed" Margin="10"/>
+                                <ScrollViewer x:Name="txtPreviewScroll" Visibility="Collapsed" Margin="10">
+                                    <TextBox x:Name="txtPreview" IsReadOnly="True"
+                                             Background="Transparent"
+                                             Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                             BorderThickness="0" FontFamily="Consolas" FontSize="11"
+                                             TextWrapping="Wrap" AcceptsReturn="True"/>
+                                </ScrollViewer>
+                                <TextBlock x:Name="txtNoPreview" Text="No Preview Available"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                           Opacity="0.5" Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Details Panel -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="pnlDetails">
+                                <TextBlock Text="Details" FontSize="16" FontWeight="Bold"
+                                           Foreground="{DynamicResource AccentFillColorDefaultBrush}"
+                                           Margin="0,0,0,15"/>
+                                <TextBlock Text="No file selected" x:Name="txtNoSelection"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                           Opacity="0.5"/>
+                                <StackPanel x:Name="pnlFileDetails" Visibility="Collapsed">
+                                    <TextBlock Text="Name" FontSize="11"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                                    <TextBlock x:Name="txtFileName" FontSize="13"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                               TextWrapping="Wrap" Margin="0,3,0,12"/>
+
+                                    <TextBlock Text="Path" FontSize="11"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                                    <TextBox x:Name="txtFilePath" FontSize="11"
+                                             Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                             Background="Transparent" BorderThickness="0"
+                                             IsReadOnly="True" TextWrapping="Wrap" Margin="0,3,0,12"/>
+
+                                    <TextBlock Text="Size" FontSize="11"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                                    <TextBlock x:Name="txtFileSize" FontSize="13"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,3,0,12"/>
+
+                                    <TextBlock Text="Created" FontSize="11"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                                    <TextBlock x:Name="txtFileCreated" FontSize="13"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,3,0,12"/>
+
+                                    <TextBlock Text="Modified" FontSize="11"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                                    <TextBlock x:Name="txtFileModified" FontSize="13"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,3,0,12"/>
+
+                                    <Separator Margin="0,5,0,15" Opacity="0.3"/>
+
+                                    <TextBlock Text="Tags" FontSize="11"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                                    <TextBox x:Name="txtTags" Margin="0,3,0,8"
+                                             TextWrapping="Wrap" FontSize="12" AcceptsReturn="False"/>
+
+                                    <TextBlock Text="Notes" FontSize="11"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                                    <TextBox x:Name="txtNotes" Margin="0,3,0,12"
+                                             TextWrapping="Wrap" AcceptsReturn="True"
+                                             Height="80" FontSize="12" VerticalScrollBarVisibility="Auto"/>
+
+                                    <ui:Button x:Name="btnSaveTags" Content="Save"
+                                               Appearance="Primary" Click="BtnSaveTags_Click" Margin="0,0,0,8"/>
+                                    <ui:Button x:Name="btnOpenFile" Content="Open Location"
+                                               Click="BtnOpenFile_Click" Margin="0,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <!-- Keyboard Shortcuts Info -->
+                        <Border Grid.Row="2" CornerRadius="4" Padding="10" Margin="0,10,0,0"
+                                Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+                            <TextBlock Text="Ctrl+C Copy | Ctrl+X Cut | Ctrl+V Paste | Del Delete | F2 Rename | F5 Refresh"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Opacity="0.5" TextWrapping="Wrap" TextAlignment="Center"/>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Progress Bar -->
+            <Border Grid.Row="4" Padding="20,10"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                    x:Name="pnlProgress" Visibility="Collapsed">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="txtProgressStatus" Text="Indexing..."
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" FontSize="13"/>
+                        <ui:Button Grid.Column="1" x:Name="btnCancelIndex" Content="Cancel"
+                                   Click="BtnCancelIndex_Click" />
+                    </Grid>
+                    <ProgressBar x:Name="progressBar" Height="6" Margin="0,8,0,0"
+                                 Foreground="{DynamicResource AccentFillColorDefaultBrush}"
+                                 BorderThickness="0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Status Bar -->
+            <Border Grid.Row="5" Padding="20,10"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="txtStatus"
+                               Text="Ready - Select a folder or drag &amp; drop to start"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               VerticalAlignment="Center" FontSize="12"/>
+                    <TextBlock x:Name="txtFileCount" Text="0 files"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               VerticalAlignment="Center" Grid.Column="1" FontSize="12"/>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </ui:FluentWindow>

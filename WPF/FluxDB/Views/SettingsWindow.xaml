@@ -4,38 +4,51 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Title="Settings" Height="450" Width="600"
-    WindowStartupLocation="CenterOwner">
+    WindowStartupLocation="CenterOwner"
+    WindowBackdropType="Mica"
+    ExtendsContentIntoTitleBar="True"
+    WindowCornerPreference="Round">
 
-    <Grid Margin="16">
+    <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" />
+
+        <Grid Grid.Row="1" Margin="15">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
         <TabControl Background="Transparent" BorderThickness="0,1,0,0">
             <TabItem Header="General">
-                <StackPanel Margin="0,16,0,0">
-                    <TextBlock Text="Version" FontSize="16" FontWeight="Bold" Margin="0,0,0,12"
+                <StackPanel Margin="0,20,0,0">
+                    <TextBlock Text="Appearance" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"
                                Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
 
-                    <Grid Margin="0,0,0,12">
+                    <Grid Margin="0,0,0,15">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="120"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="Current Version:" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="{Binding CurrentVersion}" VerticalAlignment="Center" FontWeight="Bold"/>
+                        <TextBlock Grid.Column="1" x:Name="txtCurrentVersion" Text="0.0.0"
+                                   VerticalAlignment="Center" FontWeight="Bold"/>
                     </Grid>
 
-                    <CheckBox x:Name="chkAutoUpdate" Content="Automatically check for updates on startup"
-                              IsChecked="{Binding AutoUpdateCheck}" Margin="0,0,0,12"/>
+                    <CheckBox x:Name="chkAutoUpdate"
+                              Content="Automatically check for updates on startup"
+                              Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                              Margin="0,0,0,15"/>
 
-                    <Separator Margin="0,8,0,16" Opacity="0.3"/>
+                    <Separator Margin="0,10,0,20" Opacity="0.3"/>
 
-                    <TextBlock Text="Updates" FontSize="16" FontWeight="Bold" Margin="0,0,0,12"
+                    <TextBlock Text="Updates" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"
                                Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
-
-                    <Border Padding="16" CornerRadius="4"
+                    <Border Padding="15" CornerRadius="4"
                             Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
                         <StackPanel>
                             <Grid>
@@ -44,12 +57,13 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="{Binding UpdateStatus}" FontSize="14"/>
-                                    <TextBlock Text="Check here for new versions." FontSize="11" Opacity="0.6" Margin="0,4,0,0"/>
+                                    <TextBlock x:Name="txtUpdateStatus" Text="Checking for updates..." FontSize="14"/>
+                                    <TextBlock x:Name="txtUpdateDetails" FontSize="11" Opacity="0.6"
+                                               Margin="0,5,0,0" Visibility="Collapsed"/>
                                 </StackPanel>
-                                <ui:Button Grid.Column="1" Content="Download Update"
-                                        Command="{Binding DownloadUpdateCommand}"
-                                        Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BoolToVisibility}}"/>
+                                <ui:Button Grid.Column="1" x:Name="btnDownloadUpdate"
+                                           Content="Download Update" Appearance="Primary"
+                                           Visibility="Collapsed" Click="BtnDownloadUpdate_Click"/>
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -57,34 +71,41 @@
             </TabItem>
 
             <TabItem Header="Data">
-                <StackPanel Margin="0,16,0,0">
-                    <TextBlock Text="Export / Import" FontSize="16" FontWeight="Bold" Margin="0,0,0,12"
-                               Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,20,0,0">
+                        <TextBlock Text="Export / Import" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"
+                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
 
-                    <Border Padding="16" CornerRadius="4" Margin="0,0,0,12"
-                            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
-                        <StackPanel>
-                            <TextBlock Text="Export" FontSize="14" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="Export the current index as JSON or compressed JSON." FontSize="11" Opacity="0.6" Margin="0,0,0,8"/>
-                            <ui:Button Content="Export Index..." Width="150" Command="{Binding ExportCommand}"/>
-                        </StackPanel>
-                    </Border>
+                        <Border Padding="15" CornerRadius="4" Margin="0,0,0,15"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                            <StackPanel>
+                                <TextBlock Text="Export" FontSize="14" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBlock Text="Export the current index as JSON or compressed JSON."
+                                           FontSize="11" Opacity="0.6" Margin="0,0,0,10"/>
+                                <ui:Button x:Name="btnExport" Content="Export Index..." Width="150"
+                                           Click="BtnExport_Click"/>
+                            </StackPanel>
+                        </Border>
 
-                    <Border Padding="16" CornerRadius="4"
-                            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
-                        <StackPanel>
-                            <TextBlock Text="Import" FontSize="14" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="Import a previously exported index file." FontSize="11" Opacity="0.6" Margin="0,0,0,8" TextWrapping="Wrap"/>
-                            <ui:Button Content="Import Index..." Width="150" Command="{Binding ImportCommand}"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                        <Border Padding="15" CornerRadius="4"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                            <StackPanel>
+                                <TextBlock Text="Import" FontSize="14" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBlock Text="Import a previously exported index file. Existing entries will be updated, new entries will be added."
+                                           FontSize="11" Opacity="0.6" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <ui:Button x:Name="btnImport" Content="Import Index..." Width="150"
+                                           Click="BtnImport_Click"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <ui:Button Content="Cancel" Width="100" Margin="0,0,8,0" Click="BtnCancel_Click"/>
-            <ui:Button Content="Save Settings" Width="120" Click="BtnSave_Click"/>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+            <ui:Button Content="Cancel" Width="100" Margin="0,0,10,0" Click="BtnCancel_Click"/>
+            <ui:Button Content="Save Settings" Width="120" Appearance="Primary" Click="BtnSave_Click"/>
         </StackPanel>
+        </Grid>
     </Grid>
 </ui:FluentWindow>

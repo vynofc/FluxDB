@@ -5,27 +5,21 @@
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Title="Starting FluxDB" Height="380" Width="480"
     WindowStartupLocation="CenterScreen"
-    WindowCornerPreference="Round"
+    WindowBackdropType="Mica"
     ExtendsContentIntoTitleBar="True"
-    WindowBackdropType="Mica">
+    WindowCornerPreference="Round">
 
     <Grid>
         <ui:TitleBar Visibility="Collapsed" />
 
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-            <ui:SymbolIcon Symbol="Database24"
-                           Width="64" Height="64"
-                           Foreground="{DynamicResource AccentFillColorDefaultBrush}" />
-            <TextBlock Text="FluxDB"
-                       FontSize="32" FontWeight="Bold"
-                       HorizontalAlignment="Center" Margin="0,16,0,4" />
-            <TextBlock x:Name="txtVersion" Text=""
-                       FontSize="12" Opacity="0.6"
-                       HorizontalAlignment="Center" Margin="0,0,0,24" />
-            <ui:ProgressRing IsIndeterminate="True" Width="32" Height="32" />
+            <Image x:Name="imgLogo" Width="180" Height="180" />
             <TextBlock x:Name="txtMessage" Text="Starting FluxDB..."
-                       FontSize="13" HorizontalAlignment="Center"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,12,0,0" />
+                       FontSize="16" HorizontalAlignment="Center" Margin="0,8" />
+            <ProgressBar x:Name="pb" Width="440" Height="14"
+                         IsIndeterminate="False" Minimum="0" Maximum="100" Value="0" Margin="0,8" />
+            <ui:Button x:Name="btnCancel" Content="Cancel" Width="80" HorizontalAlignment="Right"
+                       Margin="0,8,0,0" />
         </StackPanel>
     </Grid>
 </ui:FluentWindow>

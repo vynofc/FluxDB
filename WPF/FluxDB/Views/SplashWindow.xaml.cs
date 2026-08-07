@@ -1,28 +1,75 @@
+using System;
+using System.Linq;
 using System.Diagnostics;
+using System.IO;
 using System.Net.Http;
 using System.Reflection;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Media.Imaging;
+using FluxDB.Models;
+using FluxDB.Services;
 using Newtonsoft.Json;
-using Wpf.Ui.Controls;
 
 namespace FluxDB.Views
 {
-    public partial class SplashWindow : FluentWindow
+    public partial class SplashWindow : Wpf.Ui.Controls.FluentWindow
     {
-        private readonly SettingsService _settingsService = new Services.SettingsService();
+        private readonly SettingsService _settingsService = new SettingsService();
 
         public SplashWindow()
         {
             InitializeComponent();
-            Loaded += OnLoaded;
+            Loaded += SplashWindow_Loaded;
+            btnCancel.Click += (s, e) => { Application.Current.Shutdown(); };
+
+            try
+            {
+                var exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                var icoPath = Path.Combine(exeDir ?? string.Empty, "FluxDB-icon.ico");
+                var pngPath = Path.Combine(exeDir ?? string.Empty, "FluxDB-icon.png");
+
+                if (File.Exists(icoPath))
+                {
+                    try
+                    {
+                        var iconUri = new Uri(icoPath);
+                        this.Icon = BitmapFrame.Create(iconUri);
+
+                        var bmp = new BitmapImage();
+                        bmp.BeginInit();
+                        bmp.UriSource = iconUri;
+                        bmp.DecodePixelWidth = 180;
+                        bmp.DecodePixelHeight = 180;
+                        bmp.CacheOption = BitmapCacheOption.OnLoad;
+                        bmp.EndInit();
+                        imgLogo.Source = bmp;
+                    }
+                    catch (Exception ex) { LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}"); }
+                }
+                else if (File.Exists(pngPath))
+                {
+                    try
+                    {
+                        var pngUri = new Uri(pngPath);
+                        this.Icon = BitmapFrame.Create(pngUri);
+
+                        var bmp = new BitmapImage();
+                        bmp.BeginInit();
+                        bmp.UriSource = pngUri;
+                        bmp.DecodePixelWidth = 180;
+                        bmp.DecodePixelHeight = 180;
+                        bmp.CacheOption = BitmapCacheOption.OnLoad;
+                        bmp.EndInit();
+                        imgLogo.Source = bmp;
+                    }
+                    catch (Exception ex) { LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}"); }
+                }
+            }
+            catch (Exception ex) { LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}"); }
         }
 
-        private void OnLoaded(object sender, RoutedEventArgs e)
-        {
-            txtVersion.Text = App.GetLocalVersion();
-            _ = InitializeAsync();
-        }
-
-        private async Task InitializeAsync()
+        private async void SplashWindow_Loaded(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -54,16 +101,19 @@ namespace FluxDB.Views
                 txtMessage.Text = "Starting application...";
                 await Task.Delay(250);
 
-                var mainWindow = App.Host.Services.GetRequiredService<MainWindow>();
-                mainWindow.Show();
+                var main = new MainWindow();
+                Application.Current.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+                main.Show();
+                Hide();
                 Close();
+                Application.Current.MainWindow = main;
+                Application.Current.ShutdownMode = System.Windows.ShutdownMode.OnMainWindowClose;
             }
             catch (Exception ex)
             {
-                LoggingService.Log($"Startup CRITICAL failure: {ex}");
-                System.Windows.MessageBox.Show("Startup failed: " + ex, "Error",
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
-                Application.Current.Shutdown();
+                LoggingService.Log($"Startup CRITICAL failure: {ex.Message}");
+                MessageBox.Show("Startup failed: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Dispatcher.Invoke(() => Application.Current.Shutdown());
             }
         }
 

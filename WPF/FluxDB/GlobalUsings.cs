@@ -22,4 +22,3 @@ global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Hosting;
 global using Wpf.Ui;
 global using Wpf.Ui.Appearance;
-global using Wpf.Ui.Controls;
