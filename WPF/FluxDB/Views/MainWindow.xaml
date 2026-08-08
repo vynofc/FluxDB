@@ -34,9 +34,14 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="400"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="520" MinWidth="300"/>
+            </Grid.ColumnDefinitions>
 
             <!-- Drop Overlay -->
-            <Border x:Name="dropOverlay" Grid.RowSpan="6"
+            <Border x:Name="dropOverlay" Grid.RowSpan="6" Grid.ColumnSpan="3"
                     Background="#80000000" Visibility="Collapsed" Panel.ZIndex="100">
                 <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
@@ -56,7 +61,7 @@
             </Border>
 
             <!-- Header -->
-            <Border Grid.Row="0" Padding="20,15"
+            <Border Grid.Row="0" Grid.Column="0" Padding="20,15" Margin="20,0,0,0" CornerRadius="8,8,0,0"
                     Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -86,7 +91,7 @@
             </Border>
 
             <!-- Navigation Bar -->
-            <Border Grid.Row="1" Padding="20,10"
+            <Border Grid.Row="1" Grid.Column="0" Padding="20,10" Margin="20,0,0,0" CornerRadius="0"
                     Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -131,7 +136,7 @@
             </Border>
 
             <!-- Search Bar -->
-            <Border Grid.Row="2" Padding="20,10"
+            <Border Grid.Row="2" Grid.Column="0" Padding="20,10" Margin="20,0,0,0" CornerRadius="0,0,8,8"
                     Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -148,17 +153,9 @@
                 </Grid>
             </Border>
 
-            <!-- Main Content -->
-            <Grid Grid.Row="3">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" MinWidth="400"/>
-                    <ColumnDefinition Width="5"/>
-                    <ColumnDefinition Width="520" MinWidth="300"/>
-                </Grid.ColumnDefinitions>
-
-                <!-- Files DataGrid -->
-                <Border Margin="20,10,0,10" CornerRadius="8"
-                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+            <!-- Files DataGrid -->
+            <Border Grid.Row="3" Grid.Column="0" Margin="20,10,0,0" CornerRadius="8"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
                     <DataGrid x:Name="dgFiles"
                               AutoGenerateColumns="False"
                               IsReadOnly="True"
@@ -218,11 +215,11 @@
                     </DataGrid>
                 </Border>
 
-                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                              Background="Transparent" Cursor="SizeWE"/>
+            <GridSplitter Grid.Row="0" Grid.RowSpan="4" Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                          Background="Transparent" Cursor="SizeWE"/>
 
-                <!-- Details & Preview Panel -->
-                <Border Grid.Column="2" Margin="0,10,20,10" CornerRadius="8"
+            <!-- Details & Preview Panel -->
+            <Border Grid.Row="0" Grid.RowSpan="4" Grid.Column="2" Margin="0,0,20,0" CornerRadius="8"
                         Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" Padding="15">
                     <Grid>
                         <Grid.RowDefinitions>
@@ -279,6 +276,22 @@
                                                Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                                TextWrapping="Wrap" Margin="0,3,0,12"/>
 
+                                    <TextBlock Text="Tags" FontSize="11"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                                    <TextBox x:Name="txtTags" Margin="0,3,0,8"
+                                             TextWrapping="Wrap" FontSize="12" AcceptsReturn="False"/>
+
+                                    <TextBlock Text="Notes" FontSize="11"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
+                                    <TextBox x:Name="txtNotes" Margin="0,3,0,12"
+                                             TextWrapping="Wrap" AcceptsReturn="True"
+                                             Height="80" FontSize="12" VerticalScrollBarVisibility="Auto"/>
+
+                                    <ui:Button x:Name="btnSaveTags" Content="Save"
+                                               Appearance="Primary" Click="BtnSaveTags_Click" Margin="0,0,0,8"/>
+
+                                    <Separator Margin="0,5,0,15" Opacity="0.3"/>
+
                                     <TextBlock Text="Path" FontSize="11"
                                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
                                     <TextBox x:Name="txtFilePath" FontSize="11"
@@ -301,21 +314,6 @@
                                     <TextBlock x:Name="txtFileModified" FontSize="13"
                                                Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,3,0,12"/>
 
-                                    <Separator Margin="0,5,0,15" Opacity="0.3"/>
-
-                                    <TextBlock Text="Tags" FontSize="11"
-                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
-                                    <TextBox x:Name="txtTags" Margin="0,3,0,8"
-                                             TextWrapping="Wrap" FontSize="12" AcceptsReturn="False"/>
-
-                                    <TextBlock Text="Notes" FontSize="11"
-                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
-                                    <TextBox x:Name="txtNotes" Margin="0,3,0,12"
-                                             TextWrapping="Wrap" AcceptsReturn="True"
-                                             Height="80" FontSize="12" VerticalScrollBarVisibility="Auto"/>
-
-                                    <ui:Button x:Name="btnSaveTags" Content="Save"
-                                               Appearance="Primary" Click="BtnSaveTags_Click" Margin="0,0,0,8"/>
                                     <ui:Button x:Name="btnOpenFile" Content="Open Location"
                                                Click="BtnOpenFile_Click" Margin="0,0,0,0"/>
                                 </StackPanel>
@@ -332,10 +330,9 @@
                         </Border>
                     </Grid>
                 </Border>
-            </Grid>
 
             <!-- Progress Bar -->
-            <Border Grid.Row="4" Padding="20,10"
+            <Border Grid.Row="4" Grid.ColumnSpan="3" Padding="20,10"
                     Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
                     x:Name="pnlProgress" Visibility="Collapsed">
                 <StackPanel>
@@ -356,8 +353,8 @@
             </Border>
 
             <!-- Status Bar -->
-            <Border Grid.Row="5" Padding="20,10"
-                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+            <Border Grid.Row="5" Grid.ColumnSpan="3" Padding="20,10"
+                    Background="Transparent">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>

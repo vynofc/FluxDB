@@ -31,6 +31,7 @@ namespace FluxDB.Views
 
         private CancellationTokenSource _indexCancellation;
         private CancellationTokenSource _previewCts;
+        private int _previewVersion;
         private FileEntry _selectedFile;
         private string _currentRootFolder;
         private string _currentViewFolder;
@@ -549,6 +550,7 @@ namespace FluxDB.Views
             _previewCts?.Dispose();
             _previewCts = new CancellationTokenSource();
             var ct = _previewCts.Token;
+            var version = Interlocked.Increment(ref _previewVersion);
 
             imgPreview.Source = null;
             imgPreview.Visibility = Visibility.Collapsed;
@@ -584,6 +586,8 @@ namespace FluxDB.Views
                         return bmp;
                     }, ct);
 
+                    if (_previewVersion != version) return;
+
                     imgPreview.Source = bitmap;
                     imgPreview.Visibility = Visibility.Visible;
                 }
@@ -601,6 +605,7 @@ namespace FluxDB.Views
                 {
                     var path = file.Path;
                     var thumb = await Task.Run(() => GetShellThumbnail(path, 800), ct);
+                    if (_previewVersion != version) return;
                     if (thumb != null)
                     {
                         SetImageSource(thumb);
@@ -657,6 +662,8 @@ namespace FluxDB.Views
                     }, ct);
                 }
                 catch (OperationCanceledException) { return; }
+
+                if (_previewVersion != version) return;
 
                 if (content != null)
                 {
