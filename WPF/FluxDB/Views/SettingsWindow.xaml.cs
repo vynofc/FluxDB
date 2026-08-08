@@ -42,6 +42,11 @@ namespace FluxDB.Views
         {
             txtCurrentVersion.Text = App.GetLocalVersion();
             chkAutoUpdate.IsChecked = Settings.AutoUpdateCheck;
+
+            cmbTheme.Items.Add("Dark");
+            cmbTheme.Items.Add("Light");
+            cmbTheme.Items.Add("High Contrast");
+            cmbTheme.SelectedItem = Settings.Theme ?? "Dark";
         }
 
         private void UpdateUpdateStatus()
@@ -86,6 +91,28 @@ namespace FluxDB.Views
             }
         }
 
+        private void CmbTheme_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (cmbTheme.SelectedItem is string theme)
+            {
+                Settings.Theme = theme;
+                if (theme == "Light")
+                    ApplicationThemeManager.Apply(ApplicationTheme.Light);
+                else if (theme == "High Contrast")
+                    ApplicationThemeManager.Apply(ApplicationTheme.HighContrast);
+                else
+                    ApplicationThemeManager.Apply(ApplicationTheme.Dark);
+            }
+        }
+
+        private void BtnAccent_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string color)
+            {
+                Settings.AccentColor = color;
+            }
+        }
+
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
             DialogResult = false;
@@ -95,6 +122,7 @@ namespace FluxDB.Views
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
             Settings.AutoUpdateCheck = chkAutoUpdate.IsChecked ?? false;
+            Settings.Theme = cmbTheme.SelectedItem as string ?? "Dark";
             DialogResult = true;
             Close();
         }

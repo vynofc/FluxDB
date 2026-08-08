@@ -175,7 +175,13 @@
                               VirtualizingStackPanel.IsVirtualizing="True"
                               VirtualizingStackPanel.VirtualizationMode="Recycling"
                               EnableRowVirtualization="True"
-                              RowHeight="32">
+                              EnableColumnVirtualization="True"
+                              RowHeight="28">
+                        <DataGrid.ColumnHeaderStyle>
+                            <Style TargetType="DataGridColumnHeader">
+                                <EventSetter Event="MouseRightButtonDown" Handler="ColumnHeader_RightClick"/>
+                            </Style>
+                        </DataGrid.ColumnHeaderStyle>
 
                         <DataGrid.ContextMenu>
                             <ContextMenu>
@@ -196,14 +202,12 @@
                         </DataGrid.ContextMenu>
 
                         <DataGrid.Columns>
-                            <DataGridTemplateColumn Header="" Width="35" CanUserSort="False">
+                            <DataGridTemplateColumn Header="" Width="28" CanUserSort="False" CanUserResize="False">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <TextBlock Text="{Binding Icon}"
-                                                   FontFamily="Segoe MDL2 Assets"
-                                                   Foreground="{Binding IconColor}"
-                                                   FontSize="14" VerticalAlignment="Center"
-                                                   HorizontalAlignment="Center"/>
+                                        <ui:SymbolIcon Symbol="{Binding IconSymbol}" FontSize="16"
+                                                       Foreground="{Binding IconColorBrush}"
+                                                       VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
@@ -215,9 +219,6 @@
                         </DataGrid.Columns>
                     </DataGrid>
                 </Border>
-
-            <GridSplitter Grid.Row="0" Grid.RowSpan="4" Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                          Background="Transparent" Cursor="SizeWE"/>
 
             <!-- Details & Preview Panel -->
             <Border Grid.Row="0" Grid.RowSpan="4" Grid.Column="2" Margin="0,0,20,0" CornerRadius="8"
@@ -269,6 +270,23 @@
                                 <TextBlock Text="No file selected" x:Name="txtNoSelection"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                            Opacity="0.5"/>
+                                <StackPanel x:Name="pnlMultiSelection" Visibility="Collapsed">
+                                    <TextBlock x:Name="txtMultiCount" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock x:Name="txtMultiTotalSize" FontSize="12"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Margin="0,0,0,4"/>
+                                    <TextBlock x:Name="txtMultiTypes" FontSize="12"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Margin="0,0,0,12" TextWrapping="Wrap"/>
+                                    <ui:Button Content="Batch Assign Tags" Margin="0,0,0,6"
+                                               Click="BtnBatchTags_Click" />
+                                    <ui:Button Content="Delete Selected" Margin="0,0,0,6"
+                                               Foreground="#f44336" Click="BtnBatchDelete_Click" />
+                                    <ui:Button Content="Copy Selected" Margin="0,0,0,6"
+                                               Click="BtnBatchCopy_Click" />
+                                </StackPanel>
                                 <StackPanel x:Name="pnlFileDetails" Visibility="Collapsed">
                                     <TextBlock Text="Name" FontSize="11"
                                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
@@ -278,8 +296,26 @@
 
                                     <TextBlock Text="Tags" FontSize="11"
                                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
-                                    <TextBox x:Name="txtTags" Margin="0,3,0,8"
-                                             TextWrapping="Wrap" FontSize="12" AcceptsReturn="False"/>
+                                    <Border CornerRadius="4" Padding="6" Margin="0,3,0,8"
+                                            Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
+                                            MinHeight="32">
+                                        <WrapPanel x:Name="pnlTagChips" Margin="0,0,0,0"/>
+                                    </Border>
+                                    <TextBox x:Name="txtTagInput" Margin="0,0,0,8"
+                                             FontSize="12" Height="26" AcceptsReturn="False"
+                                             KeyDown="TxtTagInput_KeyDown"
+                                             ToolTip="Type tag and press Enter"/>
+                                    <Popup x:Name="tagAutocompletePopup" StaysOpen="False"
+                                           PlacementTarget="{Binding ElementName=txtTagInput}"
+                                           Placement="Bottom" Width="200">
+                                        <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                                BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                                                BorderThickness="1" CornerRadius="4" Padding="4">
+                                            <ListBox x:Name="tagAutocompleteList" MaxHeight="150"
+                                                     SelectionChanged="TagAutocompleteList_SelectionChanged"
+                                                     Background="Transparent" BorderThickness="0"/>
+                                        </Border>
+                                    </Popup>
 
                                     <TextBlock Text="Notes" FontSize="11"
                                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" Opacity="0.7"/>
@@ -368,6 +404,170 @@
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                VerticalAlignment="Center" Grid.Column="1" FontSize="12"/>
                 </Grid>
+            </Border>
+
+            <!-- Toast Notification -->
+            <Border x:Name="toastNotification" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,20,40" CornerRadius="8" Padding="12,8"
+                    Background="{DynamicResource AccentFillColorDefaultBrush}"
+                    Visibility="Collapsed" Panel.ZIndex="150">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="toastText" Foreground="White" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <ui:Button x:Name="btnToastClose" Content="×" Width="20" Height="20" Padding="0"
+                               Appearance="Transparent" Foreground="White" FontSize="14"
+                               Click="BtnToastClose_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Keyboard Shortcut Cheat Sheet Overlay -->
+            <Border x:Name="cheatSheetOverlay" Grid.RowSpan="6" Grid.ColumnSpan="3"
+                    Background="#80000000" Visibility="Collapsed" Panel.ZIndex="200"
+                    MouseLeftButtonDown="CheatSheetOverlay_MouseLeftButtonDown">
+                <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                        BorderThickness="2" CornerRadius="12"
+                        Width="550" MaxHeight="500" Padding="25"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+                            <TextBlock Text="Keyboard Shortcuts" FontSize="18" FontWeight="Bold"
+                                       Foreground="{DynamicResource AccentFillColorDefaultBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,20,0"/>
+                            <TextBlock Text="Ctrl+K to toggle" FontSize="11"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Opacity="0.5" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="Navigation" FontSize="13" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,8"/>
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Alt+Left" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Alt+Right" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Alt+Up" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Backspace" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Enter" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Go back" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Go forward" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Go up" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Go up" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Open selected item" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="File Operations" FontSize="13" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,8"/>
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Ctrl+C" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Ctrl+X" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Ctrl+V" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Del" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="F2" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Copy" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Cut" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Paste" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Delete" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Rename" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="Search &amp; Tools" FontSize="13" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,8"/>
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Ctrl+F" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="F5" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="F8" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Ctrl+K" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Esc" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Search" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Refresh" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Log Viewer" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Shortcut Cheat Sheet" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Focus DataGrid" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="Preview" FontSize="13" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,8"/>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Shift+Scroll" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Ctrl+Scroll" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Zoom image" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Horizontal scroll" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
             </Border>
         </Grid>
     </Grid>

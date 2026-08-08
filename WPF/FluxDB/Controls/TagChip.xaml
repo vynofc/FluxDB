@@ -1,0 +1,18 @@
+<UserControl
+    x:Class="FluxDB.Views.Controls.TagChip"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border CornerRadius="10" Padding="6,2" Margin="0,0,4,4"
+            Background="{Binding ChipBackground, RelativeSource={RelativeSource AncestorType=UserControl}}">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock x:Name="txtTagName" Text="{Binding TagName, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                       Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+            <Button x:Name="btnRemove" Click="BtnRemove_Click"
+                    Width="16" Height="16" Margin="4,0,0,0"
+                    Background="Transparent" BorderThickness="0" Padding="0"
+                    Foreground="White" Opacity="0.7" FontSize="10"
+                    Content="×" Cursor="Hand"
+                    ToolTip="Remove tag"/>
+        </StackPanel>
+    </Border>
+</UserControl>

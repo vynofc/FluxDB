@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -234,6 +235,20 @@ namespace FluxDB.Views
                 ShowLogViewer();
                 e.Handled = true;
             }
+            else if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                ToggleCheatSheet();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                if (cheatSheetOverlay.Visibility == Visibility.Visible)
+                {
+                    cheatSheetOverlay.Visibility = Visibility.Collapsed;
+                    dgFiles.Focus();
+                    e.Handled = true;
+                }
+            }
         }
 
         #endregion
@@ -253,6 +268,7 @@ namespace FluxDB.Views
             Clipboard.SetFileDropList(fileCollection);
 
             txtStatus.Text = cut ? $"Cut {_clipboardFiles.Count} item(s)" : $"Copied {_clipboardFiles.Count} item(s)";
+            ShowToast(cut ? $"Cut {_clipboardFiles.Count} item(s)" : $"Copied {_clipboardFiles.Count} item(s)");
         }
 
         private async void PasteFiles()
@@ -336,6 +352,7 @@ namespace FluxDB.Views
 
             await RefreshCurrentFolderViewAsync();
             txtStatus.Text = $"Deleted {deletedCount} item(s)";
+            ShowToast($"Deleted {deletedCount} item(s)");
         }
 
         private void RenameSelectedFile()
@@ -376,6 +393,7 @@ namespace FluxDB.Views
 
                     RefreshCurrentFolderView();
                     txtStatus.Text = $"Renamed to {newName}";
+                    ShowToast($"Renamed to {newName}");
                 }
                 catch (Exception ex)
                 {
@@ -402,6 +420,7 @@ namespace FluxDB.Views
                     Directory.CreateDirectory(newPath);
                     RefreshCurrentFolderView();
                     txtStatus.Text = $"Created folder: {Path.GetFileName(newPath)}";
+                    ShowToast($"Created folder: {Path.GetFileName(newPath)}");
                 }
                 catch (Exception ex)
                 {
@@ -714,6 +733,67 @@ namespace FluxDB.Views
 
         #endregion
 
+        #region Column Configuration
+
+        private void ColumnHeader_RightClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var header = sender as DataGridColumnHeader;
+            if (header?.Column == null) return;
+
+            var menu = new System.Windows.Controls.ContextMenu();
+            foreach (var col in dgFiles.Columns)
+            {
+                var headerText = col.Header?.ToString() ?? "";
+                if (string.IsNullOrEmpty(headerText)) continue;
+
+                var menuItem = new System.Windows.Controls.MenuItem
+                {
+                    Header = headerText,
+                    IsCheckable = true,
+                    IsChecked = col.Visibility == Visibility.Visible,
+                    Tag = col
+                };
+                menuItem.Click += (s2, e2) =>
+                {
+                    if (s2 is System.Windows.Controls.MenuItem mi && mi.Tag is DataGridColumn dgc)
+                    {
+                        dgc.Visibility = mi.IsChecked ? Visibility.Visible : Visibility.Collapsed;
+                        SaveColumnVisibility();
+                    }
+                };
+                menu.Items.Add(menuItem);
+            }
+
+            menu.Items.Add(new System.Windows.Controls.Separator());
+            var resetItem = new System.Windows.Controls.MenuItem { Header = "Reset All" };
+            resetItem.Click += (s2, e2) =>
+            {
+                foreach (var col in dgFiles.Columns)
+                    col.Visibility = Visibility.Visible;
+                SaveColumnVisibility();
+            };
+            menu.Items.Add(resetItem);
+
+            menu.IsOpen = true;
+        }
+
+        private void SaveColumnVisibility()
+        {
+            if (_settingsService == null) return;
+            var settings = _settingsService.Load();
+            if (settings.ColumnVisibility == null)
+                settings.ColumnVisibility = new Dictionary<string, bool>();
+            foreach (var col in dgFiles.Columns)
+            {
+                var header = col.Header?.ToString() ?? "";
+                if (!string.IsNullOrEmpty(header))
+                    settings.ColumnVisibility[header] = col.Visibility == Visibility.Visible;
+            }
+            _settingsService.Save(settings);
+        }
+
+        #endregion
+
         #region Navigation
 
         private void NavigateToFolder(string folderPath, bool addToHistory = true)
@@ -922,9 +1002,76 @@ namespace FluxDB.Views
 
         private void DgFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            _selectedFile = dgFiles.SelectedItem as FileEntry;
-            UpdateDetailsPanel();
-            UpdatePreview(_selectedFile);
+            _selectedFile = dgFiles.SelectedItems.Count == 1 ? dgFiles.SelectedItem as FileEntry : null;
+            if (dgFiles.SelectedItems.Count > 1)
+            {
+                ShowMultiSelectionPanel();
+            }
+            else
+            {
+                pnlMultiSelection.Visibility = Visibility.Collapsed;
+                UpdateDetailsPanel();
+                UpdatePreview(_selectedFile);
+            }
+        }
+
+        private void ShowMultiSelectionPanel()
+        {
+            var selected = dgFiles.SelectedItems.Cast<FileEntry>().ToList();
+            txtNoSelection.Visibility = Visibility.Collapsed;
+            pnlFileDetails.Visibility = Visibility.Collapsed;
+            pnlMultiSelection.Visibility = Visibility.Visible;
+
+            var totalSize = selected.Where(f => !f.IsFolder).Sum(f => f.Size);
+            var folderCount = selected.Count(f => f.IsFolder);
+            var fileCount = selected.Count - folderCount;
+
+            txtMultiCount.Text = $"{selected.Count} items selected ({folderCount} folders, {fileCount} files)";
+
+            if (totalSize < 1024) txtMultiTotalSize.Text = $"Total size: {totalSize} B";
+            else if (totalSize < 1024 * 1024) txtMultiTotalSize.Text = $"Total size: {totalSize / 1024.0:F1} KB";
+            else if (totalSize < 1024 * 1024 * 1024) txtMultiTotalSize.Text = $"Total size: {totalSize / (1024.0 * 1024.0):F1} MB";
+            else txtMultiTotalSize.Text = $"Total size: {totalSize / (1024.0 * 1024.0 * 1024.0):F2} GB";
+
+            var typeCounts = selected.Where(f => !f.IsFolder).GroupBy(f => f.TypeDisplay)
+                .OrderByDescending(g => g.Count()).Take(5)
+                .Select(g => $"{g.Count()} {g.Key}");
+            txtMultiTypes.Text = $"Types: {string.Join(", ", typeCounts)}";
+
+            pnlPreview.Visibility = Visibility.Collapsed;
+        }
+
+        private void BtnBatchTags_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = dgFiles.SelectedItems.Cast<FileEntry>().Where(f => !f.IsFolder).ToList();
+            if (selected.Count == 0 || _databaseService == null) return;
+
+            var dialog = new RenameDialog("Enter tags (comma-separated)");
+            dialog.Owner = this;
+            dialog.Title = "Batch Assign Tags";
+            if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.NewName))
+            {
+                var tags = dialog.NewName.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => !string.IsNullOrEmpty(t)).ToList();
+                foreach (var file in selected)
+                {
+                    _databaseService.SetTagsForFile(file.Id, tags);
+                    file.Tags = tags;
+                    file.TagsText = string.Join(", ", tags);
+                }
+                txtStatus.Text = $"Tags assigned to {selected.Count} file(s)";
+                RefreshCurrentFolderView();
+            }
+        }
+
+        private void BtnBatchDelete_Click(object sender, RoutedEventArgs e)
+        {
+            DeleteSelectedFiles();
+        }
+
+        private void BtnBatchCopy_Click(object sender, RoutedEventArgs e)
+        {
+            CopySelectedFiles(false);
         }
 
         private void UpdateDetailsPanel()
@@ -953,8 +1100,127 @@ namespace FluxDB.Views
             txtFileSize.Text = _selectedFile.SizeDisplay;
             txtFileCreated.Text = _selectedFile.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
             txtFileModified.Text = _selectedFile.ModifiedAt.ToString("yyyy-MM-dd HH:mm:ss");
-            txtTags.Text = _selectedFile.TagsText ?? "";
             txtNotes.Text = _selectedFile.Note ?? "";
+
+            RebuildTagChips(_selectedFile.Tags);
+            txtTagInput.Text = "";
+        }
+
+        private void RebuildTagChips(List<string> tags)
+        {
+            pnlTagChips.Children.Clear();
+            if (tags == null) return;
+            foreach (var tag in tags)
+            {
+                var chip = new TagChip
+                {
+                    TagName = tag,
+                    ChipBackground = GetTagColor(tag)
+                };
+                chip.RemoveClicked += (s, e) =>
+                {
+                    pnlTagChips.Children.Remove(chip);
+                    AutoSaveTags();
+                };
+                pnlTagChips.Children.Add(chip);
+            }
+        }
+
+        private static readonly string[] TagColors = new[] { "#0078D4", "#107C10", "#D83B01", "#5C2D91", "#E81123", "#008272", "#E74856", "#8764B8", "#00B7C3", "#038387" };
+
+        private System.Windows.Media.Brush GetTagColor(string tag)
+        {
+            var hash = Math.Abs(tag.GetHashCode());
+            var colorHex = TagColors[hash % TagColors.Length];
+            return new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(colorHex));
+        }
+
+        private List<string> GetCurrentTagsFromChips()
+        {
+            return pnlTagChips.Children.OfType<TagChip>().Select(c => c.TagName).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+        }
+
+        private void AutoSaveTags()
+        {
+            if (_selectedFile == null || _selectedFile.IsFolder || _databaseService == null) return;
+            var tags = GetCurrentTagsFromChips();
+            try
+            {
+                _databaseService.SetTagsForFile(_selectedFile.Id, tags);
+                _databaseService.SetNoteForFile(_selectedFile.Id, txtNotes.Text);
+                _selectedFile.Tags = tags;
+                _selectedFile.TagsText = string.Join(", ", tags);
+                _selectedFile.Note = txtNotes.Text;
+                txtStatus.Text = "Saved";
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Log($"AutoSaveTags failed: {ex.Message}");
+            }
+        }
+
+        private void TxtTagInput_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                AddTagFromInput();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Back && string.IsNullOrEmpty(txtTagInput.Text))
+            {
+                if (pnlTagChips.Children.Count > 0)
+                {
+                    pnlTagChips.Children.RemoveAt(pnlTagChips.Children.Count - 1);
+                    AutoSaveTags();
+                }
+            }
+            else if (e.Key == Key.Down)
+            {
+                if (tagAutocompleteList.Items.Count > 0 && tagAutocompletePopup.IsOpen)
+                {
+                    tagAutocompleteList.Focus();
+                    tagAutocompleteList.SelectedIndex = 0;
+                }
+            }
+        }
+
+        private void AddTagFromInput()
+        {
+            var tag = txtTagInput.Text.Trim();
+            if (string.IsNullOrEmpty(tag)) return;
+
+            var existing = GetCurrentTagsFromChips();
+            if (existing.Contains(tag, StringComparer.OrdinalIgnoreCase))
+            {
+                txtTagInput.Text = "";
+                return;
+            }
+
+            var chip = new TagChip
+            {
+                TagName = tag,
+                ChipBackground = GetTagColor(tag)
+            };
+            chip.RemoveClicked += (s, e) =>
+            {
+                pnlTagChips.Children.Remove(chip);
+                AutoSaveTags();
+            };
+            pnlTagChips.Children.Add(chip);
+            txtTagInput.Text = "";
+            tagAutocompletePopup.IsOpen = false;
+            AutoSaveTags();
+        }
+
+        private void TagAutocompleteList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (tagAutocompleteList.SelectedItem is string tag)
+            {
+                txtTagInput.Text = tag;
+                AddTagFromInput();
+                txtTagInput.Focus();
+            }
         }
 
         private void BtnSaveTags_Click(object sender, RoutedEventArgs e)
@@ -963,9 +1229,7 @@ namespace FluxDB.Views
 
             try
             {
-                var tags = txtTags.Text.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(t => t.Trim()).Where(t => !string.IsNullOrEmpty(t)).ToList();
-
+                var tags = GetCurrentTagsFromChips();
                 _databaseService.SetTagsForFile(_selectedFile.Id, tags);
                 _databaseService.SetNoteForFile(_selectedFile.Id, txtNotes.Text);
 
@@ -1030,6 +1294,9 @@ namespace FluxDB.Views
                     txtStatus.Text = "Cancelled";
                 else
                     txtStatus.Text = $"Failed: {result.ErrorMessage}";
+
+                if (result.Success)
+                    ShowToast($"Indexed {result.FilesIndexed} files");
             }
             catch (Exception ex)
             {
@@ -1183,6 +1450,43 @@ namespace FluxDB.Views
             {
                 MessageBox.Show("Log Viewer konnte nicht gestartet werden.", "Fehler", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private void ToggleCheatSheet()
+        {
+            cheatSheetOverlay.Visibility = cheatSheetOverlay.Visibility == Visibility.Visible
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
+
+        private void CheatSheetOverlay_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (e.OriginalSource == cheatSheetOverlay)
+            {
+                cheatSheetOverlay.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private System.Threading.Timer _toastTimer;
+
+        private void ShowToast(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                toastText.Text = message;
+                toastNotification.Visibility = Visibility.Visible;
+                _toastTimer?.Dispose();
+                _toastTimer = new System.Threading.Timer(_ =>
+                {
+                    Dispatcher.Invoke(() => toastNotification.Visibility = Visibility.Collapsed);
+                }, null, 3000, System.Threading.Timeout.Infinite);
+            });
+        }
+
+        private void BtnToastClose_Click(object sender, RoutedEventArgs e)
+        {
+            toastNotification.Visibility = Visibility.Collapsed;
+            _toastTimer?.Dispose();
         }
 
         private async Task OpenFolderAsync(string folderPath)
@@ -1447,29 +1751,24 @@ namespace FluxDB.Views
             e.Handled = true;
             var direction = e.Column.SortDirection != ListSortDirection.Ascending
                 ? ListSortDirection.Ascending : ListSortDirection.Descending;
-
             var path = e.Column.SortMemberPath;
-            var items = dgFiles.ItemsSource as IList<FileEntry>;
-            if (items == null) return;
 
-            var sorted = direction == ListSortDirection.Ascending
-                ? items.OrderBy(f => GetPropertyValue(f, path)).ToList()
-                : items.OrderByDescending(f => GetPropertyValue(f, path)).ToList();
-
-            dgFiles.ItemsSource = sorted;
             e.Column.SortDirection = direction;
-        }
 
-        private static object GetPropertyValue(FileEntry entry, string propertyName)
-        {
-            return propertyName switch
+            var view = CollectionViewSource.GetDefaultView(dgFiles.ItemsSource);
+            if (view == null) return;
+
+            view.SortDescriptions.Clear();
+            if (!string.IsNullOrEmpty(path))
             {
-                "Name" => entry.Name ?? "",
-                "TypeDisplay" => entry.TypeDisplay ?? "",
-                "Size" => entry.Size,
-                "ModifiedAt" => entry.ModifiedAt,
-                _ => ""
-            };
+                view.SortDescriptions.Add(new SortDescription(path, direction));
+            }
+
+            foreach (var col in dgFiles.Columns)
+            {
+                if (col != e.Column)
+                    col.SortDirection = null;
+            }
         }
 
         protected override void OnClosed(EventArgs e)
