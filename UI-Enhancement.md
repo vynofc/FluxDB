@@ -21,33 +21,7 @@
 
 ---
 
-## 2. Thumbnail-/Grid-Ansicht
-
-**Problem:** Nur Listenansicht (`DataGrid`-Zeilen) — für Bild- und Medienordner unpraktisch.
-
-**Lösung:** Ein **Toggle-Button** (Liste ↔ Kacheln) in der Navigation-Bar, der zwischen zwei Views umschaltet:
-
-| Listenansicht | Grid-Ansicht |
-|---|---|
-| `DataGrid` mit Spalten (Name, Typ, Größe, Tags, Modified) | `UniformGrid` / `WrapPanel` mit Kacheln |
-| Sortierbar, kompakt, viele Infos | Große Icons/Thumbnails, visuelle Navigation |
-
-**Grid-Ansicht Details:**
-- `ItemsControl` mit `UniformGrid`-Panel (z.B. 4-6 Spalten, responsiv)
-- Jede Kachel: großes Icon (64x64), Dateiname (abgeschnitten), Dateigröße
-- Echte Thumbnails für Bilder (bereits via `GetShellThumbnail` vorhanden)
-- Hover-Effekt (Scale-Animation, Border-Highlight)
-- Rechtsklick-Kontextmenü wie in Listenansicht
-
-**Umsetzung:**
-- Neuer `FileGridView`-UserControl + `FileGridTile`-UserControl
-- `ToggleSwitch` oder `Button` mit `SymbolIcon` (List24 ↔ Grid24) in Navigationsleiste
-- `BooleanToVisibilityConverter` für Umschalten zwischen DataGrid und GridView
-- Thumbnail-Cache (max 100 Einträge, LRU) für Performance
-
----
-
-## 3. Ordnerbaum-Sidebar
+## 2. Ordnerbaum-Sidebar
 
 **Problem:** Breadcrumbs allein sind für tiefe Ordnerstrukturen langsam. Man muss sich durchklicken, um 3-4 Ebenen tief zu navigieren.
 
@@ -74,7 +48,7 @@
 
 ---
 
-## 4. Multi-Selektions-Info
+## 3. Multi-Selektions-Info
 
 **Problem:** Wenn mehrere Dateien ausgewählt sind, zeigt das Detail-Panel nichts an (leer oder "No file selected").
 
@@ -108,32 +82,37 @@
 
 ---
 
-## 5. Theme-Schnellumschalter + Header-Modernisierung
+## 4. Themen-Verwaltung in Settings
 
-**Problem:** Theme-Wechsel erfordert Öffnen des Settings-Fensters → mehrere Klicks. Header wirkt etwas beengt.
+**Problem:** Aktuell gibt es nur Dark und Light als Themes. Der Theme-Wechsel erfordert das Öffnen des Settings-Fensters. Keine Möglichkeit, eigene Akzentfarben oder zusätzliche vordefinierte Themes zu wählen.
 
-**Lösung A — Theme-Schnellumschalter:**
-- Ein **Sonne/Mond-Icon-Button** (SymbolRegular.WeatherSunny24 / WeatherMoon24) rechts im Header
-- Klick toggled zwischen Dark/Light via `ApplicationThemeManager.Apply()`
-- Sofortige visuelle Rückmeldung (Icon-Wechsel + `Storyboard`-Animation)
-- Zustand in `SettingsService` speichern
+**Lösung:** Eine **Theme-Sektion** im Settings-Fenster mit mehreren vordefinierten Themes und Akzentfarben.
 
-**Lösung B — Header-Modernisierung:**
-- Pfad-Anzeige (`txtCurrentFolder`) als **abgeschnittener Pfad** mit Tooltip (vollständig)
-- "Select Folder"-Button als Icon-Button (FolderAdd24) statt Text-Button
-- Refresh-Button als Icon-Button (ArrowSync24)
-- Settings-Button als Zahnrad-Icon (Settings24)
-- Kompaktere Abstände (`Padding="12,8"`), kleinere Titel-Schrift (20px)
+**Verfügbare Themes:**
+- **Dark** (Standard) — Dunkler Hintergrund, helle Schrift
+- **Light** — Heller Hintergrund, dunkle Schrift
+- **High Contrast** — Maximale Kontraste für Barrierefreiheit
+- **OLED Dark** — Reines Schwarz (#000) für OLED-Displays (Stromsparend)
+- **Sepia** — Warme Brauntöne, augenschonend
+
+**Zusätzlich:**
+- **Akzentfarbe**-Auswahl (Dropdown oder Color-Picker) — beeinflusst Buttons, Links, Hervorhebungen
+- Live-Vorschau im Settings-Fenster (Theme wird sofort angewendet)
+- Theme-Persistenz in `settings.json` (`Theme` + `AccentColor`)
 
 **Umsetzung:**
-- `ThemeToggleCommand` in `MainWindow` (oder `SettingsViewModel`)
-- `EventHandler` für `ApplicationThemeManager.Changed` für Icon-Update
-- `ToolTipService.ShowDuration` auf `20000` für Pfad-Tooltip
-- `MultiBinding` mit `StringTrimmingConverter` für Pfad-Anzeige
+- `ComboBox` im Settings-Fenster für Theme-Auswahl
+- `ColorPicker`-Control oder vordefinierte Farb-Buttons für Akzentfarbe
+- `ApplicationThemeManager.Apply()` mit `ThemeType` (Dark/Light/HighContrast)
+- `ResourceDictionary`-Merge für benutzerdefinierte Akzentfarben via `SolidColorBrush`-Overrides
+- OLED-Theme via `ResourceDictionary` mit `Background=#000000` und `CardBackground=#111111`
+- Sepia-Theme via `ResourceDictionary` mit warmen Farbtönen
+
+**UX-Vorteil:** Personalisierung, Barrierefreiheit (High Contrast), OLED-Stromsparen, augenschonendes Arbeiten (Sepia).
 
 ---
 
-## 6. Icons ganz links im DataGrid
+## 5. Icons ganz links im DataGrid
 
 **Problem:** Im DataGrid sind Dateien nur über die Typ-Spalte (Text) identifizierbar. Der Nutzer muss den Text lesen, statt das Icon auf einen Blick zu erkennen.
 
@@ -154,24 +133,140 @@
 
 ---
 
-## Weitere Ideen
+## 6. Sortier-Indikator
 
-| # | Idee | Aufwand |
-|---|---|---|
-| 8 | **Sortier-Indikator** — Pfeil-Icons in DataGrid-Headern für aktuelle Sortierung | Klein |
-| 9 | **Favoriten/Pins** — Ordner anheften (Pin-Icon), immer sichtbar in Sidebar | Mittel |
-| 10 | **Tastenkürzel-Cheat-Sheet** — `Ctrl+K` Overlay mit allen Shortcuts | Klein |
-| 11 | **Lazy-Loading im DataGrid** — `DataGridVirtualization` für 100k+ Dateien | Mittel |
-| 12 | **Spalten-Konfiguration** — Spalten per Rechtsklick auf Header ein-/ausblenden | Klein |
-| 14 | **Toast-Benachrichtigungen** — `ISnackbarService` für Copy/Delete/Indexing-Feedback | Mittel |
+**Problem:** Das DataGrid unterstützt Sortierung per Spaltenklick, aber es gibt keine visuelle Rückmeldung, welche Spalte aktuell sortiert ist und in welcher Richtung (aufsteigend/absteigend). Der Nutzer muss raten oder sich merken, wonach sortiert wurde.
+
+**Lösung:** Pfeil-Icons (▲/▼) im Spaltenheader der aktuell sortierten Spalte, die die Sortierrichtung anzeigen.
+
+**Umsetzung:**
+- `DataGridTemplateColumn` mit `HeaderTemplate` für jede Spalte
+- `SortDirection`-Binding an `DataGrid.Items.SortDescriptions`
+- `SymbolIcon` (ArrowUp24 / ArrowDown24) rechtsbündig im Header
+- `DataGrid.Sorting`-Event nutzen, um einen eigenen SortDirection-Tracker zu aktualisieren
+- Alternativ: WPF-UI `DataGrid`-Styling mit `DataGridColumnHeader`-Template überschreiben
+
+**UX-Vorteil:** Sofort erkennbar, wonach sortiert ist — konsistent mit Windows Explorer.
+
+---
+
+## 7. Favoriten/Pins
+
+**Problem:** Häufig genutzte Unterordner sind tief in der Ordnerstruktur verschachtelt. Jedes Mal muss man über Breadcrumbs oder Sidebar mehrere Ebenen navigieren, um dorthin zu gelangen.
+
+**Lösung:** Eine „Favoriten“-Sektion (gepinnte Ordner) in der Sidebar oder als Dropdown in der Navigation-Bar. Ordner können per Pin-Icon angeheftet werden.
+
+**Umsetzung:**
+- `PinnedFolder`-Model mit `Path`, `Name`, `PinnedAt`
+- Pin/Unpin-Button in der Navigation-Bar (SymbolRegular.Pin24 / PinOff24)
+- Favoriten-Liste in `AppSettings` speichern (max 20 Einträge)
+- Anzeige als Liste unterhalb des TreeViews in der Sidebar oder als Dropdown (`SplitButton`)
+- Drag & Drop: Ordner aus DataGrid auf Favoriten-Liste ziehen = anheften
+- Rechtsklick auf Favorit → „Entfernen“ oder „In neuem Tab öffnen“
+
+**UX-Vorteil:** Schnellzugriff auf Arbeitsordner ohne Navigation, personalisierbar.
+
+---
+
+## 8. Tastenkürzel-Cheat-Sheet
+
+**Problem:** FluxDB hat viele Tastenkürzel (Alt+Links/Rechts/Hoch, Backspace, Enter, F5, Ctrl+F, F8, Ctrl+C/V/X, F2, Entf, etc.), aber keine Dokumentation davon in der App. Neue Nutzer kennen sie nicht.
+
+**Lösung:** Ein Overlay/Popup (`Ctrl+K`), das alle verfügbaren Tastenkürzel in einer übersichtlichen Tabelle anzeigt.
+
+**Umsetzung:**
+- `cheatSheetPopup` als `Popup` oder `ContentDialog` mit semi-transparentem Overlay
+- Tabelle mit Spalten: Tastenkürzel | Aktion | Kontext
+- Kategorien: Navigation, Datei-Operationen, Suche, Allgemein
+- `Esc` oder erneutes `Ctrl+K` schließt das Overlay
+- `KeyBinding` auf `Ctrl+K` im `MainWindow`
+- Dark-Mode-kompatibles Styling (passend zum aktuellen Theme)
+
+**UX-Vorteil:** Entdeckbarkeit aller Shortcuts, kein Auswendiglernen nötig, professioneller Eindruck.
+
+---
+
+## 9. Lazy-Loading / Virtualisierung im DataGrid
+
+**Problem:** Bei Ordnern mit 100.000+ Dateien wird das DataGrid träge — alle Zeilen werden beim ersten Laden gerendert, was zu langen Ladezeiten und hohem RAM-Verbrauch führt.
+
+**Lösung:** UI-Virtualisierung aktivieren, sodass nur die sichtbaren Zeilen gerendert werden. Optional: gestaffeltes Laden (erst 500 Dateien anzeigen, Rest bei Scroll).
+
+**Umsetzung:**
+- `DataGrid.EnableRowVirtualization="True"` und `EnableColumnVirtualization="True"`
+- `VirtualizingStackPanel.IsVirtualizing="True"` im `ItemsPanelTemplate`
+- `VirtualizingStackPanel.VirtualizationMode="Recycling"` für bessere Scroll-Performance
+- Fixed row height (`RowHeight="28"`) für korrekte Virtualisierung
+- Optional: `DataGrid.ItemsSource` mit `CollectionView` und `DeferRefresh` für Batch-Updates
+- Bei Extremfällen: Server-seitiges Paging via `VirtualizingPanel` mit `IList`-basiertem Data-Virtualization
+
+**UX-Vorteil:** Flüssiges Scrollen auch bei riesigen Ordnern, sofortiges Öffnen ohne Wartezeit.
+
+---
+
+## 10. Spalten-Konfiguration
+
+**Problem:** Nicht alle Spalten sind für jeden Nutzer relevant. Manche brauchen „Tags“ und „Größe“, andere nur „Name“ und „Datum“. Aktuell sind alle Spalten fix sichtbar.
+
+**Lösung:** Rechtsklick auf den DataGrid-Header öffnet ein Kontextmenü mit Checkboxen zum Ein-/Ausblenden einzelner Spalten.
+
+**Umsetzung:**
+- `ContextMenu` auf `DataGridColumnHeader` via `ColumnHeaderStyle`
+- Für jede Spalte ein `MenuItem` mit `IsCheckable="True"` und `IsChecked`-Binding an `Column.Visibility`
+- `Visibility`-Binding: `Visible` wenn gecheckt, `Collapsed` wenn nicht
+- `ColumnVisibilityModel` pro Spalte mit `IsVisible`-Property
+- Zustand in `AppSettings` oder eigener `ColumnSettings`-Sektion speichern
+- „Alle anzeigen“ / „Zurücksetzen“-Eintrag im Kontextmenü
+
+**UX-Vorteil:** Personalisierbare Ansicht, weniger horizontales Scrollen, Fokus auf relevante Daten.
+
+---
+
+## 11. Toast-Benachrichtigungen
+
+**Problem:** Aktionen wie Kopieren, Löschen, oder Index-Abschluss geben aktuell kein visuelles Feedback außer der Statusbar. Der Nutzer bemerkt nicht immer, dass eine Aktion erfolgreich war.
+
+**Lösung:** Toast/Snackbar-Benachrichtigungen via `ISnackbarService` von WPF-UI für zeitkritische Feedbacks.
+
+**Umsetzung:**
+- `ISnackbarService` via DI registrieren (falls DI umgestellt wird) oder manuell instanziieren
+- `SnackbarPresenter` im `MainWindow` XAML einbinden
+- Benachrichtigungen für:
+  - „5 Dateien kopiert“ (nach Ctrl+C)
+  - „3 Dateien gelöscht“ (nach Delete)
+  - „Indexierung abgeschlossen: 12.345 Dateien“ (nach Indexer-Fertigstellung)
+  - „Ordner umbenannt“ (nach Rename)
+  - „Fehler beim Löschen: datei.txt ist schreibgeschützt“
+- `SnackbarOptions` mit Icon, Dauer (3-5 Sekunden), und optionalem Action-Button („Rückgängig“)
+- `ControlAppearance` an aktuelles Theme anpassen (Dark/Light)
+
+**UX-Vorteil:** Sofortiges, unaufdringliches Feedback — Nutzer weiß immer, was gerade passiert ist.
+
+---
+
+## Zusammenfassung aller Ideen
+
+| # | Idee | Aufwand | Phase |
+|---|---|---|---|
+| 1 | Tag-Chips statt TextBox | Mittel | 2 |
+| 2 | Ordnerbaum-Sidebar | Groß | 3 |
+| 3 | Multi-Selektions-Info | Mittel | 2 |
+| 4 | Themen-Verwaltung in Settings | Mittel | 1 |
+| 5 | Icons ganz links im DataGrid | Klein | 1 |
+| 6 | Sortier-Indikator | Klein | 4 |
+| 7 | Favoriten/Pins | Mittel | 3 |
+| 8 | Tastenkürzel-Cheat-Sheet | Klein | 1 |
+| 9 | Lazy-Loading / Virtualisierung | Mittel | 4 |
+| 10 | Spalten-Konfiguration | Klein | 4 |
+| 11 | Toast-Benachrichtigungen | Mittel | 4 |
 
 ---
 
 ## Priorisierte Roadmap
 
 ```
-Phase 1 (Quick Wins):   #6 (DataGrid-Icons), #5 (Theme-Toggle), #10 (Shortcut-Sheet)
-Phase 2 (Core UX):      #1 (Tag-Chips), #4 (Multi-Select-Info)
-Phase 3 (Navigation):   #3 (Ordnerbaum-Sidebar), #2 (Grid-Ansicht)
-Phase 4 (Polish):       #12+#14
+Phase 1 (Quick Wins):   #5 (DataGrid-Icons), #4 (Themen-Verwaltung), #8 (Shortcut-Sheet)
+Phase 2 (Core UX):      #1 (Tag-Chips), #3 (Multi-Select-Info)
+Phase 3 (Navigation):   #2 (Ordnerbaum-Sidebar), #7 (Favoriten/Pins)
+Phase 4 (Polish):       #6 (Sortier-Indikator), #10 (Spalten-Konfiguration), #11 (Toast-Benachrichtigungen)
 ```

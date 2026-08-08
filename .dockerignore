@@ -1,0 +1,12 @@
+# Build-Kontext klein halten (gilt fuer Services mit Kontext = Repo-Root, z. B. wpf)
+.git
+.gitignore
+.vscode
+bin
+docs
+memories
+**/bin
+**/obj
+**/packages
+*.md
+!version.txt

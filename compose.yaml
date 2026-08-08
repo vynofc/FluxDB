@@ -1,0 +1,38 @@
+name: fluxdb
+
+# Wichtig: Docker Desktop kann Windows- und Linux-Container NICHT gleichzeitig ausfuehren.
+# Daher sind die Services ueber Profile getrennt:
+#
+#   Windows-Container-Modus (WPF):
+#     docker compose --profile windows up wpf
+#
+#   Linux-Container-Modus (Go-Tools):
+#     docker compose --profile linux up installer log-viewer
+#
+# Die gebauten Artefakte landen unter ./bin/docker/<service>/.
+
+services:
+  wpf:
+    profiles: ["windows"]
+    build:
+      context: .                      # Repo-Root (version.txt wird vom csproj benoetigt)
+      dockerfile: WPF/FluxDB/Dockerfile
+    image: fluxdb-wpf-build
+    volumes:
+      - ./bin/docker/wpf:C:\out
+
+  installer:
+    profiles: ["linux"]
+    build:
+      context: ./Installer
+    image: fluxdb-installer-build
+    volumes:
+      - ./bin/docker/installer:/out
+
+  log-viewer:
+    profiles: ["linux"]
+    build:
+      context: ./Log_Viewer
+    image: fluxdb-logviewer-build
+    volumes:
+      - ./bin/docker/log-viewer:/out
