@@ -234,15 +234,14 @@
                                 Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
                             <Grid>
                                 <ScrollViewer x:Name="imgPreviewContainer" Margin="10"
-                                              HorizontalScrollBarVisibility="Disabled"
+                                              HorizontalScrollBarVisibility="Auto"
                                               VerticalScrollBarVisibility="Auto"
                                               PreviewMouseWheel="ImgPreviewContainer_PreviewMouseWheel">
-                                    <Image x:Name="imgPreview" Stretch="Uniform" Visibility="Collapsed"
-                                           HorizontalAlignment="Center" VerticalAlignment="Top"
-                                           RenderTransformOrigin="0.5,0">
-                                        <Image.RenderTransform>
+                                    <Image x:Name="imgPreview" Stretch="None" Visibility="Collapsed"
+                                           HorizontalAlignment="Center" VerticalAlignment="Top">
+                                        <Image.LayoutTransform>
                                             <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                        </Image.RenderTransform>
+                                        </Image.LayoutTransform>
                                     </Image>
                                 </ScrollViewer>
                                 <WebBrowser x:Name="webPdfPreview" Visibility="Collapsed" Margin="10"/>

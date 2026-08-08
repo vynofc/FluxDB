@@ -19,10 +19,21 @@ namespace FluxDB.Services
             LoggingService.LogDebug($"DatabaseService: opening DB at {databasePath}");
             _connection = new SQLiteConnection(string.Format("Data Source={0};Version=3;", databasePath));
             _connection.Open();
-            using (var pragmaCmd = new SQLiteCommand("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-8000;", _connection))
+            using (var pragmaCmd = new SQLiteCommand("PRAGMA journal_mode=DELETE; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-8000;", _connection))
             {
                 pragmaCmd.ExecuteNonQuery();
             }
+
+            // Clean up orphaned WAL/SHM files from previous WAL mode
+            try
+            {
+                var walPath = databasePath + "-wal";
+                var shmPath = databasePath + "-shm";
+                if (File.Exists(walPath)) File.Delete(walPath);
+                if (File.Exists(shmPath)) File.Delete(shmPath);
+            }
+            catch { /* best effort */ }
+
             InitDb();
             LoggingService.LogDebug("DatabaseService: DB opened and schema initialized");
         }

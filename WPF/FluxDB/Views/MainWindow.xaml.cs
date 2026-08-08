@@ -590,6 +590,8 @@ namespace FluxDB.Views
 
                     imgPreview.Source = bitmap;
                     imgPreview.Visibility = Visibility.Visible;
+                    var scale2 = imgPreview.LayoutTransform as ScaleTransform;
+                    if (scale2 != null) { scale2.ScaleX = 1; scale2.ScaleY = 1; }
                 }
                 catch (OperationCanceledException) { return; }
                 catch (Exception ex)
@@ -687,23 +689,34 @@ namespace FluxDB.Views
         {
             imgPreview.Source = bitmap;
             imgPreview.Visibility = Visibility.Visible;
+            var scale = imgPreview.LayoutTransform as ScaleTransform;
+            if (scale != null) { scale.ScaleX = 1; scale.ScaleY = 1; }
         }
 
         private void ImgPreviewContainer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (imgPreview.Visibility != Visibility.Visible || imgPreview.Source == null) return;
 
-            var scale = imgPreview.RenderTransform as ScaleTransform;
-            if (scale == null) return;
+            if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0)
+            {
+                var scale = imgPreview.LayoutTransform as ScaleTransform;
+                if (scale == null) return;
 
-            var zoomFactor = e.Delta > 0 ? 1.2 : 0.8;
-            scale.ScaleX *= zoomFactor;
-            scale.ScaleY *= zoomFactor;
+                var zoomFactor = e.Delta > 0 ? 1.2 : 0.8;
+                scale.ScaleX *= zoomFactor;
+                scale.ScaleY *= zoomFactor;
 
-            if (scale.ScaleX < 0.1) { scale.ScaleX = 0.1; scale.ScaleY = 0.1; }
-            if (scale.ScaleX > 10) { scale.ScaleX = 10; scale.ScaleY = 10; }
+                if (scale.ScaleX < 0.1) { scale.ScaleX = 0.1; scale.ScaleY = 0.1; }
+                if (scale.ScaleX > 10) { scale.ScaleX = 10; scale.ScaleY = 10; }
 
-            e.Handled = true;
+                e.Handled = true;
+            }
+            else if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+            {
+                imgPreviewContainer.ScrollToHorizontalOffset(
+                    imgPreviewContainer.HorizontalOffset - e.Delta);
+                e.Handled = true;
+            }
         }
 
         #endregion
