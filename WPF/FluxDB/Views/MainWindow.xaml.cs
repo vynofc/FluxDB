@@ -19,6 +19,7 @@ using FluxDB.Services;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using Microsoft.Web.WebView2.Wpf;
 
 namespace FluxDB.Views
 {
@@ -558,6 +559,8 @@ namespace FluxDB.Views
             txtNoPreview.Visibility = Visibility.Collapsed;
             pnlPreview.Visibility = Visibility.Collapsed;
             webPdfPreview.Visibility = Visibility.Collapsed;
+            if (webPdfPreview.CoreWebView2 != null)
+                webPdfPreview.CoreWebView2.Navigate("about:blank");
 
             if (file == null || file.IsFolder || !File.Exists(file.Path))
             {
@@ -605,20 +608,10 @@ namespace FluxDB.Views
             {
                 try
                 {
-                    var path = file.Path;
-                    var thumb = await Task.Run(() => GetShellThumbnail(path, 800), ct);
-                    if (_previewVersion != version) return;
-                    if (thumb != null)
-                    {
-                        SetImageSource(thumb);
-                    }
-                    else
-                    {
-                        txtNoPreview.Text = "No embedded preview available. Open externally to view.";
-                        txtNoPreview.Visibility = Visibility.Visible;
-                    }
+                    await webPdfPreview.EnsureCoreWebView2Async();
+                    webPdfPreview.CoreWebView2.Navigate(file.Path);
+                    webPdfPreview.Visibility = Visibility.Visible;
                 }
-                catch (OperationCanceledException) { return; }
                 catch (Exception ex)
                 {
                     LoggingService.Log($"Cannot preview PDF: {ex.Message}");

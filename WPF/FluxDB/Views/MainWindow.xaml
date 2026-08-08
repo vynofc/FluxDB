@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:wpf="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
     mc:Ignorable="d"
     Title="FluxDB - File Database Manager"
     Height="750" Width="1400"
@@ -244,7 +245,7 @@
                                         </Image.LayoutTransform>
                                     </Image>
                                 </ScrollViewer>
-                                <WebBrowser x:Name="webPdfPreview" Visibility="Collapsed" Margin="10"/>
+                                <wpf:WebView2 x:Name="webPdfPreview" Visibility="Collapsed"/>
                                 <ScrollViewer x:Name="txtPreviewScroll" Visibility="Collapsed" Margin="10">
                                     <TextBox x:Name="txtPreview" IsReadOnly="True"
                                              Background="Transparent"
