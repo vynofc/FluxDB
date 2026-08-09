@@ -44,6 +44,18 @@ namespace FluxDB.Services
             catch { /* best effort */ }
 
             InitDb();
+
+            try
+            {
+                if (File.Exists(databasePath))
+                {
+                    var attr = File.GetAttributes(databasePath);
+                    if ((attr & FileAttributes.Hidden) == 0)
+                        File.SetAttributes(databasePath, attr | FileAttributes.Hidden);
+                }
+            }
+            catch { /* best effort */ }
+
             LoggingService.LogDebug("DatabaseService: DB opened and schema initialized");
         }
 

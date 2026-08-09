@@ -283,6 +283,7 @@ namespace FluxDB.ViewModels
                 {
                     return Directory.GetDirectories(currentFolder)
                         .Where(d => !Path.GetFileName(d).StartsWith("."))
+                        .Where(d => (File.GetAttributes(d) & (FileAttributes.Hidden | FileAttributes.System)) == 0)
                         .OrderBy(d => Path.GetFileName(d))
                         .ToList();
                 }
@@ -306,6 +307,12 @@ namespace FluxDB.ViewModels
             var allFiles = await Task.Run(() => _databaseService.GetFilesInFolder(currentFolder));
             var filesInFolder = allFiles
                 .Where(f => Path.GetDirectoryName(f.Path) == currentFolder)
+                .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
+                .Where(f =>
+                {
+                    try { return (File.GetAttributes(f.Path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
+                    catch { return false; }
+                })
                 .Where(MatchesFilter)
                 .OrderBy(f => f.Name);
 
@@ -377,7 +384,14 @@ namespace FluxDB.ViewModels
             }
 
             if (_databaseService == null) return;
-            var results = _databaseService.SearchFiles(SearchText, Navigation.CurrentViewFolder);
+            var results = _databaseService.SearchFiles(SearchText, Navigation.CurrentViewFolder)
+                .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
+                .Where(f =>
+                {
+                    try { return (File.GetAttributes(f.Path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
+                    catch { return false; }
+                })
+                .ToList();
             Files = new ObservableCollection<FileEntry>(results);
             FileCountText = $"{results.Count} results";
         }
