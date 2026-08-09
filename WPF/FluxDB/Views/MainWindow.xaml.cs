@@ -119,6 +119,17 @@ namespace FluxDB.Views
 
             try
             {
+                if (File.Exists(dbPath))
+                {
+                    var attr = File.GetAttributes(dbPath);
+                    if ((attr & FileAttributes.Hidden) == 0)
+                        File.SetAttributes(dbPath, attr | FileAttributes.Hidden);
+                }
+            }
+            catch (Exception ex) { LoggingService.Log($"Failed to hide database file: {ex.Message}"); }
+
+            try
+            {
                 _settingsService.AddRecentFolder(folderPath);
             }
             catch (Exception ex) { LoggingService.Log($"Failed to add recent folder: {ex.Message}"); }
@@ -1015,7 +1026,15 @@ namespace FluxDB.Views
             var folder = _currentViewFolder ?? _currentRootFolder;
             List<FileEntry> results = await Task.Run(() => _databaseService.SearchFiles(query, folder));
 
-            dgFiles.ItemsSource = results.Where(MatchesFilter).ToList();
+            dgFiles.ItemsSource = results
+                .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
+                .Where(f =>
+                {
+                    try { return (File.GetAttributes(f.Path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
+                    catch { return false; }
+                })
+                .Where(MatchesFilter)
+                .ToList();
             txtFileCount.Text = $"{results.Count} found";
             txtStatus.Text = $"Search results for: {query}";
         }
@@ -1574,6 +1593,7 @@ namespace FluxDB.Views
                 {
                     return Directory.GetDirectories(currentFolder)
                         .Where(d => !Path.GetFileName(d).StartsWith("."))
+                        .Where(d => (File.GetAttributes(d) & (FileAttributes.Hidden | FileAttributes.System)) == 0)
                         .OrderBy(d => Path.GetFileName(d))
                         .ToList();
                 }
@@ -1600,6 +1620,12 @@ namespace FluxDB.Views
             var allFiles = await Task.Run(() => _databaseService.GetFilesInFolder(currentFolder));
             var filesInFolder = allFiles
                 .Where(f => Path.GetDirectoryName(f.Path) == currentFolder)
+                .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
+                .Where(f =>
+                {
+                    try { return (File.GetAttributes(f.Path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
+                    catch { return false; }
+                })
                 .Where(MatchesFilter)
                 .OrderBy(f => f.Name);
 

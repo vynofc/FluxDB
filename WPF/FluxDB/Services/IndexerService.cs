@@ -50,7 +50,7 @@ namespace FluxDB.Services
             {
                 try
                 {
-                    result.FilesIndexed = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories).Count();
+                    result.FilesIndexed = EnumerateAllFiles(rootPath, cancellationToken).Count();
                 }
                 catch (UnauthorizedAccessException) { }
                 catch (DirectoryNotFoundException) { }
@@ -200,6 +200,16 @@ namespace FluxDB.Services
             }
         }
 
+        private static bool IsHiddenOrSystem(string path)
+        {
+            try
+            {
+                var attr = File.GetAttributes(path);
+                return (attr & (FileAttributes.Hidden | FileAttributes.System)) != 0;
+            }
+            catch { return true; }
+        }
+
         private IEnumerable<string> EnumerateAllFiles(string path, CancellationToken cancellationToken)
         {
             var stack = new Stack<string>();
@@ -222,11 +232,13 @@ namespace FluxDB.Services
                 foreach (var file in files)
                 {
                     if (cancellationToken.IsCancellationRequested) yield break;
+                    if (IsHiddenOrSystem(file)) continue;
                     yield return file;
                 }
 
                 for (int i = dirs.Length - 1; i >= 0; i--)
                 {
+                    if (IsHiddenOrSystem(dirs[i])) continue;
                     stack.Push(dirs[i]);
                 }
             }
