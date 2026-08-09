@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	githubAPIURL     = "https://api.github.com/repos/vynofc/FluxDB/releases"
-	downloadBaseURL  = "https://github.com/vynofc/FluxDB/releases/download/%s/FluxDB.zip"
+	githubAPIURL    = "https://api.github.com/repos/vynofc/FluxDB/releases"
+	downloadBaseURL = "https://github.com/vynofc/FluxDB/releases/download/%s/FluxDB.zip"
 )
 
 type githubRelease struct {
@@ -25,7 +25,7 @@ type releaseInfo struct {
 	prerelease bool
 }
 
-func fetchReleasesCmd() tea.Cmd {
+func fetchReleasesCmd(includeBeta bool) tea.Cmd {
 	return func() tea.Msg {
 		client := &http.Client{Timeout: 15 * time.Second}
 		req, err := http.NewRequest("GET", githubAPIURL+"?per_page=20", nil)
@@ -60,7 +60,14 @@ func fetchReleasesCmd() tea.Cmd {
 
 		var infos []releaseInfo
 		for _, r := range releases {
+			if r.Prerelease && !includeBeta {
+				continue
+			}
 			infos = append(infos, releaseInfo{tag: r.TagName, prerelease: r.Prerelease})
+		}
+
+		if len(infos) == 0 {
+			return errMsg{err: fmt.Errorf("keine passenden Releases gefunden")}
 		}
 
 		return releasesFetchedMsg{releases: infos}

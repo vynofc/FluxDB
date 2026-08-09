@@ -74,10 +74,11 @@ type model struct {
 	progressCh      chan float64
 	steps           []step
 	activeStep      int
-	selectedVersion string
-	createShortcut  bool
-	detail          bool
-	beta            bool
+	selectedVersion   string
+	createShortcut    bool
+	detail            bool
+	beta              bool
+	lastLoggedPercent int
 }
 
 func initialModel(customTag, customPath string, detail bool, beta bool) model {
@@ -123,17 +124,18 @@ func initialModel(customTag, customPath string, detail bool, beta bool) model {
 	}
 
 	return model{
-		state:       startState,
-		spinner:     s,
-		progressBar: pb,
-		viewport:    vp,
-		logs:        []string{},
-		customTag:   customTag,
-		customPath:  customPath,
-		steps:       steps,
-		activeStep:  0,
-		detail:      detail,
-		beta:        beta,
+		state:             startState,
+		spinner:           s,
+		progressBar:       pb,
+		viewport:          vp,
+		logs:              []string{},
+		customTag:         customTag,
+		customPath:        customPath,
+		steps:             steps,
+		activeStep:        0,
+		detail:            detail,
+		beta:              beta,
+		lastLoggedPercent: -1,
 	}
 }
 
@@ -154,7 +156,7 @@ func (m *model) Init() tea.Cmd {
 			m.spinner.Tick,
 			func() tea.Msg { return logMsg{line: "🚀 FluxDB Installer gestartet"} },
 			func() tea.Msg { return logMsg{line: "📡 Rufe GitHub Releases ab..."} },
-			fetchReleasesCmd(),
+			fetchReleasesCmd(m.beta),
 		)
 	}
 
