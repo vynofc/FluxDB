@@ -17,8 +17,5 @@ global using FluxDB.Views;
 global using FluxDB.Views.Pages;
 global using FluxDB.Views.Controls;
 global using FluxDB.Converters;
-global using FluxDB.Helpers;
-global using Microsoft.Extensions.DependencyInjection;
-global using Microsoft.Extensions.Hosting;
 global using Wpf.Ui;
 global using Wpf.Ui.Appearance;

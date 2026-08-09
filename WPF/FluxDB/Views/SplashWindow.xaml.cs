@@ -103,13 +103,13 @@ namespace FluxDB.Views
                     }
                     catch (Exception ex)
                     {
-                        LoggingService.Log($"Update check failed: {ex.Message}");
+                        LoggingService.Log($"Update check failed: {ex}");
                     }
                 });
             }
             catch (Exception ex)
             {
-                LoggingService.Log($"Startup CRITICAL failure: {ex.Message}");
+                LoggingService.Log($"Startup CRITICAL failure: {ex}");
                 MessageBox.Show("Startup failed: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 Dispatcher.Invoke(() => Application.Current.Shutdown());
             }
@@ -209,7 +209,7 @@ namespace FluxDB.Views
             }
             catch (Exception ex)
             {
-                LoggingService.Log($"Update check error: {ex.Message}");
+                LoggingService.Log($"Update check error: {ex}");
                 return true;
             }
         }
@@ -249,15 +249,57 @@ namespace FluxDB.Views
                 {
                     http.Timeout = TimeSpan.FromMinutes(5);
                     var bytes = await http.GetByteArrayAsync(url);
+
+                    var verified = await VerifyInstallerChecksumAsync(http, url, bytes);
+                    if (!verified)
+                    {
+                        LoggingService.Log("DownloadInstallerAsync: checksum mismatch, aborting install");
+                        return false;
+                    }
+
                     await File.WriteAllBytesAsync(destPath, bytes);
                 }
                 return true;
             }
             catch (Exception ex)
             {
-                LoggingService.Log($"DownloadInstallerAsync failed: {ex.Message}");
+                LoggingService.Log($"DownloadInstallerAsync failed: {ex}");
                 return false;
             }
+        }
+
+        private async Task<bool> VerifyInstallerChecksumAsync(HttpClient http, string installerUrl, byte[] installerBytes)
+        {
+            string expectedHash;
+            try
+            {
+                expectedHash = (await http.GetStringAsync(installerUrl + ".sha256"))?.Trim();
+            }
+            catch (Exception ex)
+            {
+                // Older releases have no checksum asset — proceed without verification
+                LoggingService.Log($"Checksum file not available, skipping verification: {ex.Message}");
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(expectedHash))
+            {
+                LoggingService.Log("Checksum file is empty, skipping verification");
+                return true;
+            }
+
+            expectedHash = expectedHash.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0];
+
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                var actualHash = BitConverter.ToString(sha.ComputeHash(installerBytes)).Replace("-", "");
+                if (!actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    LoggingService.Log($"Checksum mismatch: expected={expectedHash} actual={actualHash}");
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }

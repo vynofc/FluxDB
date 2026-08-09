@@ -10,13 +10,16 @@ namespace FluxDB.Services
     /// </summary>
     public class SettingsService
     {
+        private const string AppDataFolderName = "FluxDB";
+        private const string SettingsFileName = "settings.json";
+
         private readonly string _settingsPath;
 
         public SettingsService()
         {
             var appDataPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "FluxDB"
+                AppDataFolderName
             );
 
             if (!Directory.Exists(appDataPath))
@@ -24,7 +27,7 @@ namespace FluxDB.Services
                 Directory.CreateDirectory(appDataPath);
             }
 
-            _settingsPath = Path.Combine(appDataPath, "settings.json");
+            _settingsPath = Path.Combine(appDataPath, SettingsFileName);
         }
 
         /// <summary>

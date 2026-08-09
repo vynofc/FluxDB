@@ -40,6 +40,21 @@ jobs:
         run: |
           Compress-Archive -Path bin\* -DestinationPath FluxDB.zip -Force
 
+      - name: Create installer checksum
+        run: |
+          $hash = (Get-FileHash Installer/FluxDB-Installer.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path Installer/FluxDB-Installer.exe.sha256 -Value "$hash  FluxDB-Installer.exe" -NoNewline
+
+      - name: Upload installer checksum asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: Installer/FluxDB-Installer.exe.sha256
+          asset_name: FluxDB-Installer.exe.sha256
+          asset_content_type: text/plain
+
       - name: Upload release asset
         uses: actions/upload-release-asset@v1
         env:

@@ -72,6 +72,7 @@ namespace FluxDB.Services
             var existingPaths = new HashSet<string>();
             int processed = 0;
             const int BatchSize = 1000;
+            const int MaxPathLength = 260;
             var currentTransaction = _database.BeginTransaction();
 
             try
@@ -86,6 +87,14 @@ namespace FluxDB.Services
 
                     try
                     {
+                        // Windows MAX_PATH limit — skip paths that would fail in the OS/DB layer
+                        if (filePath.Length >= MaxPathLength)
+                        {
+                            result.Errors.Add($"Path too long (skipped): {filePath}");
+                            processed++;
+                            continue;
+                        }
+
                         var fi = new FileInfo(filePath);
                         var fileEntry = new FileEntry
                         {

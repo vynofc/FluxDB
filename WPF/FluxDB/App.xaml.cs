@@ -19,6 +19,9 @@ namespace FluxDB
             base.OnStartup(e);
             var ver = GetLocalVersion();
             bool debugMode = ver.EndsWith("-debug", StringComparison.OrdinalIgnoreCase);
+#if DEBUG
+            debugMode = true;
+#endif
             FluxDB.Services.LoggingService.SetDebugMode(debugMode);
             if (debugMode)
                 FluxDB.Services.LoggingService.Log($"DEBUG MODE ACTIVE — version: {ver}");

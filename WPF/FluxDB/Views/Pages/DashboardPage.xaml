@@ -6,7 +6,7 @@
       Title="Dashboard">
     <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
         <StackPanel HorizontalAlignment="Center">
-            <ui:SymbolIcon Symbol="FolderOpen48"
+            <ui:SymbolIcon Symbol="FolderOpen24"
                            Width="96" Height="96"
                            Foreground="{DynamicResource AccentFillColorDefaultBrush}" />
             <TextBlock Text="FluxDB"

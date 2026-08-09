@@ -77,33 +77,24 @@ go build -ldflags="-s -w" -o ..\bin\components\Log_Viewer.exe .
 | Komponente | Paket |
 |---|---|
 | MVVM-Toolkit | `CommunityToolkit.Mvvm` 8.4.0 |
-| DI/Hosting | `Microsoft.Extensions.DependencyInjection` + `Microsoft.Extensions.Hosting` 10.0.0 |
 | UI-Framework | `WPF-UI` (wpfui) 4.2.0 |
 | JSON | `Newtonsoft.Json` 13.0.3 |
 | SQLite | `System.Data.SQLite.Core` 1.0.119.0 |
 | Target | `net10.0-windows7.0` (SDK-style `.csproj`) |
 | Runtime | `win-x64`, `SelfContained=false` |
 
-### Wichtiger Architektur-Hinweis: DI ist definiert, aber nicht verwendet
+### Architektur-Hinweis: Kein Dependency Injection
 
-`ServiceExtensions.AddFluxDB()` registriert alle Services, ViewModels, und Pages als Singletons. **Diese Registrierung wird jedoch aktuell nicht von `App.OnStartup` aufgerufen.** Das `App.xaml.cs` überschreibt `OnStartup` nur für Debug-Mode-Erkennung — es erstellt keinen `IHost`.
+Es gibt **keine DI** im Projekt. Die frühere, ungenutzte `ServiceExtensions.AddFluxDB()`-Registrierung wurde entfernt (2026-08-09, siehe report.md #2 Option A), ebenso die Pakete `Microsoft.Extensions.DependencyInjection`/`Hosting`. Wer DI wieder einführen will, muss diese Pakete neu hinzufügen, einen `IHost` in `App.OnStartup` erstellen und `SplashWindow`/`MainWindow` über den Container auflösen.
 
-Der tatsächliche Startup-Flow arbeitet komplett ohne DI:
+Der Startup-Flow arbeitet komplett ohne DI:
 
 1. `App.xaml` hat `StartupUri="Views/SplashWindow.xaml"` — WPF instanziiert `SplashWindow` direkt
 2. `SplashWindow` erstellt `new SettingsService()` direkt im Konstruktor
-3. `SplashWindow_Loaded` erstellt `new MainWindow()` direkt (nicht via DI)
+3. `SplashWindow_Loaded` erstellt `new MainWindow()` direkt
 4. `MainWindow`-Konstruktor erstellt `new SettingsService()`, `new DatabaseService()`, etc. selbst
 
-**Das bedeutet:** `ServiceExtensions`, `MainViewModel`, `NavigationViewModel`, `DashboardViewModel`, `SettingsViewModel` sind im Code vorhanden und korrekt strukturiert, werden aber aktuell nicht vom tatsächlichen Startup-Pfad verwendet. `MainWindow` hat seine eigene Navigation, Clipboard- und Indexing-Logik im Code-Behind.
-
-Falls in Zukunft auf DI umgestellt wird, muss `App.OnStartup` einen `IHost` erstellen:
-```csharp
-Host = Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
-    .ConfigureServices((ctx, services) => services.AddFluxDB())
-    .Build();
-```
-Und `SplashWindow` muss `MainWindow` via `Host.Services.GetRequiredService<MainWindow>()` auflösen.
+**Das bedeutet:** `MainViewModel`, `NavigationViewModel`, `DashboardViewModel`, `SettingsViewModel` sind im Code vorhanden und korrekt strukturiert, werden aber aktuell nicht vom tatsächlichen Startup-Pfad verwendet. `MainWindow` hat seine eigene Navigation, Clipboard- und Indexing-Logik im Code-Behind.
 
 ### Tatsächlicher Startup-Flow
 
@@ -357,7 +348,7 @@ When opening a new folder, `MainWindow.InitializeDatabaseForFolder()` **disposes
 - Windows extend `FluentWindow` (not `Window`). This provides Mica backdrop, rounded corners, and titlebar integration.
 - `ApplicationThemeManager.Apply()` is the only way to change themes. Do not manipulate `ResourceDictionary` directly.
 - XAML namespace: `xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"`
-- `ISnackbarService` and `IContentDialogService` are available via DI, but DI is not currently wired.
+- `ISnackbarService` and `IContentDialogService` exist in WPF-UI, but are not currently used by the app.
 - `SymbolRegular` enum values can change between wpfui versions. Verify the symbol exists in the version you're targeting (e.g., `FolderAdd24` doesn't exist in 4.2.0 — use `Folder24` instead).
 
 ### Code-behind pattern (current architecture)

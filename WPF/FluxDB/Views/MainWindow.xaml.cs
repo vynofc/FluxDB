@@ -101,6 +101,9 @@ namespace FluxDB.Views
 
         private void InitializeDatabaseForFolder(string folderPath)
         {
+            if (string.IsNullOrWhiteSpace(folderPath))
+                throw new ArgumentException("Folder path must not be empty.", nameof(folderPath));
+
             _databaseService?.Dispose();
             if (_indexerService != null)
             {
@@ -129,29 +132,37 @@ namespace FluxDB.Views
 
         private void LoadInitialData()
         {
-            var settings = _settingsService.Load();
-
-            if (!string.IsNullOrEmpty(settings.LastRootFolder) && Directory.Exists(settings.LastRootFolder))
+            try
             {
-                _currentRootFolder = settings.LastRootFolder;
-                _currentViewFolder = _currentRootFolder;
-                txtCurrentFolder.Text = _currentRootFolder;
-                btnRefresh.IsEnabled = true;
+                var settings = _settingsService.Load();
 
-                InitializeDatabaseForFolder(_currentRootFolder);
-
-                LoadFilterForFolder(_currentRootFolder);
-
-                NavigateToFolder(_currentRootFolder, addToHistory: false);
-
-                if (HasExistingIndex(_currentRootFolder))
+                if (!string.IsNullOrEmpty(settings.LastRootFolder) && Directory.Exists(settings.LastRootFolder))
                 {
-                    txtStatus.Text = "Index loaded from folder";
+                    _currentRootFolder = settings.LastRootFolder;
+                    _currentViewFolder = _currentRootFolder;
+                    txtCurrentFolder.Text = _currentRootFolder;
+                    btnRefresh.IsEnabled = true;
+
+                    InitializeDatabaseForFolder(_currentRootFolder);
+
+                    LoadFilterForFolder(_currentRootFolder);
+
+                    NavigateToFolder(_currentRootFolder, addToHistory: false);
+
+                    if (HasExistingIndex(_currentRootFolder))
+                    {
+                        txtStatus.Text = "Index loaded from folder";
+                    }
+                }
+                else
+                {
+                    txtStatus.Text = "Ready - Select a folder or drag & drop to start";
                 }
             }
-            else
+            catch (Exception ex)
             {
-                txtStatus.Text = "Ready - Select a folder or drag & drop to start";
+                LoggingService.Log($"LoadInitialData failed: {ex}");
+                txtStatus.Text = "Failed to load initial data - select a folder to continue";
             }
         }
 
@@ -519,24 +530,33 @@ namespace FluxDB.Views
 
         private void LoadFilterForFolder(string folderPath)
         {
-            var settings = _settingsService.Load();
-            if (settings.FolderFilters != null && settings.FolderFilters.TryGetValue(folderPath, out var filter))
+            try
             {
-                _currentFilter = filter;
-
-                foreach (ComboBoxItem item in cmbFilter.Items)
+                var settings = _settingsService.Load();
+                if (settings.FolderFilters != null && settings.FolderFilters.TryGetValue(folderPath, out var filter))
                 {
-                    if (item.Content.ToString() == filter)
+                    _currentFilter = filter;
+
+                    foreach (ComboBoxItem item in cmbFilter.Items)
                     {
-                        cmbFilter.SelectedItem = item;
-                        break;
+                        if (item.Content.ToString() == filter)
+                        {
+                            cmbFilter.SelectedItem = item;
+                            break;
+                        }
                     }
                 }
+                else
+                {
+                    _currentFilter = "All Files";
+                    cmbFilter.SelectedIndex = 0;
+                }
             }
-            else
+            catch (Exception ex)
             {
+                LoggingService.Log($"LoadFilterForFolder failed: {ex}");
                 _currentFilter = "All Files";
-                cmbFilter.SelectedIndex = 0;
+                if (cmbFilter != null) cmbFilter.SelectedIndex = 0;
             }
         }
 
@@ -1621,12 +1641,20 @@ namespace FluxDB.Views
         {
             await Task.Run(() =>
             {
+                var fullDestRoot = Path.GetFullPath(destinationFolder);
                 foreach (var src in sourcePaths)
                 {
                     try
                     {
-                        var dest = Path.Combine(destinationFolder, Path.GetFileName(src));
+                        var dest = Path.Combine(fullDestRoot, Path.GetFileName(src));
                         dest = GetUniquePath(dest);
+
+                        if (!IsPathSafe(dest, fullDestRoot))
+                        {
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                txtStatus.Text = $"Skipped unsafe path: {Path.GetFileName(src)}"));
+                            continue;
+                        }
 
                         if (Directory.Exists(src))
                         {
@@ -1666,8 +1694,21 @@ namespace FluxDB.Views
             txtStatus.Text = move ? $"Moved {sourcePaths.Length} item(s)" : $"Copied {sourcePaths.Length} item(s)";
         }
 
+        private static bool IsPathSafe(string filePath, string allowedRoot)
+        {
+            var fullPath = Path.GetFullPath(filePath);
+            var fullRoot = Path.GetFullPath(allowedRoot);
+            if (!fullRoot.EndsWith(Path.DirectorySeparatorChar.ToString()))
+                fullRoot += Path.DirectorySeparatorChar;
+            return fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void CopyDirectoryRecursive(string sourceDir, string destDir)
         {
+            // Do not follow symlinks/junctions — they could point outside the destination tree
+            if ((File.GetAttributes(sourceDir) & FileAttributes.ReparsePoint) != 0)
+                return;
+
             Directory.CreateDirectory(destDir);
             foreach (var file in Directory.GetFiles(sourceDir))
             {
@@ -1774,6 +1815,12 @@ namespace FluxDB.Views
         protected override void OnClosed(EventArgs e)
         {
             _indexCancellation?.Cancel();
+            _previewCts?.Cancel();
+            _previewCts?.Dispose();
+            _previewCts = null;
+            _toastTimer?.Dispose();
+            _toastTimer = null;
+            try { webPdfPreview?.Dispose(); } catch { }
             _databaseService?.Dispose();
             LoggingService.Shutdown();
             base.OnClosed(e);

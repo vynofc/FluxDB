@@ -9,7 +9,16 @@ namespace FluxDB.Services
 {
     public class DatabaseService : IDisposable
     {
+        private const string WalFileSuffix = "-wal";
+        private const string ShmFileSuffix = "-shm";
+
         private SQLiteConnection _connection;
+
+        private void ThrowIfDisposed()
+        {
+            if (_connection == null)
+                throw new ObjectDisposedException(nameof(DatabaseService));
+        }
 
         public DatabaseService(string databasePath)
         {
@@ -27,8 +36,8 @@ namespace FluxDB.Services
             // Clean up orphaned WAL/SHM files from previous WAL mode
             try
             {
-                var walPath = databasePath + "-wal";
-                var shmPath = databasePath + "-shm";
+                var walPath = databasePath + WalFileSuffix;
+                var shmPath = databasePath + ShmFileSuffix;
                 if (File.Exists(walPath)) File.Delete(walPath);
                 if (File.Exists(shmPath)) File.Delete(shmPath);
             }
@@ -61,11 +70,13 @@ namespace FluxDB.Services
 
         public SQLiteTransaction BeginTransaction()
         {
+            ThrowIfDisposed();
             return _connection.BeginTransaction();
         }
 
         public int UpsertFile(FileEntry f, SQLiteTransaction transaction = null)
         {
+            ThrowIfDisposed();
             var sql = "INSERT INTO files (path,name,extension,size,created_at,modified_at,deleted,last_indexed_at) VALUES (@p,@n,@e,@s,@c,@m,@d,@l) ON CONFLICT(path) DO UPDATE SET name=@n,extension=@e,size=@s,modified_at=@m,deleted=@d,last_indexed_at=@l RETURNING id";
             using (var cmd = new SQLiteCommand(sql, _connection, transaction))
             {
@@ -84,6 +95,7 @@ namespace FluxDB.Services
 
         public List<FileEntry> GetAllFiles(bool includeDeleted = false)
         {
+            ThrowIfDisposed();
             var files = new List<FileEntry>();
             var sql = @"
                 SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
@@ -110,6 +122,7 @@ namespace FluxDB.Services
 
         public List<FileEntry> GetFilesInFolder(string folderPath)
         {
+            ThrowIfDisposed();
             var files = new List<FileEntry>();
             var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
             var sql = @"
@@ -164,6 +177,7 @@ namespace FluxDB.Services
 
         public void SetTagsForFile(int fileId, List<string> tags, SQLiteTransaction transaction = null)
         {
+            ThrowIfDisposed();
             LoggingService.LogDebug($"SetTagsForFile: fileId={fileId} tags=[{string.Join(", ", tags)}]");
             var ownTransaction = transaction == null;
             var tx = transaction ?? _connection.BeginTransaction();
@@ -208,6 +222,7 @@ namespace FluxDB.Services
 
         public void SetNoteForFile(int fileId, string note, SQLiteTransaction transaction = null)
         {
+            ThrowIfDisposed();
             using (var cmd = new SQLiteCommand("INSERT INTO notes (file_id,note) VALUES (@id,@n) ON CONFLICT(file_id) DO UPDATE SET note=@n", _connection, transaction))
             {
                 cmd.Parameters.AddWithValue("@id", fileId);
@@ -218,6 +233,7 @@ namespace FluxDB.Services
 
         public void MarkDeletedFiles(HashSet<string> existingPaths, string scopePath = null)
         {
+            ThrowIfDisposed();
             var toDelete = new List<int>();
             LoggingService.LogDebug($"MarkDeletedFiles: scope={scopePath ?? "(all)"}, existingPaths.Count={existingPaths.Count}");
 
@@ -257,6 +273,7 @@ namespace FluxDB.Services
 
         public int GetFileCount()
         {
+            ThrowIfDisposed();
             using (var cmd = new SQLiteCommand("SELECT COUNT(*) FROM files WHERE deleted=0", _connection))
             {
                 return Convert.ToInt32(cmd.ExecuteScalar());
@@ -265,6 +282,7 @@ namespace FluxDB.Services
 
         public void MarkFileAsDeleted(int fileId)
         {
+            ThrowIfDisposed();
             LoggingService.LogDebug($"MarkFileAsDeleted: fileId={fileId}");
             using (var cmd = new SQLiteCommand("UPDATE files SET deleted=1 WHERE id=@id", _connection))
             {
@@ -275,6 +293,7 @@ namespace FluxDB.Services
 
         public void MarkPathAsDeleted(string folderPath)
         {
+            ThrowIfDisposed();
             LoggingService.LogDebug($"MarkPathAsDeleted: {folderPath}");
             var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
             using (var cmd = new SQLiteCommand("UPDATE files SET deleted=1 WHERE path=@path OR path LIKE @prefix", _connection))
@@ -287,6 +306,7 @@ namespace FluxDB.Services
 
         public void UpdateFolderPath(string oldPath, string newPath)
         {
+            ThrowIfDisposed();
             LoggingService.LogDebug($"UpdateFolderPath: {oldPath} → {newPath}");
             var oldPrefix = oldPath.EndsWith("\\") ? oldPath : oldPath + "\\";
             var newPrefix = newPath.EndsWith("\\") ? newPath : newPath + "\\";
@@ -311,6 +331,7 @@ namespace FluxDB.Services
 
         public List<FileEntry> SearchFiles(string query, string folderPath)
         {
+            ThrowIfDisposed();
             if (string.IsNullOrWhiteSpace(query))
             {
                 LoggingService.LogDebug($"SearchFiles: empty query, returning all files under {folderPath}");
@@ -348,6 +369,7 @@ namespace FluxDB.Services
 
         public HashSet<string> GetDirectoriesWithTaggedFiles(string folderPath)
         {
+            ThrowIfDisposed();
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
             var sql = @"
@@ -378,6 +400,7 @@ namespace FluxDB.Services
 
         public void UpdateFilePathAndName(int fileId, string newPath, string newName)
         {
+            ThrowIfDisposed();
             using (var cmd = new SQLiteCommand("UPDATE files SET path=@p,name=@n,extension=@e WHERE id=@id", _connection))
             {
                 cmd.Parameters.AddWithValue("@id", fileId);
@@ -390,6 +413,7 @@ namespace FluxDB.Services
 
         public void ClearDatabase()
         {
+            ThrowIfDisposed();
             using (var cmd = new SQLiteCommand("DELETE FROM file_tags;DELETE FROM notes;DELETE FROM tags;DELETE FROM files;", _connection))
             {
                 cmd.ExecuteNonQuery();

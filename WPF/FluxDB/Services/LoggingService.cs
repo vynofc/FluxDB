@@ -12,6 +12,8 @@ namespace FluxDB.Services
         private static readonly List<string> _buffer = new List<string>();
         private const int MaxBufferLines = 2000;
         private static readonly string _logFilePath;
+        private const string AppDataFolderName = "FluxDB";
+        private const string LogFileName = "logs.txt";
 
         public static bool IsDebugMode { get; private set; }
 
@@ -21,13 +23,13 @@ namespace FluxDB.Services
         {
             try
             {
-                var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FluxDB");
+                var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppDataFolderName);
                 if (!Directory.Exists(appData)) Directory.CreateDirectory(appData);
-                _logFilePath = Path.Combine(appData, "logs.txt");
+                _logFilePath = Path.Combine(appData, LogFileName);
             }
             catch
             {
-                _logFilePath = Path.Combine(Directory.GetCurrentDirectory(), "logs.txt");
+                _logFilePath = Path.Combine(Directory.GetCurrentDirectory(), LogFileName);
             }
         }
 
@@ -83,11 +85,6 @@ namespace FluxDB.Services
                         if (_writeQueue.Count == 0)
                         {
                             _isProcessingQueue = false;
-                            if (_writeQueue.Count > 0)
-                            {
-                                _isProcessingQueue = true;
-                                continue;
-                            }
                             return;
                         }
                         linesToWrite = _writeQueue.ToArray();
@@ -96,11 +93,13 @@ namespace FluxDB.Services
 
                     try
                     {
+                        var sb = new StringBuilder();
+                        foreach (var line in linesToWrite)
+                            sb.AppendLine(line);
+
                         lock (_writerLock)
                         {
-                            var writer = GetWriter();
-                            foreach (var line in linesToWrite)
-                                writer.WriteLine(line);
+                            GetWriter().Write(sb.ToString());
                         }
                     }
                     catch
