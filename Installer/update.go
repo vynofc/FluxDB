@@ -102,7 +102,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.detail {
 			m.addLog(fmt.Sprintf("📌 Version: %s", msg.tag))
 		}
-		m.nextStep()
+		if m.state != stateDownloading {
+			m.nextStep()
+		}
 		m.state = stateDownloading
 		if m.detail {
 			m.addLog(fmt.Sprintf("📥 Starte Download: %s", msg.tag))
@@ -120,10 +122,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		progress := float64(msg)
+		if progress < 0 {
+			progress = 0
+		} else if progress > 1 {
+			progress = 1
+		}
+		percent := int(progress*100 + 0.5)
 		m.progress = progress
 		cmd := m.progressBar.SetPercent(progress)
-		if m.detail {
-			m.addLog(fmt.Sprintf("📥 Download: %.0f%%", progress*100))
+		if m.detail && percent != m.lastLoggedPercent {
+			m.lastLoggedPercent = percent
+			m.addLog(fmt.Sprintf("📥 Download: %d%%", percent))
 		}
 		return m, tea.Batch(cmd, listenProgress(m.progressCh))
 
@@ -188,6 +197,9 @@ func (m *model) handleVersionForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.detail {
 			m.addLog(fmt.Sprintf("📌 Gewaehlte Version: %s", m.selectedVersion))
 		}
+		m.nextStep()
+		m.versionForm = nil
+		m.state = stateDownloading
 		return m, func() tea.Msg { return tagFetchedMsg{tag: m.selectedVersion} }
 	}
 	return m, cmd
