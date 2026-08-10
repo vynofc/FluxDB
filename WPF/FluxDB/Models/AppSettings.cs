@@ -17,6 +17,16 @@ namespace FluxDB.Models
     }
 
     /// <summary>
+    /// Definition of a single developer setting (dotted key, description, default).
+    /// </summary>
+    public class DevSettingDefinition
+    {
+        public string Key { get; set; }
+        public string Description { get; set; }
+        public string DefaultValue { get; set; }
+    }
+
+    /// <summary>
     /// Application settings stored locally
     /// </summary>
     public class AppSettings
@@ -37,5 +47,8 @@ namespace FluxDB.Models
         public Dictionary<string, string> FolderSortDirection { get; set; } = new Dictionary<string, string>();
 
         public PersistenceOptions Persistence { get; set; } = new PersistenceOptions();
+
+        // Developer settings (dotted key -> value), editable via F9 dev settings window
+        public Dictionary<string, string> DevSettings { get; set; } = new Dictionary<string, string>();
     }
 }

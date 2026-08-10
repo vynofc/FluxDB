@@ -71,7 +71,8 @@ namespace FluxDB.Services
             // Phase 2: Index files (streaming enumeration, no intermediate list)
             var existingPaths = new HashSet<string>();
             int processed = 0;
-            const int BatchSize = 1000;
+            var BatchSize = new SettingsService().GetDevSettingInt(DevSettingsRegistry.IndexerBatchSizeKey);
+            if (BatchSize <= 0) BatchSize = 1000;
             const int MaxPathLength = 260;
             var currentTransaction = _database.BeginTransaction();
 

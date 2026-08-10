@@ -573,6 +573,8 @@
                                                    Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
                                         <TextBlock Text="F8" FontSize="12" FontFamily="Consolas"
                                                    Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="F9" FontSize="12" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
                                         <TextBlock Text="Ctrl+K" FontSize="12" FontFamily="Consolas"
                                                    Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,0,3"/>
                                         <TextBlock Text="Esc" FontSize="12" FontFamily="Consolas"
@@ -584,6 +586,8 @@
                                         <TextBlock Text="Refresh" FontSize="12"
                                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
                                         <TextBlock Text="Log Viewer" FontSize="12"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Developer Settings" FontSize="12"
                                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>
                                         <TextBlock Text="Shortcut Cheat Sheet" FontSize="12"
                                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,3"/>

@@ -42,7 +42,12 @@ namespace FluxDB.Views
         // Navigation History
         private Stack<string> _backHistory = new Stack<string>();
         private Stack<string> _forwardHistory = new Stack<string>();
-        private const int MaxHistorySize = 50;
+
+        private int GetMaxHistorySize()
+        {
+            var v = _settingsService?.GetDevSettingInt(DevSettingsRegistry.NavigationHistorySizeKey) ?? 50;
+            return v > 0 ? v : 50;
+        }
 
         // Drag & Drop
         private Point _dragStartPoint;
@@ -288,6 +293,11 @@ namespace FluxDB.Views
             else if (e.Key == Key.F8)
             {
                 ShowLogViewer();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.F9)
+            {
+                ShowDevSettings();
                 e.Handled = true;
             }
             else if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
@@ -728,8 +738,10 @@ namespace FluxDB.Views
                                     }
                                 }
 
-                                if (text.Length > 5000)
-                                    text = text.Substring(0, 5000) + "\n\n... (truncated)";
+                                var maxChars = _settingsService?.GetDevSettingInt(DevSettingsRegistry.PreviewMaxCharsKey) ?? 5000;
+                                if (maxChars <= 0) maxChars = 5000;
+                                if (text.Length > maxChars)
+                                    text = text.Substring(0, maxChars) + "\n\n... (truncated)";
 
                                 return text;
                             }
@@ -784,7 +796,7 @@ namespace FluxDB.Views
                 scale.ScaleY *= zoomFactor;
 
                 if (scale.ScaleX < 0.1) { scale.ScaleX = 0.1; scale.ScaleY = 0.1; }
-                if (scale.ScaleX > 10) { scale.ScaleX = 10; scale.ScaleY = 10; }
+                if (scale.ScaleX > GetImageZoomMax()) { scale.ScaleX = GetImageZoomMax(); scale.ScaleY = GetImageZoomMax(); }
 
                 e.Handled = true;
             }
@@ -797,6 +809,12 @@ namespace FluxDB.Views
         }
 
         #endregion
+
+        private int GetImageZoomMax()
+        {
+            var v = _settingsService?.GetDevSettingInt(DevSettingsRegistry.ImageZoomMaxKey) ?? 10;
+            return v > 0 ? v : 10;
+        }
 
         #region Column Configuration
 
@@ -934,10 +952,11 @@ namespace FluxDB.Views
             if (addToHistory && !string.IsNullOrEmpty(_currentViewFolder) && _currentViewFolder != folderPath)
             {
                 _backHistory.Push(_currentViewFolder);
-                if (_backHistory.Count > MaxHistorySize)
+                var maxHistory = GetMaxHistorySize();
+                if (_backHistory.Count > maxHistory)
                 {
                     var trimmed = _backHistory.ToArray();
-                    _backHistory = new Stack<string>(trimmed.Take(MaxHistorySize));
+                    _backHistory = new Stack<string>(trimmed.Take(maxHistory));
                 }
                 _forwardHistory.Clear();
             }
@@ -1115,7 +1134,9 @@ namespace FluxDB.Views
             var cts = new CancellationTokenSource();
             _searchDebounceCts = cts;
 
-            Task.Delay(200, cts.Token).ContinueWith(t =>
+            var debounceMs = _settingsService?.GetDevSettingInt(DevSettingsRegistry.SearchDebounceKey) ?? 25;
+            if (debounceMs <= 0) debounceMs = 25;
+            Task.Delay(debounceMs, cts.Token).ContinueWith(t =>
             {
                 if (t.IsCanceled)
                     return;
@@ -1608,6 +1629,20 @@ namespace FluxDB.Views
             catch
             {
                 MessageBox.Show("Log Viewer konnte nicht gestartet werden.", "Fehler", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ShowDevSettings()
+        {
+            try
+            {
+                var devWindow = new DevSettingsWindow(_settingsService);
+                devWindow.Owner = this;
+                devWindow.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Log($"ShowDevSettings failed: {ex.Message}");
             }
         }
 

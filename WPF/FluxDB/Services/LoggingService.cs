@@ -10,7 +10,6 @@ namespace FluxDB.Services
     {
         private static readonly object _lock = new object();
         private static readonly List<string> _buffer = new List<string>();
-        private const int MaxBufferLines = 2000;
         private static readonly string _logFilePath;
         private const string AppDataFolderName = "FluxDB";
         private const string LogFileName = "logs.txt";
@@ -47,6 +46,19 @@ namespace FluxDB.Services
             return _logWriter;
         }
 
+        private static int GetMaxBufferLines()
+        {
+            try
+            {
+                var v = new SettingsService().GetDevSettingInt(DevSettingsRegistry.LogBufferLinesKey);
+                return v > 0 ? v : 2000;
+            }
+            catch
+            {
+                return 2000;
+            }
+        }
+
         public static void Log(string message)
         {
             try
@@ -55,9 +67,10 @@ namespace FluxDB.Services
                 var line = $"[{timestamp}] {message}";
                 lock (_lock)
                 {
+                    var maxBuffer = GetMaxBufferLines();
                     _buffer.Add(line);
-                    if (_buffer.Count > MaxBufferLines)
-                        _buffer.RemoveRange(0, _buffer.Count - MaxBufferLines);
+                    if (_buffer.Count > maxBuffer)
+                        _buffer.RemoveRange(0, _buffer.Count - maxBuffer);
 
                     _writeQueue.Enqueue(line);
                     if (!_isProcessingQueue)
