@@ -364,7 +364,9 @@ namespace FluxDB.Services
                 LEFT JOIN tags t ON ft.tag_id = t.id
                 WHERE f.deleted=0 AND f.path LIKE @folderPrefix
                 GROUP BY f.id
-                HAVING f.name LIKE @q OR f.path LIKE @q OR tags_text LIKE @q OR n.note LIKE @q";
+                HAVING f.name LIKE @q OR f.path LIKE @q OR n.note LIKE @q
+                   OR EXISTS (SELECT 1 FROM file_tags ft2 JOIN tags t2 ON ft2.tag_id = t2.id
+                              WHERE ft2.file_id = f.id AND t2.name LIKE @q)";
 
             using (var cmd = new SQLiteCommand(sql, _connection))
             {
