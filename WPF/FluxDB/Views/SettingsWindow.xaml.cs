@@ -47,6 +47,14 @@ namespace FluxDB.Views
             cmbTheme.Items.Add("Light");
             cmbTheme.Items.Add("High Contrast");
             cmbTheme.SelectedItem = Settings.Theme ?? "Dark";
+
+            var p = Settings.Persistence ?? new PersistenceOptions();
+            chkPersistLastRootFolder.IsChecked = p.LastRootFolder;
+            chkPersistLastViewFolder.IsChecked = p.LastViewFolder;
+            chkPersistFilter.IsChecked = p.Filter;
+            chkPersistSort.IsChecked = p.Sort;
+            chkPersistColumnVisibility.IsChecked = p.ColumnVisibility;
+            chkPersistRecentFolders.IsChecked = p.RecentFolders;
         }
 
         private void UpdateUpdateStatus()
@@ -105,24 +113,52 @@ namespace FluxDB.Views
             }
         }
 
-        private void BtnAccent_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is System.Windows.Controls.Button btn && btn.Tag is string color)
-            {
-                Settings.AccentColor = color;
-            }
-        }
-
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
             DialogResult = false;
             Close();
         }
 
+        private void BtnReportBug_Click(object sender, RoutedEventArgs e)
+        {
+            OpenUrl("https://service-runner.org/FluxDB/bug-report");
+        }
+
+        private void BtnNewFeature_Click(object sender, RoutedEventArgs e)
+        {
+            OpenUrl("https://service-runner.org/FluxDB/new-feature");
+        }
+
+        private void OpenUrl(string url)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Log($"OpenUrl failed: {ex.Message}");
+            }
+        }
+
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
             Settings.AutoUpdateCheck = chkAutoUpdate.IsChecked ?? false;
             Settings.Theme = cmbTheme.SelectedItem as string ?? "Dark";
+
+            if (Settings.Persistence == null)
+                Settings.Persistence = new PersistenceOptions();
+
+            Settings.Persistence.LastRootFolder = chkPersistLastRootFolder.IsChecked ?? true;
+            Settings.Persistence.LastViewFolder = chkPersistLastViewFolder.IsChecked ?? true;
+            Settings.Persistence.Filter = chkPersistFilter.IsChecked ?? true;
+            Settings.Persistence.Sort = chkPersistSort.IsChecked ?? true;
+            Settings.Persistence.ColumnVisibility = chkPersistColumnVisibility.IsChecked ?? true;
+            Settings.Persistence.RecentFolders = chkPersistRecentFolders.IsChecked ?? true;
+
             DialogResult = true;
             Close();
         }

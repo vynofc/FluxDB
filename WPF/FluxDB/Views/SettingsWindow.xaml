@@ -26,11 +26,11 @@
         <TabControl Background="Transparent" BorderThickness="0,1,0,0">
             <TabItem Header="General">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="0,20,0,0">
-                        <TextBlock Text="Appearance" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"
+                    <StackPanel Margin="0,12,0,0">
+                        <TextBlock Text="Appearance" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"
                                    Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
 
-                        <Grid Margin="0,0,0,12">
+                        <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="130"/>
                                 <ColumnDefinition Width="*"/>
@@ -40,65 +40,8 @@
                                       SelectionChanged="CmbTheme_SelectionChanged"/>
                         </Grid>
 
-                        <Grid Margin="0,0,0,15">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="130"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Accent Color:" VerticalAlignment="Center"/>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <Button x:Name="btnAccentBlue" Width="28" Height="28" Margin="0,0,4,0"
-                                        Tag="#0078D4" Click="BtnAccent_Click" ToolTip="Blue">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#0078D4" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="btnAccentGreen" Width="28" Height="28" Margin="0,0,4,0"
-                                        Tag="#107C10" Click="BtnAccent_Click" ToolTip="Green">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#107C10" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="btnAccentOrange" Width="28" Height="28" Margin="0,0,4,0"
-                                        Tag="#D83B01" Click="BtnAccent_Click" ToolTip="Orange">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#D83B01" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="btnAccentPurple" Width="28" Height="28" Margin="0,0,4,0"
-                                        Tag="#5C2D91" Click="BtnAccent_Click" ToolTip="Purple">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#5C2D91" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="btnAccentRed" Width="28" Height="28" Margin="0,0,4,0"
-                                        Tag="#E81123" Click="BtnAccent_Click" ToolTip="Red">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#E81123" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="btnAccentTeal" Width="28" Height="28"
-                                        Tag="#008272" Click="BtnAccent_Click" ToolTip="Teal">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#008272" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                            </StackPanel>
-                        </Grid>
 
-                        <Grid Margin="0,0,0,15">
+                        <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="130"/>
                                 <ColumnDefinition Width="*"/>
@@ -111,11 +54,11 @@
                         <CheckBox x:Name="chkAutoUpdate"
                                   Content="Automatically check for updates on startup"
                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                  Margin="0,0,0,15"/>
+                                  Margin="0,0,0,8"/>
 
-                        <Separator Margin="0,10,0,20" Opacity="0.3"/>
+                        <Separator Margin="0,5,0,12" Opacity="0.3"/>
 
-                        <TextBlock Text="Updates" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"
+                        <TextBlock Text="Updates" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"
                                    Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
                         <Border Padding="15" CornerRadius="4"
                                 Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
@@ -138,6 +81,29 @@
                                 </Grid>
                             </StackPanel>
                         </Border>
+
+                        <Separator Margin="0,5,0,12" Opacity="0.3"/>
+
+                        <TextBlock Text="Feedback" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+
+                        <Border Padding="15" CornerRadius="4"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                            <StackPanel>
+                                <TextBlock Text="Found a bug or have an idea for a new feature? Let us know!"
+                                           FontSize="11" Opacity="0.6" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:Button x:Name="btnReportBug" Content="Report a Bug" Width="150"
+                                               Margin="0,0,10,0" Click="BtnReportBug_Click"/>
+                                    <ui:Button x:Name="btnNewFeature" Content="Suggest a Feature" Width="150"
+                                               Click="BtnNewFeature_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="Made with ❤️ from vynOFC with service-runner.org"
+                                   FontSize="10" Opacity="0.5" Margin="0,12,0,0"
+                                   HorizontalAlignment="Center"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -167,6 +133,47 @@
                                            FontSize="11" Opacity="0.6" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 <ui:Button x:Name="btnImport" Content="Import Index..." Width="150"
                                            Click="BtnImport_Click"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Persistence">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,20,0,0">
+                        <TextBlock Text="Remember UI State" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"
+                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+
+                        <TextBlock Text="Choose what FluxDB saves to settings.json so your workspace is restored next time."
+                                   FontSize="11" Opacity="0.6" Margin="0,0,0,15" TextWrapping="Wrap"/>
+
+                        <Border Padding="15" CornerRadius="4"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                            <StackPanel>
+                                <CheckBox x:Name="chkPersistLastRootFolder"
+                                          Content="Last root folder (reopen the last indexed folder on startup)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,10"/>
+                                <CheckBox x:Name="chkPersistLastViewFolder"
+                                          Content="Last viewed subfolder (restore the exact folder you were browsing)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,10"/>
+                                <CheckBox x:Name="chkPersistFilter"
+                                          Content="File type filter (per folder)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,10"/>
+                                <CheckBox x:Name="chkPersistSort"
+                                          Content="Sort column and direction (per folder)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,10"/>
+                                <CheckBox x:Name="chkPersistColumnVisibility"
+                                          Content="Column visibility (which columns are shown/hidden)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,10"/>
+                                <CheckBox x:Name="chkPersistRecentFolders"
+                                          Content="Recent folders list (dashboard)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

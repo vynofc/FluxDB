@@ -88,23 +88,31 @@ namespace FluxDB.Services
                 var normalized = Path.GetFullPath(folderPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
                 var settings = Load();
+                var persistence = settings.Persistence ?? new PersistenceOptions();
 
-                if (settings.RecentFolders == null)
-                    settings.RecentFolders = new System.Collections.Generic.List<string>();
-
-                // Remove if already exists (case-insensitive)
-                settings.RecentFolders.RemoveAll(f => string.Equals(f, normalized, StringComparison.OrdinalIgnoreCase));
-
-                // Add to beginning
-                settings.RecentFolders.Insert(0, normalized);
-
-                // Keep only last 10
-                if (settings.RecentFolders.Count > 10)
+                if (persistence.RecentFolders)
                 {
-                    settings.RecentFolders.RemoveRange(10, settings.RecentFolders.Count - 10);
+                    if (settings.RecentFolders == null)
+                        settings.RecentFolders = new System.Collections.Generic.List<string>();
+
+                    // Remove if already exists (case-insensitive)
+                    settings.RecentFolders.RemoveAll(f => string.Equals(f, normalized, StringComparison.OrdinalIgnoreCase));
+
+                    // Add to beginning
+                    settings.RecentFolders.Insert(0, normalized);
+
+                    // Keep only last 10
+                    if (settings.RecentFolders.Count > 10)
+                    {
+                        settings.RecentFolders.RemoveRange(10, settings.RecentFolders.Count - 10);
+                    }
                 }
 
-                settings.LastRootFolder = normalized;
+                if (persistence.LastRootFolder)
+                {
+                    settings.LastRootFolder = normalized;
+                }
+
                 Save(settings);
             }
             catch (Exception ex)

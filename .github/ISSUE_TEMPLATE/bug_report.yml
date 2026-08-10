@@ -48,8 +48,8 @@ body:
       label: 🟢🟡🔴 Umfang des Problems
       description: Wie groß schätzt du das Problem ein?
       options:
-        - 🟢 small — kleiner Fix, schnell erledigt
-        - 🟡 medium — mittlerer Aufwand
-        - 🔴 big — großes Problem, viel Arbeit
+        - 🟢 small
+        - 🟡 medium
+        - 🔴 big
     validations:
       required: true
