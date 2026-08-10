@@ -21,6 +21,9 @@ Die WPF-App ist die Hauptoberfläche von FluxDB. Sie übernimmt:
 Aus dem Repository-Root:
 
 ```powershell
-nuget restore WPF/FluxDB/FluxDB.csproj
-msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Release /p:Platform="Any CPU"
+dotnet restore WPF/FluxDB/FluxDB.csproj
+dotnet build WPF/FluxDB/FluxDB.csproj -c Release
+
+# Publish nach bin/
+dotnet publish WPF/FluxDB/FluxDB.csproj -c Release -o bin\
 ```

@@ -1,18 +1,42 @@
 # Installationsanforderungen
 
-## Windows
+## Voraussetzungen
+
+- **.NET 10 SDK** (für die WPF-App) — https://dotnet.microsoft.com/download
+- **Go** (für Installer und Log-Viewer) — siehe `go.mod` der jeweiligen Komponente
+  (Installer: Go 1.26+, Log-Viewer: Go 1.24+)
+
+## Automatisches Setup (Windows)
+
+Das zentrale Build-Skript [build.bat](../build.bat) richtet alle Abhängigkeiten ein:
 
 ```powershell
-install-requirements.bat
+build.bat 1
 ```
 
-## Linux/macOS
+Das Skript prüft die .NET- und Go-Installationen, führt `dotnet restore` für die
+WPF-App aus und lädt die Go-Module für Installer und Log-Viewer.
 
-```bash
-bash install-requirements.sh
+## Manuelles Setup
+
+```powershell
+# NuGet-Pakete der WPF-App
+dotnet restore WPF/FluxDB/FluxDB.csproj
+
+# Go-Module des Installers
+cd Installer
+go mod download
+
+# Go-Module des Log-Viewers
+cd ../Log_Viewer
+go mod download
 ```
 
-## Was installiert wird
+Alternativ bietet der Installer ein eigenes Requirements-Skript, das die Go-Toolchain
+prüft, `go mod tidy` ausführt und den Installer direkt baut:
 
-- NuGet-Pakete für die WPF-App unter [WPF/FluxDB](../WPF/FluxDB)
-- Go-Module für [Installer](../Installer) und [Log_Viewer](../Log_Viewer)
+```powershell
+cd Installer
+requirements.bat    # Windows
+bash requirements.sh  # Linux/macOS
+```

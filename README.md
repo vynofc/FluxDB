@@ -18,7 +18,7 @@ FluxDB ist ein Windows-basiertes Toolset aus einer WPF-Anwendung, einem Installe
 ├── Log_Viewer/        # Go-Log-Viewer
 ├── docs/              # zusätzliche Dokumentation
 ├── .github/workflows/ # CI/CD
-└── build.bat / build.sh
+└── build.bat          # zentrales Build-Skript (Windows)
 ```
 
 ## Funktionen
@@ -30,10 +30,20 @@ FluxDB ist ein Windows-basiertes Toolset aus einer WPF-Anwendung, einem Installe
 
 ## Setup
 
-Die Abhängigkeiten lassen sich mit einem der folgenden Skripte installieren:
+Das zentrale Build-Skript [build.bat](build.bat) bietet über Option `1` eine automatische
+Installation aller Abhängigkeiten (NuGet-Pakete der WPF-App, Go-Module von Installer und Log-Viewer):
 
-- Windows: [install-requirements.bat](install-requirements.bat)
-- Linux/macOS: [install-requirements.sh](install-requirements.sh)
+```powershell
+build.bat 1
+```
+
+Alternativ lässt sich das Setup manuell ausführen:
+
+```powershell
+dotnet restore WPF/FluxDB/FluxDB.csproj
+cd Installer && go mod download && cd ..
+cd Log_Viewer && go mod download && cd ..
+```
 
 Weitere Details sind in [docs/install-requirements.md](docs/install-requirements.md) beschrieben.
 
@@ -44,16 +54,22 @@ Alle Build-Skripte schreiben ihre Artefakte in den Root-Ordner [bin](bin/).
 ### WPF-App
 
 ```powershell
-nuget restore WPF/FluxDB/FluxDB.csproj
-msbuild WPF/FluxDB/FluxDB.csproj /p:Configuration=Release /p:Platform="Any CPU" /p:OutDir=bin\
+dotnet restore WPF/FluxDB/FluxDB.csproj
+dotnet build WPF/FluxDB/FluxDB.csproj -c Release
+
+# Publish (self-contained output nach bin/)
+dotnet publish WPF/FluxDB/FluxDB.csproj -c Release -o bin\
 ```
 
-### Installer und Log-Viewer
+### Installer, Log-Viewer und Release-Paket
 
 ```powershell
-build.bat
+build.bat        # interaktives Menü
+build.bat 3      # nur Installer
+build.bat 4      # nur Log-Viewer
+build.bat 5      # komplettes Release-Paket (WPF + Installer + Log-Viewer + ZIP)
 ```
 
-Ergebnis: `bin/FluxDB.exe`, `bin/FluxDB-Installer.exe`, `bin/components/Log_Viewer.exe` sowie die nativen SQLite-Unterordner.
+Ergebnis: `bin/FluxDB.exe`, `bin/FluxDB-Installer.exe`, `bin/components/Log_Viewer.exe` sowie die nativen SQLite-Unterordner (`bin/x64/`, `bin/x86/`). Nach Option 5 liegt zusätzlich `FluxDB.zip` im Repo-Root.
 
 Weitere Details finden Sie in [docs/README.md](docs/README.md).

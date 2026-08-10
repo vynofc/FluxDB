@@ -12,10 +12,12 @@ Dieser Ordner bündelt die Windows-Desktopkomponenten von FluxDB.
 WPF/
 └── FluxDB/
     ├── App.xaml
-    ├── MainWindow.xaml
+    ├── Views/          # MainWindow, SplashWindow, SettingsWindow, Pages
+    ├── ViewModels/
     ├── Services/
     ├── Models/
-    └── README.md
+    ├── Converters/
+    └── Dockerfile
 ```
 
 Die WPF-App ist für die lokale Dateisuche, Indizierung, Tag-Verwaltung und die UI-Logik zuständig.

@@ -1,12 +1,13 @@
 # FluxDB Installer
 
-Go-basierter TUI-Installer für FluxDB. Lädt Versionen von GitHub Releases herunter und entpackt sie nach `%LOCALAPPDATA%\FluxDB`. Bietet interaktive Versionsauswahl, Fortschrittsanzeige, detailliertes Log und optionale Desktop-Verknüpfung.
+Go-basierter TUI-Installer für FluxDB. Lädt Versionen von GitHub Releases herunter und entpackt sie nach `%LOCALAPPDATA%\FluxDB`. Bietet interaktive Versionsauswahl, Fortschrittsanzeige, detailliertes Log und optionale Desktop- und Startmenü-Verknüpfung.
 
 ## Build
 
 ### requirements.bat / requirements.sh
 
-Prüft Go-Installation, führt `go mod tidy` aus und baut den Installer:
+Prüft Go-Installation, führt `go mod tidy` aus und baut den Installer in das
+Root-Verzeichnis `bin/`:
 
 ```bash
 # Windows
@@ -18,27 +19,31 @@ cd Installer
 bash requirements.sh
 ```
 
-### build.bat / build.sh
-
-Nur Build (ohne Dependency-Check):
+### Direkter Build
 
 ```bash
-# Windows
-build.bat
-
-# Cross-Compile von Linux/macOS
-bash build.sh
+cd Installer
+go build -ldflags="-s -w" -o ../bin/FluxDB-Installer.exe .
 ```
 
-Ausgabe: `Installer/bin/FluxDB-Installer.exe`
+Alternativ über das zentrale Build-Skript im Repo-Root:
 
-**Voraussetzung**: Go 1.22+
+```powershell
+build.bat 3
+```
+
+Ausgabe: `bin/FluxDB-Installer.exe` (Repo-Root)
+
+**Voraussetzung**: Go 1.26+ (siehe `go.mod`)
 
 ## Verwendung
 
 ```bash
-# Einfache Installation (nimmt automatisch neueste Version, minimale Anzeige)
+# Einfache Installation (nimmt automatisch neueste stabile Version, minimale Anzeige)
 FluxDB-Installer.exe
+
+# Beta-Releases bei der Versionsermittlung einschliessen
+FluxDB-Installer.exe --beta
 
 # Detail-Modus (Versionsauswahl + ausführliches Log)
 FluxDB-Installer.exe --detail
@@ -51,6 +56,9 @@ FluxDB-Installer.exe --path "D:\MeineApps\FluxDB"
 
 # Silent-Mode (kein TUI, reiner Text-Output — für CI/Scripting)
 FluxDB-Installer.exe --silent --tag v1.2.3
+
+# Silent-Mode mit automatischem Start von FluxDB nach der Installation
+FluxDB-Installer.exe --silent-start
 ```
 
 ## CLI-Flags
@@ -60,7 +68,9 @@ FluxDB-Installer.exe --silent --tag v1.2.3
 | `--tag <version>` | Bestimmte Version installieren (überspringt Versionsauswahl) |
 | `--path <dir>` | Alternatives Installationsverzeichnis (Standard: `%LOCALAPPDATA%\FluxDB`) |
 | `--silent` | Keine TUI, nur Text-Output |
-| `--detail` | Detailmodus: interaktive Versionsauswahl + ausführliches Log
+| `--silent-start` | Wie `--silent`, startet FluxDB nach der Installation automatisch |
+| `--detail` | Detailmodus: interaktive Versionsauswahl + ausführliches Log |
+| `--beta` | Beta-Releases (Prereleases) bei der Versionsermittlung einschliessen |
 
 ## Ablauf
 
@@ -71,11 +81,12 @@ Version ermitteln → Download → Entpacken → Shortcut? → Done
      │                 │            │            │
      ▼                 ▼            ▼            ▼
 GitHub API         Fortschritt    ZIP nach    Desktop-.lnk
-Latest Release     + Download    %LOCALAPPDATA%  (optional)
-                   in %TEMP%     \FluxDB
+Latest Release     + Download    %LOCALAPPDATA%  + Startmenü
+                   in %TEMP%     \FluxDB       (optional)
 ```
 
 1. **Version ermitteln**: Holt den neuesten Release-Tag via GitHub API
+   (mit `--beta` werden auch Prereleases berücksichtigt)
 2. **Download**: Lädt `FluxDB.zip` nach `%TEMP%` mit Fortschrittsbalken
 3. **Entpacken**: Extrahiert nach `%LOCALAPPDATA%\FluxDB`, schreibt `version.txt`
 4. **Shortcut**: `huh`-Confirm fragt nach Desktop- und Startmenü-Verknüpfung
@@ -88,8 +99,8 @@ Loading → Version wählen → Download → Entpacken → Shortcut? → Done
    │           │               │            │            │
    ▼           ▼               ▼            ▼            ▼
 GitHub API  huh-Select    Fortschritt    ZIP nach    Desktop-.lnk
-Releases    (alle Tags)   + Download    %LOCALAPPDATA%  (optional)
-abrufen                   in %TEMP%     \FluxDB
+Releases    (alle Tags)   + Download    %LOCALAPPDATA%  + Startmenü
+abrufen                   in %TEMP%     \FluxDB       (optional)
 ```
 
 Zusätzlich: ausführlicher Log-Viewport mit allen API-Abfragen, Dateipfaden und Statusmeldungen.
@@ -108,17 +119,17 @@ Zusätzlich: ausführlicher Log-Viewport mit allen API-Abfragen, Dateipfaden und
 
 | Datei | Zuständigkeit |
 |---|---|
-| `main.go` | Entrypoint, CLI-Flag-Parsing, TUI/Silent-Dispatch |
+| `main.go` | Entrypoint, CLI-Flag-Parsing, TUI/Silent-Dispatch, `launchFluxDB` |
 | `model.go` | Bubble Tea Model (States, Messages, Typen) |
 | `update.go` | State Machine (Update-Funktion) mit huh-Integration |
 | `view.go` | Rendering: Step-Header, Content, Log-Viewport, Footer |
 | `forms.go` | huh-Formulare: Versionsauswahl + Shortcut-Abfrage |
-| `github.go` | GitHub API: Releases-Liste, Latest Tag, Download-URL |
+| `github.go` | GitHub API: Releases-Liste (inkl. Beta-Filter), Latest Tag, Download-URL |
 | `download.go` | ZIP-Download mit progressReader (Echtzeit-Fortschritt) |
-| `extract.go` | ZIP-Extraktion + Zip-Slip-Schutz |
-| `shortcut.go` | Desktop-Verknüpfung via VBScript (cscript) |
+| `extract.go` | ZIP-Extraktion + Zip-Slip-Schutz, Locked-File-Handling |
+| `shortcut.go` | Desktop- und Startmenü-Verknüpfung via PowerShell COM (WScript.Shell) |
 | `helpers.go` | Hilfsfunktionen: Log-Formatierung, Step-Header |
-| `silent.go` | Silent-Mode-Logik (ohne Bubble Tea) |
+| `silent.go` | Silent-Mode-Logik (ohne Bubble Tea), LOCALAPPDATA-Fallback |
 | `styles.go` | Lipgloss Styles (Dark-Theme, Steps, Log-Viewport) |
 
 ### State Machine
@@ -130,6 +141,7 @@ stateLoading → stateSelectVersion → stateDownloading → stateExtracting →
 ```
 
 Mit `--tag` überspringt die Machine `stateSelectVersion` und beginnt direkt bei `stateDownloading`.
+Im Standard-Modus (ohne `--detail`) wird `stateSelectVersion` ebenfalls übersprungen.
 
 ## Scope-Abgrenzung
 
@@ -144,4 +156,5 @@ Auf Wunsch erstellt der Installer:
 - **Desktop**: `FluxDB.lnk` auf dem Desktop
 - **Startmenü**: `FluxDB.lnk` unter `Start Menu\Programs\FluxDB\`
 
-Beide werden via VBScript (`cscript`) erstellt und zeigen auf die `FluxDB.exe` im Installationsverzeichnis.
+Beide werden via PowerShell COM-Script (`WScript.Shell`) erstellt und zeigen auf die
+`FluxDB.exe` im Installationsverzeichnis.
