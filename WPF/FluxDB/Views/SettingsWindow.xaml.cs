@@ -113,14 +113,6 @@ namespace FluxDB.Views
             }
         }
 
-        private void BtnAccent_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is System.Windows.Controls.Button btn && btn.Tag is string color)
-            {
-                Settings.AccentColor = color;
-            }
-        }
-
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
             DialogResult = false;

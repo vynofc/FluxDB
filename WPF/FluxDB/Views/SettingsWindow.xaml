@@ -40,63 +40,6 @@
                                       SelectionChanged="CmbTheme_SelectionChanged"/>
                         </Grid>
 
-                        <Grid Margin="0,0,0,15">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="130"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Accent Color:" VerticalAlignment="Center"/>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <Button x:Name="btnAccentBlue" Width="28" Height="28" Margin="0,0,4,0"
-                                        Tag="#0078D4" Click="BtnAccent_Click" ToolTip="Blue">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#0078D4" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="btnAccentGreen" Width="28" Height="28" Margin="0,0,4,0"
-                                        Tag="#107C10" Click="BtnAccent_Click" ToolTip="Green">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#107C10" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="btnAccentOrange" Width="28" Height="28" Margin="0,0,4,0"
-                                        Tag="#D83B01" Click="BtnAccent_Click" ToolTip="Orange">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#D83B01" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="btnAccentPurple" Width="28" Height="28" Margin="0,0,4,0"
-                                        Tag="#5C2D91" Click="BtnAccent_Click" ToolTip="Purple">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#5C2D91" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="btnAccentRed" Width="28" Height="28" Margin="0,0,4,0"
-                                        Tag="#E81123" Click="BtnAccent_Click" ToolTip="Red">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#E81123" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="btnAccentTeal" Width="28" Height="28"
-                                        Tag="#008272" Click="BtnAccent_Click" ToolTip="Teal">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="#008272" CornerRadius="14" Width="24" Height="24"/>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                            </StackPanel>
-                        </Grid>
 
                         <Grid Margin="0,0,0,15">
                             <Grid.ColumnDefinitions>
