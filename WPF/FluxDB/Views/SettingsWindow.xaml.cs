@@ -47,6 +47,14 @@ namespace FluxDB.Views
             cmbTheme.Items.Add("Light");
             cmbTheme.Items.Add("High Contrast");
             cmbTheme.SelectedItem = Settings.Theme ?? "Dark";
+
+            var p = Settings.Persistence ?? new PersistenceOptions();
+            chkPersistLastRootFolder.IsChecked = p.LastRootFolder;
+            chkPersistLastViewFolder.IsChecked = p.LastViewFolder;
+            chkPersistFilter.IsChecked = p.Filter;
+            chkPersistSort.IsChecked = p.Sort;
+            chkPersistColumnVisibility.IsChecked = p.ColumnVisibility;
+            chkPersistRecentFolders.IsChecked = p.RecentFolders;
         }
 
         private void UpdateUpdateStatus()
@@ -123,6 +131,17 @@ namespace FluxDB.Views
         {
             Settings.AutoUpdateCheck = chkAutoUpdate.IsChecked ?? false;
             Settings.Theme = cmbTheme.SelectedItem as string ?? "Dark";
+
+            if (Settings.Persistence == null)
+                Settings.Persistence = new PersistenceOptions();
+
+            Settings.Persistence.LastRootFolder = chkPersistLastRootFolder.IsChecked ?? true;
+            Settings.Persistence.LastViewFolder = chkPersistLastViewFolder.IsChecked ?? true;
+            Settings.Persistence.Filter = chkPersistFilter.IsChecked ?? true;
+            Settings.Persistence.Sort = chkPersistSort.IsChecked ?? true;
+            Settings.Persistence.ColumnVisibility = chkPersistColumnVisibility.IsChecked ?? true;
+            Settings.Persistence.RecentFolders = chkPersistRecentFolders.IsChecked ?? true;
+
             DialogResult = true;
             Close();
         }

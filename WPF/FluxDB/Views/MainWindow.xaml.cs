@@ -146,19 +146,44 @@ namespace FluxDB.Views
             try
             {
                 var settings = _settingsService.Load();
+                var persistence = settings.Persistence ?? new PersistenceOptions();
 
-                if (!string.IsNullOrEmpty(settings.LastRootFolder) && Directory.Exists(settings.LastRootFolder))
+                if (persistence.LastRootFolder && !string.IsNullOrEmpty(settings.LastRootFolder) && Directory.Exists(settings.LastRootFolder))
                 {
                     _currentRootFolder = settings.LastRootFolder;
-                    _currentViewFolder = _currentRootFolder;
-                    txtCurrentFolder.Text = _currentRootFolder;
+
+                    string initialView = _currentRootFolder;
+                    if (persistence.LastViewFolder &&
+                        settings.FolderLastView != null &&
+                        settings.FolderLastView.TryGetValue(_currentRootFolder, out var lastView) &&
+                        !string.IsNullOrEmpty(lastView) &&
+                        Directory.Exists(lastView) &&
+                        lastView.StartsWith(_currentRootFolder, StringComparison.OrdinalIgnoreCase))
+                    {
+                        initialView = lastView;
+                    }
+
+                    _currentViewFolder = initialView;
+                    txtCurrentFolder.Text = initialView;
                     btnRefresh.IsEnabled = true;
 
                     InitializeDatabaseForFolder(_currentRootFolder);
 
-                    LoadFilterForFolder(_currentRootFolder);
+                    if (persistence.Filter)
+                        LoadFilterForFolder(_currentRootFolder);
+                    else
+                    {
+                        _currentFilter = "All Files";
+                        cmbFilter.SelectedIndex = 0;
+                    }
 
-                    NavigateToFolder(_currentRootFolder, addToHistory: false);
+                    NavigateToFolder(initialView, addToHistory: false);
+
+                    if (persistence.Sort)
+                        ApplySavedSort(_currentRootFolder);
+
+                    if (persistence.ColumnVisibility)
+                        ApplySavedColumnVisibility(settings);
 
                     if (HasExistingIndex(_currentRootFolder))
                     {
@@ -531,6 +556,7 @@ namespace FluxDB.Views
         private void SaveFilterForFolder(string folderPath, string filter)
         {
             var settings = _settingsService.Load();
+            if (settings.Persistence != null && !settings.Persistence.Filter) return;
             if (settings.FolderFilters == null)
             {
                 settings.FolderFilters = new Dictionary<string, string>();
@@ -812,6 +838,7 @@ namespace FluxDB.Views
         {
             if (_settingsService == null) return;
             var settings = _settingsService.Load();
+            if (settings.Persistence != null && !settings.Persistence.ColumnVisibility) return;
             if (settings.ColumnVisibility == null)
                 settings.ColumnVisibility = new Dictionary<string, bool>();
             foreach (var col in dgFiles.Columns)
@@ -821,6 +848,71 @@ namespace FluxDB.Views
                     settings.ColumnVisibility[header] = col.Visibility == Visibility.Visible;
             }
             _settingsService.Save(settings);
+        }
+
+        private void ApplySavedColumnVisibility(AppSettings settings)
+        {
+            try
+            {
+                if (settings?.ColumnVisibility == null || settings.ColumnVisibility.Count == 0) return;
+                foreach (var col in dgFiles.Columns)
+                {
+                    var header = col.Header?.ToString() ?? "";
+                    if (!string.IsNullOrEmpty(header) && settings.ColumnVisibility.TryGetValue(header, out var visible))
+                    {
+                        col.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                    }
+                }
+            }
+            catch (Exception ex) { LoggingService.Log($"ApplySavedColumnVisibility failed: {ex.Message}"); }
+        }
+
+        private void ApplySavedSort(string rootFolder)
+        {
+            try
+            {
+                var settings = _settingsService.Load();
+                if (settings?.FolderSortColumn == null || settings.FolderSortDirection == null) return;
+                if (!settings.FolderSortColumn.TryGetValue(rootFolder, out var sortPath) || string.IsNullOrEmpty(sortPath)) return;
+                if (!settings.FolderSortDirection.TryGetValue(rootFolder, out var dirStr)) return;
+
+                var direction = string.Equals(dirStr, "Descending", StringComparison.OrdinalIgnoreCase)
+                    ? ListSortDirection.Descending
+                    : ListSortDirection.Ascending;
+
+                var view = CollectionViewSource.GetDefaultView(dgFiles.ItemsSource);
+                if (view != null)
+                {
+                    view.SortDescriptions.Clear();
+                    view.SortDescriptions.Add(new SortDescription(sortPath, direction));
+                }
+
+                foreach (var col in dgFiles.Columns)
+                {
+                    col.SortDirection = string.Equals(col.SortMemberPath, sortPath, StringComparison.OrdinalIgnoreCase)
+                        ? direction
+                        : (ListSortDirection?)null;
+                }
+            }
+            catch (Exception ex) { LoggingService.Log($"ApplySavedSort failed: {ex.Message}"); }
+        }
+
+        private void SaveSortForFolder(string sortPath, ListSortDirection direction)
+        {
+            if (string.IsNullOrEmpty(_currentRootFolder) || string.IsNullOrEmpty(sortPath)) return;
+            try
+            {
+                var settings = _settingsService.Load();
+                if (settings.Persistence != null && !settings.Persistence.Sort) return;
+                if (settings.FolderSortColumn == null)
+                    settings.FolderSortColumn = new Dictionary<string, string>();
+                if (settings.FolderSortDirection == null)
+                    settings.FolderSortDirection = new Dictionary<string, string>();
+                settings.FolderSortColumn[_currentRootFolder] = sortPath;
+                settings.FolderSortDirection[_currentRootFolder] = direction == ListSortDirection.Descending ? "Descending" : "Ascending";
+                _settingsService.Save(settings);
+            }
+            catch (Exception ex) { LoggingService.Log($"SaveSortForFolder failed: {ex.Message}"); }
         }
 
         #endregion
@@ -844,9 +936,25 @@ namespace FluxDB.Views
 
             _currentViewFolder = folderPath;
             txtCurrentFolder.Text = folderPath;
+            SaveLastViewFolder();
             UpdateNavigationButtons();
             UpdateBreadcrumbs();
             RefreshCurrentFolderView();
+        }
+
+        private void SaveLastViewFolder()
+        {
+            if (string.IsNullOrEmpty(_currentRootFolder) || string.IsNullOrEmpty(_currentViewFolder)) return;
+            try
+            {
+                var settings = _settingsService.Load();
+                if (settings.Persistence != null && !settings.Persistence.LastViewFolder) return;
+                if (settings.FolderLastView == null)
+                    settings.FolderLastView = new Dictionary<string, string>();
+                settings.FolderLastView[_currentRootFolder] = _currentViewFolder;
+                _settingsService.Save(settings);
+            }
+            catch (Exception ex) { LoggingService.Log($"SaveLastViewFolder failed: {ex.Message}"); }
         }
 
         private void UpdateNavigationButtons()
@@ -1533,15 +1641,40 @@ namespace FluxDB.Views
             if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath))
                 return;
 
+            var settingsSnapshot = _settingsService.Load();
+            var persistence = settingsSnapshot.Persistence ?? new PersistenceOptions();
+
             _currentRootFolder = folderPath;
-            _currentViewFolder = folderPath;
+
+            string initialView = folderPath;
+            if (persistence.LastViewFolder &&
+                settingsSnapshot.FolderLastView != null &&
+                settingsSnapshot.FolderLastView.TryGetValue(folderPath, out var lastView) &&
+                !string.IsNullOrEmpty(lastView) &&
+                Directory.Exists(lastView) &&
+                lastView.StartsWith(folderPath, StringComparison.OrdinalIgnoreCase))
+            {
+                initialView = lastView;
+            }
+
+            _currentViewFolder = initialView;
             _backHistory.Clear();
             _forwardHistory.Clear();
 
             InitializeDatabaseForFolder(folderPath);
-            LoadFilterForFolder(folderPath);
+            if (persistence.Filter)
+                LoadFilterForFolder(folderPath);
+            else
+            {
+                _currentFilter = "All Files";
+                cmbFilter.SelectedIndex = 0;
+            }
+
+            if (persistence.ColumnVisibility)
+                ApplySavedColumnVisibility(settingsSnapshot);
+
             btnRefresh.IsEnabled = true;
-            txtCurrentFolder.Text = folderPath;
+            txtCurrentFolder.Text = initialView;
 
             if (HasExistingIndex(folderPath) && _databaseService.GetFileCount() > 0)
             {
@@ -1554,13 +1687,17 @@ namespace FluxDB.Views
                     await StartIndexing();
                 else
                 {
-                    NavigateToFolder(folderPath, addToHistory: false);
+                    NavigateToFolder(initialView, addToHistory: false);
+                    if (persistence.Sort)
+                        ApplySavedSort(folderPath);
                     txtStatus.Text = "Loaded existing index";
                 }
             }
             else
             {
                 await StartIndexing();
+                if (persistence.Sort)
+                    ApplySavedSort(folderPath);
             }
         }
 
@@ -1836,6 +1973,9 @@ namespace FluxDB.Views
                 if (col != e.Column)
                     col.SortDirection = null;
             }
+
+            if (!string.IsNullOrEmpty(path))
+                SaveSortForFolder(path, direction);
         }
 
         protected override void OnClosed(EventArgs e)

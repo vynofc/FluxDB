@@ -172,6 +172,47 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
+
+            <TabItem Header="Persistence">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,20,0,0">
+                        <TextBlock Text="Remember UI State" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"
+                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+
+                        <TextBlock Text="Choose what FluxDB saves to settings.json so your workspace is restored next time."
+                                   FontSize="11" Opacity="0.6" Margin="0,0,0,15" TextWrapping="Wrap"/>
+
+                        <Border Padding="15" CornerRadius="4"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                            <StackPanel>
+                                <CheckBox x:Name="chkPersistLastRootFolder"
+                                          Content="Last root folder (reopen the last indexed folder on startup)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,10"/>
+                                <CheckBox x:Name="chkPersistLastViewFolder"
+                                          Content="Last viewed subfolder (restore the exact folder you were browsing)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,10"/>
+                                <CheckBox x:Name="chkPersistFilter"
+                                          Content="File type filter (per folder)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,10"/>
+                                <CheckBox x:Name="chkPersistSort"
+                                          Content="Sort column and direction (per folder)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,10"/>
+                                <CheckBox x:Name="chkPersistColumnVisibility"
+                                          Content="Column visibility (which columns are shown/hidden)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,10"/>
+                                <CheckBox x:Name="chkPersistRecentFolders"
+                                          Content="Recent folders list (dashboard)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
