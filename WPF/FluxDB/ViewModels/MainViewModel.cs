@@ -539,7 +539,7 @@ namespace FluxDB.ViewModels
         private async Task SaveTags()
         {
             if (SelectedFile == null || _databaseService == null) return;
-            var tags = TagsText?.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+            var tags = TagsText?.Split(new[] { ',', ';', ' ', '\0' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(t => t.Trim()).Where(t => !string.IsNullOrEmpty(t)).ToList() ?? new List<string>();
 
             await Task.Run(() => _databaseService.SetTagsForFile(SelectedFile.Id, tags));

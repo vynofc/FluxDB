@@ -312,8 +312,8 @@ stateDownloading → stateExtracting → stateAskShortcut → stateDone
 
 ### SQL and tags
 
-- Tags are stored via `GROUP_CONCAT(t.name, '\0')` with **null-byte separator** `\0` (was previously `, ` which broke on tag names containing commas). When parsing back, split on `'\0'` with `StringSplitOptions.RemoveEmptyEntries`.
-- When adding new `GROUP_CONCAT` queries or modifying tag handling, always use `\0` as the separator.
+- Tags are stored via `GROUP_CONCAT(t.name, char(0))` with **null-byte separator** (was previously `, ` which broke on tag names containing commas). When parsing back, split on `'\0'` with `StringSplitOptions.RemoveEmptyEntries`.
+- When adding new `GROUP_CONCAT` queries or modifying tag handling, always use `char(0)` as the separator. **Never** write `'\0'` in SQL: SQLite has no string escapes, so `'\0'` is the two-character literal backslash+zero, not a null byte.
 
 ### Database file location
 

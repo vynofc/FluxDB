@@ -110,7 +110,7 @@ namespace FluxDB.Services
             ThrowIfDisposed();
             var files = new List<FileEntry>();
             var sql = @"
-                SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, char(0)) as tags_text
                 FROM files f
                 LEFT JOIN notes n ON f.id = n.file_id
                 LEFT JOIN file_tags ft ON f.id = ft.file_id
@@ -138,7 +138,7 @@ namespace FluxDB.Services
             var files = new List<FileEntry>();
             var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
             var sql = @"
-                SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, char(0)) as tags_text
                 FROM files f
                 LEFT JOIN notes n ON f.id = n.file_id
                 LEFT JOIN file_tags ft ON f.id = ft.file_id
@@ -173,17 +173,20 @@ namespace FluxDB.Services
                 ModifiedAt = r.IsDBNull(6) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(6), out var m) ? m : DateTime.MinValue),
                 Deleted = r.GetInt32(7) == 1,
                 LastIndexedAt = r.IsDBNull(8) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(8), out var l) ? l : DateTime.MinValue),
-                Note = r.IsDBNull(9) ? "" : r.GetString(9),
-                TagsText = r.IsDBNull(10) ? "" : r.GetString(10)
+                Note = r.IsDBNull(9) ? "" : r.GetString(9)
             };
-            if (!string.IsNullOrEmpty(f.TagsText))
+            var rawTags = r.IsDBNull(10) ? "" : r.GetString(10);
+            if (!string.IsNullOrEmpty(rawTags))
             {
-                f.Tags = new List<string>(f.TagsText.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries));
+                f.Tags = new List<string>(rawTags.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+                    .SelectMany(t => t.Split(new[] { "\\0" }, StringSplitOptions.RemoveEmptyEntries))
+                    .Select(t => t.Trim()).Where(t => !string.IsNullOrEmpty(t)));
             }
             else
             {
                 f.Tags = new List<string>();
             }
+            f.TagsText = string.Join(", ", f.Tags);
             return f;
         }
 
@@ -354,7 +357,7 @@ namespace FluxDB.Services
             var files = new List<FileEntry>();
             var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
             var sql = @"
-                SELECT f.*, n.note, GROUP_CONCAT(t.name, '\0') as tags_text
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, char(0)) as tags_text
                 FROM files f
                 LEFT JOIN notes n ON f.id = n.file_id
                 LEFT JOIN file_tags ft ON f.id = ft.file_id

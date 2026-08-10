@@ -139,19 +139,8 @@
             <!-- Search Bar -->
             <Border Grid.Row="2" Grid.Column="0" Padding="20,10" Margin="20,0,0,0" CornerRadius="0,0,8,8"
                     Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="txtSearch" KeyUp="TxtSearch_KeyUp"
-                             FontSize="14" Padding="10,8"/>
-                    <ui:Button Grid.Column="1" x:Name="btnSearch" Content="Search"
-                               Appearance="Primary" Click="BtnSearch_Click" Margin="10,0,0,0"/>
-                    <ui:Button Grid.Column="2" x:Name="btnClearSearch" Content="Clear"
-                               Click="BtnClearSearch_Click" Margin="10,0,0,0"/>
-                </Grid>
+                <TextBox x:Name="txtSearch" TextChanged="TxtSearch_TextChanged"
+                         FontSize="14" Padding="10,8"/>
             </Border>
 
             <!-- Files DataGrid -->

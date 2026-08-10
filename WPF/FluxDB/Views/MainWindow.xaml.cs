@@ -1106,22 +1106,25 @@ namespace FluxDB.Views
             }
         }
 
-        private void BtnSearch_Click(object sender, RoutedEventArgs e)
-        {
-            PerformSearch();
-        }
+        private CancellationTokenSource _searchDebounceCts;
 
-        private void BtnClearSearch_Click(object sender, RoutedEventArgs e)
+        private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
         {
-            txtSearch.Text = "";
-            NavigateToFolder(_currentViewFolder, addToHistory: false);
-            txtStatus.Text = "Search cleared";
-        }
+            _searchDebounceCts?.Cancel();
+            _searchDebounceCts?.Dispose();
+            var cts = new CancellationTokenSource();
+            _searchDebounceCts = cts;
 
-        private void TxtSearch_KeyUp(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter)
-                PerformSearch();
+            Task.Delay(200, cts.Token).ContinueWith(t =>
+            {
+                if (t.IsCanceled)
+                    return;
+                Dispatcher.Invoke(() =>
+                {
+                    if (!cts.IsCancellationRequested)
+                        PerformSearch();
+                });
+            }, TaskScheduler.Default);
         }
 
         private async void PerformSearch()
@@ -1136,6 +1139,7 @@ namespace FluxDB.Views
             if (string.IsNullOrEmpty(query))
             {
                 await RefreshCurrentFolderViewAsync();
+                txtStatus.Text = "Search cleared";
                 return;
             }
 
