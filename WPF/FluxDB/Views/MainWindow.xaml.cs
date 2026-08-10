@@ -157,12 +157,20 @@ namespace FluxDB.Views
                         settings.FolderLastView != null &&
                         settings.FolderLastView.TryGetValue(_currentRootFolder, out var lastView) &&
                         !string.IsNullOrEmpty(lastView) &&
-                        Directory.Exists(lastView) &&
-                        lastView.StartsWith(_currentRootFolder, StringComparison.OrdinalIgnoreCase))
+                        Directory.Exists(lastView))
                     {
-                        initialView = lastView;
-                    }
+                        var rootFull = Path.GetFullPath(_currentRootFolder)
+                            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                        var lastFull = Path.GetFullPath(lastView)
+                            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
+                        var rootPrefix = rootFull + Path.DirectorySeparatorChar;
+                        if (string.Equals(lastFull, rootFull, StringComparison.OrdinalIgnoreCase) ||
+                            lastFull.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                        {
+                            initialView = lastFull;
+                        }
+                    }
                     _currentViewFolder = initialView;
                     txtCurrentFolder.Text = initialView;
                     btnRefresh.IsEnabled = true;
