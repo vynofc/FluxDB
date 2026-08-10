@@ -119,6 +119,31 @@ namespace FluxDB.Views
             Close();
         }
 
+        private void BtnReportBug_Click(object sender, RoutedEventArgs e)
+        {
+            OpenUrl("https://service-runner.org/FluxDB/bug-report");
+        }
+
+        private void BtnNewFeature_Click(object sender, RoutedEventArgs e)
+        {
+            OpenUrl("https://service-runner.org/FluxDB/new-feature");
+        }
+
+        private void OpenUrl(string url)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Log($"OpenUrl failed: {ex.Message}");
+            }
+        }
+
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
             Settings.AutoUpdateCheck = chkAutoUpdate.IsChecked ?? false;
