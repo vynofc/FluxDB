@@ -392,7 +392,7 @@ namespace FluxDB.Views
             if (selected.Count == 0) return;
 
             var result = MessageBox.Show(
-                $"Are you sure you want to delete {selected.Count} item(s)?\n\nThis action cannot be undone!",
+                $"Move {selected.Count} item(s) to the Recycle Bin?",
                 "Confirm Delete",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
@@ -412,12 +412,16 @@ namespace FluxDB.Views
                             {
                                 _databaseService.MarkPathAsDeleted(item.Path);
                             }
-                            Directory.Delete(item.Path, true);
+                            Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(item.Path,
+                                Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                                Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
                             Interlocked.Increment(ref deletedCount);
                         }
                         else if (File.Exists(item.Path))
                         {
-                            File.Delete(item.Path);
+                            Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(item.Path,
+                                Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                                Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
 
                             if (_databaseService != null && item.Id > 0)
                             {

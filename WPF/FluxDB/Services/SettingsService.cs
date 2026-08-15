@@ -50,6 +50,7 @@ namespace FluxDB.Services
 
         private readonly string _settingsPath;
         private readonly object _fileLock = new object();
+        private AppSettings _cachedSettings;
 
         public SettingsService()
         {
@@ -81,12 +82,16 @@ namespace FluxDB.Services
         {
             lock (_fileLock)
             {
+                if (_cachedSettings != null)
+                    return _cachedSettings;
+
                 try
                 {
                     if (File.Exists(_settingsPath))
                     {
                         var json = File.ReadAllText(_settingsPath);
-                        return JsonConvert.DeserializeObject<AppSettings>(json) ?? new AppSettings();
+                        _cachedSettings = JsonConvert.DeserializeObject<AppSettings>(json) ?? new AppSettings();
+                        return _cachedSettings;
                     }
                 }
                 catch
@@ -94,7 +99,8 @@ namespace FluxDB.Services
                     // Return default settings on error
                 }
 
-                return new AppSettings();
+                _cachedSettings = new AppSettings();
+                return _cachedSettings;
             }
         }
 
@@ -109,9 +115,11 @@ namespace FluxDB.Services
                 {
                     var json = JsonConvert.SerializeObject(settings, Formatting.Indented);
                     File.WriteAllText(_settingsPath, json, System.Text.Encoding.UTF8);
+                    _cachedSettings = settings;
                 }
                 catch (Exception ex)
                 {
+                    _cachedSettings = null;
                     System.Diagnostics.Debug.WriteLine($"Failed to save settings: {ex.Message}");
                 }
             }
