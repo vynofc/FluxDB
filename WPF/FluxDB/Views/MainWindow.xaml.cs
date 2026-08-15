@@ -104,10 +104,18 @@ namespace FluxDB.Views
             _exportService = null;
         }
 
-        private void InitializeDatabaseForFolder(string folderPath)
+        private async Task InitializeDatabaseForFolderAsync(string folderPath)
         {
             if (string.IsNullOrWhiteSpace(folderPath))
                 throw new ArgumentException("Folder path must not be empty.", nameof(folderPath));
+
+            if (_indexCancellation != null)
+            {
+                try { _indexCancellation.Cancel(); } catch (ObjectDisposedException) { }
+            }
+
+            while (_isIndexing)
+                await Task.Delay(50);
 
             _databaseService?.Dispose();
             if (_indexerService != null)
@@ -146,7 +154,7 @@ namespace FluxDB.Views
             return File.Exists(dbPath);
         }
 
-        private void LoadInitialData()
+        private async void LoadInitialData()
         {
             try
             {
@@ -180,7 +188,7 @@ namespace FluxDB.Views
                     txtCurrentFolder.Text = initialView;
                     btnRefresh.IsEnabled = true;
 
-                    InitializeDatabaseForFolder(_currentRootFolder);
+                    await InitializeDatabaseForFolderAsync(_currentRootFolder);
 
                     if (persistence.Filter)
                         LoadFilterForFolder(_currentRootFolder);
@@ -229,6 +237,13 @@ namespace FluxDB.Views
                 return;
             }
 
+            var isGridFocused = dgFiles.IsKeyboardFocusWithin
+                || e.OriginalSource == this
+                || e.OriginalSource == dgFiles;
+            var isOtherControl = e.OriginalSource is ComboBox
+                || e.OriginalSource is Button
+                || e.OriginalSource is ComboBoxItem;
+
             if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
             {
                 CopySelectedFiles(false);
@@ -244,12 +259,12 @@ namespace FluxDB.Views
                 PasteFiles();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Delete)
+            else if (e.Key == Key.Delete && !isOtherControl)
             {
                 DeleteSelectedFiles();
                 e.Handled = true;
             }
-            else if (e.Key == Key.F2)
+            else if (e.Key == Key.F2 && !isOtherControl)
             {
                 RenameSelectedFile();
                 e.Handled = true;
@@ -280,12 +295,12 @@ namespace FluxDB.Views
                 BtnUp_Click(null, null);
                 e.Handled = true;
             }
-            else if (e.Key == Key.Enter)
+            else if (e.Key == Key.Enter && isGridFocused)
             {
                 OpenSelectedItem();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Back)
+            else if (e.Key == Key.Back && !isOtherControl)
             {
                 BtnUp_Click(null, null);
                 e.Handled = true;
@@ -341,14 +356,19 @@ namespace FluxDB.Views
             if (string.IsNullOrEmpty(_currentViewFolder)) return;
 
             List<string> filesToPaste = new List<string>();
+            var isCut = false;
 
             if (Clipboard.ContainsFileDropList())
             {
                 filesToPaste = Clipboard.GetFileDropList().Cast<string>().ToList();
+                var dropEffect = Clipboard.GetData("Preferred DropEffect") as MemoryStream;
+                if (dropEffect != null && dropEffect.Length > 0)
+                    isCut = dropEffect.ReadByte() == 2;
             }
             else if (_clipboardFiles.Count > 0)
             {
                 filesToPaste = _clipboardFiles;
+                isCut = _clipboardIsCut;
             }
 
             if (filesToPaste.Count == 0)
@@ -357,9 +377,9 @@ namespace FluxDB.Views
                 return;
             }
 
-            await CopyOrMoveFilesAsync(filesToPaste.ToArray(), _currentViewFolder, _clipboardIsCut);
+            await CopyOrMoveFilesAsync(filesToPaste.ToArray(), _currentViewFolder, isCut);
 
-            if (_clipboardIsCut)
+            if (isCut)
             {
                 _clipboardFiles.Clear();
                 _clipboardIsCut = false;
@@ -433,7 +453,18 @@ namespace FluxDB.Views
 
             if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.NewName))
             {
-                var newName = dialog.NewName + extension;
+                var invalidChars = Path.GetInvalidFileNameChars();
+                if (dialog.NewName.IndexOfAny(invalidChars) >= 0)
+                {
+                    MessageBox.Show("The name contains invalid characters.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var baseName = dialog.NewName;
+                if (!selected.IsFolder && baseName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                    baseName = baseName.Substring(0, baseName.Length - extension.Length);
+
+                var newName = baseName + extension;
                 var newPath = Path.Combine(Path.GetDirectoryName(selected.Path), newName);
 
                 try
@@ -703,8 +734,25 @@ namespace FluxDB.Views
                 try
                 {
                     await webPdfPreview.EnsureCoreWebView2Async();
-                    webPdfPreview.CoreWebView2.Navigate(file.Path);
+                    if (webPdfPreview.CoreWebView2 == null)
+                    {
+                        txtNoPreview.Text = "Cannot preview PDF";
+                        txtNoPreview.Visibility = Visibility.Visible;
+                        return;
+                    }
+
+                    if (_previewVersion != version) return;
+                    ct.ThrowIfCancellationRequested();
+
+                    webPdfPreview.CoreWebView2.Navigate(new Uri(file.Path).AbsoluteUri);
                     webPdfPreview.Visibility = Visibility.Visible;
+                }
+                catch (OperationCanceledException) { return; }
+                catch (Microsoft.Web.WebView2.Core.WebView2RuntimeNotFoundException ex)
+                {
+                    LoggingService.Log($"WebView2 runtime not found: {ex.Message}");
+                    txtNoPreview.Text = "WebView2 Runtime not installed";
+                    txtNoPreview.Visibility = Visibility.Visible;
                 }
                 catch (Exception ex)
                 {
@@ -999,7 +1047,7 @@ namespace FluxDB.Views
             if (string.IsNullOrEmpty(_currentViewFolder) || string.IsNullOrEmpty(_currentRootFolder)) return;
 
             var relativePath = _currentViewFolder;
-            if (_currentViewFolder.StartsWith(_currentRootFolder))
+            if (_currentViewFolder.StartsWith(_currentRootFolder, StringComparison.OrdinalIgnoreCase))
             {
                 relativePath = _currentViewFolder.Substring(_currentRootFolder.Length).TrimStart('\\');
             }
@@ -1079,18 +1127,20 @@ namespace FluxDB.Views
 
         private void BtnUp_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrEmpty(_currentViewFolder) || _currentViewFolder == _currentRootFolder) return;
+            if (string.IsNullOrEmpty(_currentViewFolder) ||
+                string.Equals(_currentViewFolder, _currentRootFolder, StringComparison.OrdinalIgnoreCase)) return;
 
             var parent = Directory.GetParent(_currentViewFolder)?.FullName;
-            if (!string.IsNullOrEmpty(parent) && parent.StartsWith(_currentRootFolder))
+            if (!string.IsNullOrEmpty(parent) && parent.StartsWith(_currentRootFolder, StringComparison.OrdinalIgnoreCase))
                 NavigateToFolder(parent);
-            else if (_currentViewFolder != _currentRootFolder)
+            else if (!string.Equals(_currentViewFolder, _currentRootFolder, StringComparison.OrdinalIgnoreCase))
                 NavigateToFolder(_currentRootFolder);
         }
 
         private void DgFiles_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            OpenSelectedItem();
+            if (e.OriginalSource is FrameworkElement fe && fe.DataContext is FileEntry)
+                OpenSelectedItem();
         }
 
         #endregion
@@ -1167,7 +1217,7 @@ namespace FluxDB.Views
             var folder = _currentViewFolder ?? _currentRootFolder;
             List<FileEntry> results = await Task.Run(() => _databaseService.SearchFiles(query, folder));
 
-            dgFiles.ItemsSource = results
+            var filtered = results
                 .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
                 .Where(f =>
                 {
@@ -1176,7 +1226,8 @@ namespace FluxDB.Views
                 })
                 .Where(MatchesFilter)
                 .ToList();
-            txtFileCount.Text = $"{results.Count} found";
+            dgFiles.ItemsSource = filtered;
+            txtFileCount.Text = $"{filtered.Count} found";
             txtStatus.Text = $"Search results for: {query}";
         }
 
@@ -1236,7 +1287,7 @@ namespace FluxDB.Views
                 foreach (var file in selected)
                 {
                     _databaseService.SetTagsForFile(file.Id, tags);
-                    file.Tags = tags;
+                    file.Tags = new List<string>(tags);
                     file.TagsText = string.Join(", ", tags);
                 }
                 txtStatus.Text = $"Tags assigned to {selected.Count} file(s)";
@@ -1328,10 +1379,8 @@ namespace FluxDB.Views
             try
             {
                 _databaseService.SetTagsForFile(_selectedFile.Id, tags);
-                _databaseService.SetNoteForFile(_selectedFile.Id, txtNotes.Text);
-                _selectedFile.Tags = tags;
+                _selectedFile.Tags = new List<string>(tags);
                 _selectedFile.TagsText = string.Join(", ", tags);
-                _selectedFile.Note = txtNotes.Text;
                 txtStatus.Text = "Saved";
             }
             catch (Exception ex)
@@ -1393,6 +1442,46 @@ namespace FluxDB.Views
             AutoSaveTags();
         }
 
+        private void TxtTagInput_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (_databaseService == null || _selectedFile == null)
+            {
+                tagAutocompletePopup.IsOpen = false;
+                return;
+            }
+
+            var text = txtTagInput.Text.Trim();
+            if (string.IsNullOrEmpty(text))
+            {
+                tagAutocompletePopup.IsOpen = false;
+                return;
+            }
+
+            try
+            {
+                var existing = GetCurrentTagsFromChips();
+                var matches = _databaseService.GetAllTags()
+                    .Where(t => t.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0)
+                    .Where(t => !existing.Contains(t, StringComparer.OrdinalIgnoreCase))
+                    .Take(8)
+                    .ToList();
+
+                if (matches.Count > 0)
+                {
+                    tagAutocompleteList.ItemsSource = matches;
+                    tagAutocompletePopup.IsOpen = true;
+                }
+                else
+                {
+                    tagAutocompletePopup.IsOpen = false;
+                }
+            }
+            catch
+            {
+                tagAutocompletePopup.IsOpen = false;
+            }
+        }
+
         private void TagAutocompleteList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (tagAutocompleteList.SelectedItem is string tag)
@@ -1413,7 +1502,7 @@ namespace FluxDB.Views
                 _databaseService.SetTagsForFile(_selectedFile.Id, tags);
                 _databaseService.SetNoteForFile(_selectedFile.Id, txtNotes.Text);
 
-                _selectedFile.Tags = tags;
+                _selectedFile.Tags = new List<string>(tags);
                 _selectedFile.TagsText = string.Join(", ", tags);
                 _selectedFile.Note = txtNotes.Text;
 
@@ -1491,8 +1580,11 @@ namespace FluxDB.Views
                 _indexCancellation?.Dispose();
                 _indexCancellation = null;
 
-                GC.Collect();
-                NavigateToFolder(_currentViewFolder, addToHistory: false);
+                if (!string.IsNullOrEmpty(_currentViewFolder) &&
+                    _currentViewFolder.StartsWith(_currentRootFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    NavigateToFolder(_currentViewFolder, addToHistory: false);
+                }
             }
         }
 
@@ -1500,7 +1592,7 @@ namespace FluxDB.Views
         {
             Dispatcher.Invoke(() =>
             {
-                progressBar.Value = e.Percentage;
+                progressBar.Value = Math.Min(100.0, Math.Max(0.0, e.Percentage));
                 txtProgressStatus.Text = $"Indexing: {e.Current}/{e.Total} ({e.Percentage:F0}%)";
             });
         }
@@ -1526,7 +1618,13 @@ namespace FluxDB.Views
                         return;
                     }
 
-                    InitializeDatabaseForFolder(_currentRootFolder);
+                    if (_isIndexing)
+                    {
+                        MessageBox.Show("Indexing is already in progress.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                        return;
+                    }
+
+                    await InitializeDatabaseForFolderAsync(_currentRootFolder);
                     await StartIndexing();
                 }
                 else if (dlg.Choice == RefreshDialog.RefreshChoice.CurrentView)
@@ -1550,7 +1648,7 @@ namespace FluxDB.Views
 
                     if (string.IsNullOrEmpty(_currentRootFolder) || !folder.StartsWith(_currentRootFolder, StringComparison.OrdinalIgnoreCase))
                     {
-                        InitializeDatabaseForFolder(folder);
+                        await InitializeDatabaseForFolderAsync(folder);
                         _currentRootFolder = folder;
                         _backHistory.Clear();
                         _forwardHistory.Clear();
@@ -1570,7 +1668,7 @@ namespace FluxDB.Views
             if (_isIndexing) return;
             if (_indexerService == null || _databaseService == null)
             {
-                InitializeDatabaseForFolder(_currentRootFolder ?? folder);
+                await InitializeDatabaseForFolderAsync(_currentRootFolder ?? folder);
             }
 
             _isIndexing = true;
@@ -1670,10 +1768,13 @@ namespace FluxDB.Views
                 toastText.Text = message;
                 toastNotification.Visibility = Visibility.Visible;
                 _toastTimer?.Dispose();
-                _toastTimer = new System.Threading.Timer(_ =>
+                System.Threading.Timer timer = null;
+                timer = new System.Threading.Timer(_ =>
                 {
                     Dispatcher.Invoke(() => toastNotification.Visibility = Visibility.Collapsed);
+                    timer?.Dispose();
                 }, null, 3000, System.Threading.Timeout.Infinite);
+                _toastTimer = timer;
             });
         }
 
@@ -1708,7 +1809,7 @@ namespace FluxDB.Views
             _backHistory.Clear();
             _forwardHistory.Clear();
 
-            InitializeDatabaseForFolder(folderPath);
+            await InitializeDatabaseForFolderAsync(folderPath);
             if (persistence.Filter)
                 LoadFilterForFolder(folderPath);
             else
@@ -1801,9 +1902,9 @@ namespace FluxDB.Views
                 });
             }
 
-            var allFiles = await Task.Run(() => _databaseService.GetFilesInFolder(currentFolder));
+            var allFiles = await Task.Run(() => _databaseService.GetFilesDirectlyInFolder(currentFolder));
             var filesInFolder = allFiles
-                .Where(f => Path.GetDirectoryName(f.Path) == currentFolder)
+                .Where(f => string.Equals(Path.GetDirectoryName(f.Path), currentFolder, StringComparison.OrdinalIgnoreCase))
                 .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
                 .Where(f =>
                 {
@@ -1868,12 +1969,25 @@ namespace FluxDB.Views
 
                         if (Directory.Exists(src))
                         {
-                            CopyDirectoryRecursive(src, dest);
                             if (move)
                             {
-                                Directory.Delete(src, true);
+                                var srcRoot = Path.GetPathRoot(Path.GetFullPath(src));
+                                var destRoot = Path.GetPathRoot(fullDestRoot);
+                                if (string.Equals(srcRoot, destRoot, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    Directory.Move(src, dest);
+                                }
+                                else
+                                {
+                                    CopyDirectoryRecursive(src, dest);
+                                    Directory.Delete(src, true);
+                                }
                                 if (_databaseService != null)
                                     _databaseService.UpdateFolderPath(src, dest);
+                            }
+                            else
+                            {
+                                CopyDirectoryRecursive(src, dest);
                             }
                         }
                         else if (File.Exists(src))
@@ -1969,6 +2083,13 @@ namespace FluxDB.Views
 
         private void Window_DragOver(object sender, DragEventArgs e)
         {
+            if (_isIndexing)
+            {
+                e.Effects = DragDropEffects.None;
+                e.Handled = true;
+                return;
+            }
+
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 e.Effects = DragDropEffects.Copy;
@@ -1985,6 +2106,7 @@ namespace FluxDB.Views
         {
             dropOverlay.Visibility = Visibility.Collapsed;
 
+            if (_isIndexing) return;
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
 
             var paths = (string[])e.Data.GetData(DataFormats.FileDrop);

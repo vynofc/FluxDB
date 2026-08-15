@@ -180,6 +180,12 @@ namespace FluxDB.Views
                     return true;
                 }
 
+                if (localVersionStr.EndsWith("-debug", StringComparison.OrdinalIgnoreCase))
+                {
+                    LoggingService.Log($"Update available ({App.AvailableTag}) but local build is a debug build. Skipping auto-install.");
+                    return true;
+                }
+
                 if (App.IsBetaUpdate)
                 {
                     LoggingService.Log($"Beta update available ({latestBetaTag}), skipping auto-install.");

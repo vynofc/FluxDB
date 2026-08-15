@@ -46,11 +46,12 @@ namespace FluxDB.Services
 
             // Phase 1: Count files (iterative, no recursion)
             StatusChanged?.Invoke(this, "Counting files...");
+            var skippedDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             await Task.Run(() =>
             {
                 try
                 {
-                    result.FilesIndexed = EnumerateAllFiles(rootPath, cancellationToken).Count();
+                    result.FilesIndexed = EnumerateAllFiles(rootPath, cancellationToken, skippedDirs).Count();
                 }
                 catch (UnauthorizedAccessException) { }
                 catch (DirectoryNotFoundException) { }
@@ -78,7 +79,7 @@ namespace FluxDB.Services
 
             try
             {
-                foreach (var filePath in EnumerateAllFiles(rootPath, cancellationToken))
+                foreach (var filePath in EnumerateAllFiles(rootPath, cancellationToken, skippedDirs))
                 {
                     if (cancellationToken.IsCancellationRequested)
                     {
@@ -129,7 +130,9 @@ namespace FluxDB.Services
 
                     if (processed % 100 == 0 || processed == result.TotalFiles)
                     {
-                        var progress = (double)processed / result.TotalFiles * 100;
+                        var progress = result.TotalFiles > 0
+                            ? Math.Min(100.0, (double)processed / result.TotalFiles * 100)
+                            : 0.0;
                         ProgressChanged?.Invoke(this, new IndexProgressEventArgs
                         {
                             Current = processed,
@@ -163,7 +166,7 @@ namespace FluxDB.Services
             if (!cancellationToken.IsCancellationRequested && !result.Cancelled)
             {
                 StatusChanged?.Invoke(this, "Checking for deleted files...");
-                _database.MarkDeletedFiles(existingPaths, rootPath);
+                _database.MarkDeletedFiles(existingPaths, rootPath, skippedDirs.Count > 0 ? skippedDirs : null);
             }
 
             result.EndTime = DateTime.Now;
@@ -211,7 +214,7 @@ namespace FluxDB.Services
             catch { return true; }
         }
 
-        private IEnumerable<string> EnumerateAllFiles(string path, CancellationToken cancellationToken)
+        private IEnumerable<string> EnumerateAllFiles(string path, CancellationToken cancellationToken, HashSet<string> skippedDirs = null)
         {
             var stack = new Stack<string>();
             stack.Push(path);
@@ -227,8 +230,21 @@ namespace FluxDB.Services
                     files = Directory.GetFiles(current);
                     dirs = Directory.GetDirectories(current);
                 }
-                catch (UnauthorizedAccessException) { continue; }
-                catch (DirectoryNotFoundException) { continue; }
+                catch (UnauthorizedAccessException)
+                {
+                    skippedDirs?.Add(current);
+                    continue;
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    skippedDirs?.Add(current);
+                    continue;
+                }
+                catch
+                {
+                    skippedDirs?.Add(current);
+                    continue;
+                }
 
                 foreach (var file in files)
                 {

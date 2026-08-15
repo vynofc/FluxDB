@@ -20,6 +20,7 @@ namespace FluxDB.Views
         private readonly ExportService _exportService;
         private readonly DatabaseService _databaseService;
         private readonly string _rootFolder;
+        private readonly string _originalTheme;
 
         public SettingsWindow(AppSettings settings, ExportService exportService, DatabaseService databaseService, string rootFolder)
         {
@@ -30,6 +31,7 @@ namespace FluxDB.Views
             WindowCornerPreference = Wpf.Ui.Controls.WindowCornerPreference.Round;
 
             Settings = settings ?? new AppSettings();
+            _originalTheme = Settings.Theme ?? "Dark";
             _exportService = exportService;
             _databaseService = databaseService;
             _rootFolder = rootFolder;
@@ -104,19 +106,26 @@ namespace FluxDB.Views
             if (cmbTheme.SelectedItem is string theme)
             {
                 Settings.Theme = theme;
-                if (theme == "Light")
-                    ApplicationThemeManager.Apply(ApplicationTheme.Light);
-                else if (theme == "High Contrast")
-                    ApplicationThemeManager.Apply(ApplicationTheme.HighContrast);
-                else
-                    ApplicationThemeManager.Apply(ApplicationTheme.Dark);
+                ApplyTheme(theme);
             }
         }
 
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
+            Settings.Theme = _originalTheme;
+            ApplyTheme(_originalTheme);
             DialogResult = false;
             Close();
+        }
+
+        private static void ApplyTheme(string theme)
+        {
+            if (theme == "Light")
+                ApplicationThemeManager.Apply(ApplicationTheme.Light);
+            else if (theme == "High Contrast")
+                ApplicationThemeManager.Apply(ApplicationTheme.HighContrast);
+            else
+                ApplicationThemeManager.Apply(ApplicationTheme.Dark);
         }
 
         private void BtnReportBug_Click(object sender, RoutedEventArgs e)
@@ -258,6 +267,14 @@ namespace FluxDB.Views
                 {
                     http.Timeout = TimeSpan.FromMinutes(5);
                     var bytes = await http.GetByteArrayAsync(url);
+
+                    var verified = await VerifyInstallerChecksumAsync(http, url, bytes);
+                    if (!verified)
+                    {
+                        LoggingService.Log("DownloadInstallerAsync: checksum mismatch, aborting install");
+                        return false;
+                    }
+
                     await File.WriteAllBytesAsync(destPath, bytes);
                 }
                 return true;
@@ -267,6 +284,39 @@ namespace FluxDB.Views
                 LoggingService.Log($"DownloadInstallerAsync failed: {ex.Message}");
                 return false;
             }
+        }
+
+        private async Task<bool> VerifyInstallerChecksumAsync(HttpClient http, string installerUrl, byte[] installerBytes)
+        {
+            string expectedHash;
+            try
+            {
+                expectedHash = (await http.GetStringAsync(installerUrl + ".sha256"))?.Trim();
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Log($"Checksum file not available, skipping verification: {ex.Message}");
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(expectedHash))
+            {
+                LoggingService.Log("Checksum file is empty, skipping verification");
+                return true;
+            }
+
+            expectedHash = expectedHash.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0];
+
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                var actualHash = BitConverter.ToString(sha.ComputeHash(installerBytes)).Replace("-", "");
+                if (!actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    LoggingService.Log($"Checksum mismatch: expected={expectedHash} actual={actualHash}");
+                    return false;
+                }
+            }
+            return true;
         }
 
         private async void BtnExport_Click(object sender, RoutedEventArgs e)

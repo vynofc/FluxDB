@@ -49,6 +49,7 @@ namespace FluxDB.Services
         private const string SettingsFileName = "settings.json";
 
         private readonly string _settingsPath;
+        private readonly object _fileLock = new object();
 
         public SettingsService()
         {
@@ -78,20 +79,23 @@ namespace FluxDB.Services
         /// </summary>
         public AppSettings Load()
         {
-            try
+            lock (_fileLock)
             {
-                if (File.Exists(_settingsPath))
+                try
                 {
-                    var json = File.ReadAllText(_settingsPath);
-                    return JsonConvert.DeserializeObject<AppSettings>(json) ?? new AppSettings();
+                    if (File.Exists(_settingsPath))
+                    {
+                        var json = File.ReadAllText(_settingsPath);
+                        return JsonConvert.DeserializeObject<AppSettings>(json) ?? new AppSettings();
+                    }
                 }
-            }
-            catch
-            {
-                // Return default settings on error
-            }
+                catch
+                {
+                    // Return default settings on error
+                }
 
-            return new AppSettings();
+                return new AppSettings();
+            }
         }
 
         /// <summary>
@@ -99,14 +103,17 @@ namespace FluxDB.Services
         /// </summary>
         public void Save(AppSettings settings)
         {
-            try
+            lock (_fileLock)
             {
-                var json = JsonConvert.SerializeObject(settings, Formatting.Indented);
-                File.WriteAllText(_settingsPath, json, System.Text.Encoding.UTF8);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Failed to save settings: {ex.Message}");
+                try
+                {
+                    var json = JsonConvert.SerializeObject(settings, Formatting.Indented);
+                    File.WriteAllText(_settingsPath, json, System.Text.Encoding.UTF8);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to save settings: {ex.Message}");
+                }
             }
         }
 

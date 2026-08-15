@@ -160,26 +160,55 @@ namespace FluxDB.Services
             return files;
         }
 
+        public List<FileEntry> GetFilesDirectlyInFolder(string folderPath)
+        {
+            ThrowIfDisposed();
+            var files = new List<FileEntry>();
+            var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
+            var sql = @"
+                SELECT f.*, n.note, GROUP_CONCAT(t.name, char(0)) as tags_text
+                FROM files f
+                LEFT JOIN notes n ON f.id = n.file_id
+                LEFT JOIN file_tags ft ON f.id = ft.file_id
+                LEFT JOIN tags t ON ft.tag_id = t.id
+                WHERE f.deleted = 0 AND SUBSTR(f.path, 1, @prefixLen) = @prefix
+                  AND INSTR(SUBSTR(f.path, @prefixLen + 1), '\') = 0
+                GROUP BY f.id";
+
+            using (var cmd = new SQLiteCommand(sql, _connection))
+            {
+                cmd.Parameters.AddWithValue("@prefix", prefix);
+                cmd.Parameters.AddWithValue("@prefixLen", prefix.Length);
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        files.Add(MapFileEntry(r));
+                    }
+                }
+            }
+            return files;
+        }
+
         private FileEntry MapFileEntry(SQLiteDataReader r)
         {
             var f = new FileEntry
             {
-                Id = r.GetInt32(0),
-                Path = r.GetString(1),
-                Name = r.GetString(2),
-                Extension = r.IsDBNull(3) ? "" : r.GetString(3),
-                Size = r.IsDBNull(4) ? 0 : r.GetInt64(4),
-                CreatedAt = r.IsDBNull(5) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(5), out var c) ? c : DateTime.MinValue),
-                ModifiedAt = r.IsDBNull(6) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(6), out var m) ? m : DateTime.MinValue),
-                Deleted = r.GetInt32(7) == 1,
-                LastIndexedAt = r.IsDBNull(8) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(8), out var l) ? l : DateTime.MinValue),
-                Note = r.IsDBNull(9) ? "" : r.GetString(9)
+                Id = r.GetInt32(r.GetOrdinal("id")),
+                Path = r.GetString(r.GetOrdinal("path")),
+                Name = r.GetString(r.GetOrdinal("name")),
+                Extension = r.IsDBNull(r.GetOrdinal("extension")) ? "" : r.GetString(r.GetOrdinal("extension")),
+                Size = r.IsDBNull(r.GetOrdinal("size")) ? 0 : r.GetInt64(r.GetOrdinal("size")),
+                CreatedAt = r.IsDBNull(r.GetOrdinal("created_at")) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(r.GetOrdinal("created_at")), out var c) ? c : DateTime.MinValue),
+                ModifiedAt = r.IsDBNull(r.GetOrdinal("modified_at")) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(r.GetOrdinal("modified_at")), out var m) ? m : DateTime.MinValue),
+                Deleted = r.GetInt32(r.GetOrdinal("deleted")) == 1,
+                LastIndexedAt = r.IsDBNull(r.GetOrdinal("last_indexed_at")) ? DateTime.MinValue : (DateTime.TryParse(r.GetString(r.GetOrdinal("last_indexed_at")), out var l) ? l : DateTime.MinValue),
+                Note = r.IsDBNull(r.GetOrdinal("note")) ? "" : r.GetString(r.GetOrdinal("note"))
             };
-            var rawTags = r.IsDBNull(10) ? "" : r.GetString(10);
+            var rawTags = r.IsDBNull(r.GetOrdinal("tags_text")) ? "" : r.GetString(r.GetOrdinal("tags_text"));
             if (!string.IsNullOrEmpty(rawTags))
             {
                 f.Tags = new List<string>(rawTags.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
-                    .SelectMany(t => t.Split(new[] { "\\0" }, StringSplitOptions.RemoveEmptyEntries))
                     .Select(t => t.Trim()).Where(t => !string.IsNullOrEmpty(t)));
             }
             else
@@ -246,7 +275,7 @@ namespace FluxDB.Services
             }
         }
 
-        public void MarkDeletedFiles(HashSet<string> existingPaths, string scopePath = null)
+        public void MarkDeletedFiles(HashSet<string> existingPaths, string scopePath = null, HashSet<string> preservedPaths = null)
         {
             ThrowIfDisposed();
             var toDelete = new List<int>();
@@ -265,6 +294,19 @@ namespace FluxDB.Services
                         var path = r.GetString(1);
                         if (scopePath != null && !path.StartsWith(scopePath.EndsWith("\\") ? scopePath : scopePath + "\\", StringComparison.OrdinalIgnoreCase))
                             continue;
+                        if (preservedPaths != null && preservedPaths.Count > 0)
+                        {
+                            var preserved = false;
+                            foreach (var pp in preservedPaths)
+                            {
+                                if (path.StartsWith(pp.EndsWith("\\") ? pp : pp + "\\", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    preserved = true;
+                                    break;
+                                }
+                            }
+                            if (preserved) continue;
+                        }
                         if (!existingPaths.Contains(path))
                         {
                             toDelete.Add(id);
@@ -328,12 +370,13 @@ namespace FluxDB.Services
             using (var transaction = _connection.BeginTransaction())
             {
                 using (var cmd = new SQLiteCommand(
-                    @"UPDATE files SET path = @newPrefix || SUBSTR(path, @oldLen + 1), 
+                    @"UPDATE files SET path = CASE WHEN path = @oldPath THEN @newPath ELSE @newPrefix || SUBSTR(path, @oldLen + 1) END,
                       name = CASE WHEN path = @oldPath THEN @newName ELSE name END
                       WHERE path = @oldPath OR path LIKE @oldPrefix",
                     _connection, transaction))
                 {
                     cmd.Parameters.AddWithValue("@oldPath", oldPath);
+                    cmd.Parameters.AddWithValue("@newPath", newPath);
                     cmd.Parameters.AddWithValue("@newPrefix", newPrefix);
                     cmd.Parameters.AddWithValue("@oldLen", oldPrefix.Length);
                     cmd.Parameters.AddWithValue("@oldPrefix", oldPrefix + "%");
@@ -363,10 +406,10 @@ namespace FluxDB.Services
                 LEFT JOIN file_tags ft ON f.id = ft.file_id
                 LEFT JOIN tags t ON ft.tag_id = t.id
                 WHERE f.deleted=0 AND f.path LIKE @folderPrefix
-                GROUP BY f.id
-                HAVING f.name LIKE @q OR f.path LIKE @q OR n.note LIKE @q
+                  AND (f.name LIKE @q OR f.path LIKE @q OR n.note LIKE @q
                    OR EXISTS (SELECT 1 FROM file_tags ft2 JOIN tags t2 ON ft2.tag_id = t2.id
-                              WHERE ft2.file_id = f.id AND t2.name LIKE @q)";
+                              WHERE ft2.file_id = f.id AND t2.name LIKE @q))
+                GROUP BY f.id";
 
             using (var cmd = new SQLiteCommand(sql, _connection))
             {
@@ -403,6 +446,8 @@ namespace FluxDB.Services
                     while (r.Read())
                     {
                         var fullPath = r.GetString(0);
+                        if (fullPath.Length <= prefix.Length)
+                            continue;
                         var relative = fullPath.Substring(prefix.Length);
                         var slashIdx = relative.IndexOf('\\');
                         if (slashIdx > 0)
@@ -426,6 +471,21 @@ namespace FluxDB.Services
                 cmd.Parameters.AddWithValue("@e", Path.GetExtension(newName));
                 cmd.ExecuteNonQuery();
             }
+        }
+
+        public List<string> GetAllTags()
+        {
+            ThrowIfDisposed();
+            var tags = new List<string>();
+            using (var cmd = new SQLiteCommand("SELECT name FROM tags ORDER BY name", _connection))
+            using (var r = cmd.ExecuteReader())
+            {
+                while (r.Read())
+                {
+                    tags.Add(r.GetString(0));
+                }
+            }
+            return tags;
         }
 
         public void ClearDatabase()

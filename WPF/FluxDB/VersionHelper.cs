@@ -10,6 +10,8 @@ namespace FluxDB
             s = s.Trim();
             if (s.Contains("!")) s = s.Split('!')[0].Trim();
             if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
+            if (s.EndsWith("-debug", StringComparison.OrdinalIgnoreCase))
+                s = s.Substring(0, s.Length - "-debug".Length);
             return s.Trim();
         }
 

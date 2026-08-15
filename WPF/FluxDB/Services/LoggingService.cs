@@ -46,17 +46,28 @@ namespace FluxDB.Services
             return _logWriter;
         }
 
+        private static int _cachedMaxBufferLines = -1;
+
         private static int GetMaxBufferLines()
         {
+            if (_cachedMaxBufferLines > 0)
+                return _cachedMaxBufferLines;
+
             try
             {
                 var v = new SettingsService().GetDevSettingInt(DevSettingsRegistry.LogBufferLinesKey);
-                return v > 0 ? v : 2000;
+                _cachedMaxBufferLines = v > 0 ? v : 2000;
             }
             catch
             {
-                return 2000;
+                _cachedMaxBufferLines = 2000;
             }
+            return _cachedMaxBufferLines;
+        }
+
+        public static void InvalidateCachedSettings()
+        {
+            _cachedMaxBufferLines = -1;
         }
 
         public static void Log(string message)
@@ -157,7 +168,7 @@ namespace FluxDB.Services
 
         public static void Shutdown()
         {
-            lock (_lock)
+            lock (_writerLock)
             {
                 _logWriter?.Flush();
                 _logWriter?.Dispose();

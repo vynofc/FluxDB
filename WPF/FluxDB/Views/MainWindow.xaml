@@ -352,6 +352,7 @@
                                     <TextBox x:Name="txtTagInput" Margin="0,0,0,8"
                                              FontSize="13" Height="32" AcceptsReturn="False"
                                              KeyDown="TxtTagInput_KeyDown"
+                                             TextChanged="TxtTagInput_TextChanged"
                                              ToolTip="Type tag and press Enter"/>
                                     <Popup x:Name="tagAutocompletePopup" StaysOpen="False"
                                            PlacementTarget="{Binding ElementName=txtTagInput}"
