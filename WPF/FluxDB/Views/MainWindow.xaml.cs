@@ -34,10 +34,14 @@ namespace FluxDB.Views
         private CancellationTokenSource _indexCancellation;
         private CancellationTokenSource _previewCts;
         private int _previewVersion;
+        private WebView2 _webPdfPreview;
         private FileEntry _selectedFile;
         private string _currentRootFolder;
         private string _currentViewFolder;
         private bool _isIndexing;
+        private List<string> _allTagsCache;
+        private bool _tagsCacheDirty = true;
+        private CancellationTokenSource _tagDebounceCts;
 
         // Navigation History
         private Stack<string> _backHistory = new Stack<string>();
@@ -62,15 +66,13 @@ namespace FluxDB.Views
 
         private const string DatabaseFileName = ".fluxdb";
 
-        private static readonly HashSet<string> ImageExtensions = new HashSet<string> { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".ico", ".svg" };
-        private static readonly HashSet<string> AudioExtensions = new HashSet<string> { ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a" };
-        private static readonly HashSet<string> VideoExtensions = new HashSet<string> { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm" };
-        private static readonly HashSet<string> DocumentExtensions = new HashSet<string> { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf", ".odt" };
-        private static readonly HashSet<string> ArchiveExtensions = new HashSet<string> { ".zip", ".rar", ".7z", ".tar", ".gz" };
-        private static readonly HashSet<string> CodeExtensions = new HashSet<string> { ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", ".html", ".css", ".xaml", ".xml", ".json", ".sql" };
-        private static readonly HashSet<string> PreviewTextExtensions = new HashSet<string> { ".txt", ".md", ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", ".html", ".css", ".xaml", ".xml", ".json", ".sql", ".log", ".ini", ".cfg", ".bat", ".ps1", ".sh", ".yml", ".yaml", ".toml", ".config" };
-
-        private static readonly Guid ShellItemIID = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
+        private static readonly HashSet<string> ImageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".ico", ".svg" };
+        private static readonly HashSet<string> AudioExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a" };
+        private static readonly HashSet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm" };
+        private static readonly HashSet<string> DocumentExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf", ".odt" };
+        private static readonly HashSet<string> ArchiveExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".zip", ".rar", ".7z", ".tar", ".gz" };
+        private static readonly HashSet<string> CodeExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", ".html", ".css", ".xaml", ".xml", ".json", ".sql" };
+        private static readonly HashSet<string> PreviewTextExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".txt", ".md", ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", ".html", ".css", ".xaml", ".xml", ".json", ".sql", ".log", ".ini", ".cfg", ".bat", ".ps1", ".sh", ".yml", ".yaml", ".toml", ".config" };
 
         public MainWindow()
         {
@@ -87,7 +89,13 @@ namespace FluxDB.Views
                 var icoPath = Path.Combine(exeDir ?? string.Empty, "FluxDB-icon.ico");
                 if (File.Exists(icoPath))
                 {
-                    this.Icon = BitmapFrame.Create(new Uri(icoPath));
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.UriSource = new Uri(icoPath);
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    this.Icon = bmp;
                 }
             }
             catch (Exception ex) { LoggingService.Log($"Failed to load window icon: {ex.Message}"); }
@@ -655,7 +663,7 @@ namespace FluxDB.Views
             if (entry.IsFolder) return true;
             if (_currentFilter == "All Files") return true;
 
-            var ext = (entry.Extension ?? "").ToLower();
+            var ext = entry.Extension ?? "";
 
             switch (_currentFilter)
             {
@@ -665,7 +673,7 @@ namespace FluxDB.Views
                 case "Documents": return DocumentExtensions.Contains(ext);
                 case "Archives": return ArchiveExtensions.Contains(ext);
                 case "Code": return CodeExtensions.Contains(ext);
-                case "Tags": return entry.Tags.Count > 0;
+                case "Tags": return entry.Tags != null && entry.Tags.Count > 0;
                 default: return true;
             }
         }
@@ -687,9 +695,12 @@ namespace FluxDB.Views
             txtPreviewScroll.Visibility = Visibility.Collapsed;
             txtNoPreview.Visibility = Visibility.Collapsed;
             pnlPreview.Visibility = Visibility.Collapsed;
-            webPdfPreview.Visibility = Visibility.Collapsed;
-            if (webPdfPreview.CoreWebView2 != null)
-                webPdfPreview.CoreWebView2.Navigate("about:blank");
+            if (_webPdfPreview != null)
+            {
+                _webPdfPreview.Visibility = Visibility.Collapsed;
+                if (_webPdfPreview.CoreWebView2 != null)
+                    _webPdfPreview.CoreWebView2.Navigate("about:blank");
+            }
 
             if (file == null || file.IsFolder || !File.Exists(file.Path))
             {
@@ -698,7 +709,7 @@ namespace FluxDB.Views
             }
 
             pnlPreview.Visibility = Visibility.Visible;
-            var ext = (file.Extension ?? "").ToLower();
+            var ext = file.Extension ?? "";
 
             if (ImageExtensions.Contains(ext))
             {
@@ -737,8 +748,13 @@ namespace FluxDB.Views
             {
                 try
                 {
-                    await webPdfPreview.EnsureCoreWebView2Async();
-                    if (webPdfPreview.CoreWebView2 == null)
+                    if (_webPdfPreview == null)
+                    {
+                        _webPdfPreview = new WebView2 { Visibility = Visibility.Collapsed };
+                        previewGrid.Children.Add(_webPdfPreview);
+                    }
+                    await _webPdfPreview.EnsureCoreWebView2Async();
+                    if (_webPdfPreview.CoreWebView2 == null)
                     {
                         txtNoPreview.Text = "Cannot preview PDF";
                         txtNoPreview.Visibility = Visibility.Visible;
@@ -748,8 +764,8 @@ namespace FluxDB.Views
                     if (_previewVersion != version) return;
                     ct.ThrowIfCancellationRequested();
 
-                    webPdfPreview.CoreWebView2.Navigate(new Uri(file.Path).AbsoluteUri);
-                    webPdfPreview.Visibility = Visibility.Visible;
+                    _webPdfPreview.CoreWebView2.Navigate(new Uri(file.Path).AbsoluteUri);
+                    _webPdfPreview.Visibility = Visibility.Visible;
                 }
                 catch (OperationCanceledException) { return; }
                 catch (Microsoft.Web.WebView2.Core.WebView2RuntimeNotFoundException ex)
@@ -824,14 +840,6 @@ namespace FluxDB.Views
                 txtNoPreview.Text = "No preview available";
                 txtNoPreview.Visibility = Visibility.Visible;
             }
-        }
-
-        private void SetImageSource(BitmapSource bitmap)
-        {
-            imgPreview.Source = bitmap;
-            imgPreview.Visibility = Visibility.Visible;
-            var scale = imgPreview.LayoutTransform as ScaleTransform;
-            if (scale != null) { scale.ScaleX = 1; scale.ScaleY = 1; }
         }
 
         private void ImgPreviewContainer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -1060,7 +1068,7 @@ namespace FluxDB.Views
             {
                 Content = Path.GetFileName(_currentRootFolder),
                 Background = System.Windows.Media.Brushes.Transparent,
-                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 120, 212)),
+                Foreground = UiBrushes.BreadcrumbBlue,
                 BorderThickness = new System.Windows.Thickness(0),
                 Padding = new System.Windows.Thickness(4, 2, 4, 2),
                 FontSize = 13,
@@ -1090,7 +1098,7 @@ namespace FluxDB.Views
                     {
                         Content = part,
                         Background = System.Windows.Media.Brushes.Transparent,
-                        Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 120, 212)),
+                        Foreground = UiBrushes.BreadcrumbBlue,
                         BorderThickness = new System.Windows.Thickness(0),
                         Padding = new System.Windows.Thickness(4, 2, 4, 2),
                         FontSize = 13,
@@ -1180,6 +1188,8 @@ namespace FluxDB.Views
         }
 
         private CancellationTokenSource _searchDebounceCts;
+        private CancellationTokenSource _searchCts;
+        private System.Data.SQLite.SQLiteCommand _activeSearchCommand;
 
         private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -1188,8 +1198,8 @@ namespace FluxDB.Views
             var cts = new CancellationTokenSource();
             _searchDebounceCts = cts;
 
-            var debounceMs = _settingsService?.GetDevSettingInt(DevSettingsRegistry.SearchDebounceKey) ?? 25;
-            if (debounceMs <= 0) debounceMs = 25;
+            var debounceMs = _settingsService?.GetDevSettingInt(DevSettingsRegistry.SearchDebounceKey) ?? 250;
+            if (debounceMs <= 0) debounceMs = 250;
             Task.Delay(debounceMs, cts.Token).ContinueWith(t =>
             {
                 if (t.IsCanceled)
@@ -1219,17 +1229,23 @@ namespace FluxDB.Views
             }
 
             var folder = _currentViewFolder ?? _currentRootFolder;
-            List<FileEntry> results = await Task.Run(() => _databaseService.SearchFiles(query, folder));
-
-            var filtered = results
-                .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
-                .Where(f =>
-                {
-                    try { return (File.GetAttributes(f.Path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
-                    catch { return false; }
-                })
-                .Where(MatchesFilter)
-                .ToList();
+            _searchCts?.Cancel();
+            _searchCts = new CancellationTokenSource();
+            var searchCt = _searchCts.Token;
+            List<FileEntry> filtered = await Task.Run(() =>
+            {
+                var results = _databaseService.SearchFiles(query, folder, searchCt);
+                searchCt.ThrowIfCancellationRequested();
+                return results
+                    .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
+                    .Where(f =>
+                    {
+                        try { return (File.GetAttributes(f.Path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
+                        catch { return false; }
+                    })
+                    .Where(MatchesFilter)
+                    .ToList();
+            }, searchCt);
             dgFiles.ItemsSource = filtered;
             txtFileCount.Text = $"{filtered.Count} found";
             txtStatus.Text = $"Search results for: {query}";
@@ -1276,7 +1292,7 @@ namespace FluxDB.Views
             pnlPreview.Visibility = Visibility.Collapsed;
         }
 
-        private void BtnBatchTags_Click(object sender, RoutedEventArgs e)
+        private async void BtnBatchTags_Click(object sender, RoutedEventArgs e)
         {
             var selected = dgFiles.SelectedItems.Cast<FileEntry>().Where(f => !f.IsFolder).ToList();
             if (selected.Count == 0 || _databaseService == null) return;
@@ -1288,9 +1304,11 @@ namespace FluxDB.Views
             {
                 var tags = dialog.NewName.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(t => t.Trim()).Where(t => !string.IsNullOrEmpty(t)).ToList();
+                var fileIds = selected.Select(f => (long)f.Id).ToList();
+                await Task.Run(() => _databaseService.SetTagsForFiles(fileIds, tags));
+                _tagsCacheDirty = true;
                 foreach (var file in selected)
                 {
-                    _databaseService.SetTagsForFile(file.Id, tags);
                     file.Tags = new List<string>(tags);
                     file.TagsText = string.Join(", ", tags);
                 }
@@ -1367,8 +1385,7 @@ namespace FluxDB.Views
         {
             var hash = Math.Abs(tag.GetHashCode());
             var colorHex = TagColors[hash % TagColors.Length];
-            return new System.Windows.Media.SolidColorBrush(
-                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(colorHex));
+            return UiBrushes.GetIconColorBrush(colorHex);
         }
 
         private List<string> GetCurrentTagsFromChips()
@@ -1380,17 +1397,25 @@ namespace FluxDB.Views
         {
             if (_selectedFile == null || _selectedFile.IsFolder || _databaseService == null) return;
             var tags = GetCurrentTagsFromChips();
-            try
+            var fileId = _selectedFile.Id;
+            _ = Task.Run(() =>
             {
-                _databaseService.SetTagsForFile(_selectedFile.Id, tags);
-                _selectedFile.Tags = new List<string>(tags);
-                _selectedFile.TagsText = string.Join(", ", tags);
-                txtStatus.Text = "Saved";
-            }
-            catch (Exception ex)
-            {
-                LoggingService.Log($"AutoSaveTags failed: {ex.Message}");
-            }
+                try
+                {
+                    _databaseService.SetTagsForFile(fileId, tags);
+                    _tagsCacheDirty = true;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _selectedFile.Tags = new List<string>(tags);
+                        _selectedFile.TagsText = string.Join(", ", tags);
+                        txtStatus.Text = "Saved";
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    LoggingService.Log($"AutoSaveTags failed: {ex.Message}");
+                }
+            });
         }
 
         private void TxtTagInput_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -1461,29 +1486,47 @@ namespace FluxDB.Views
                 return;
             }
 
-            try
-            {
-                var existing = GetCurrentTagsFromChips();
-                var matches = _databaseService.GetAllTags()
-                    .Where(t => t.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0)
-                    .Where(t => !existing.Contains(t, StringComparer.OrdinalIgnoreCase))
-                    .Take(8)
-                    .ToList();
+            _tagDebounceCts?.Cancel();
+            _tagDebounceCts?.Dispose();
+            var cts = new CancellationTokenSource();
+            _tagDebounceCts = cts;
 
-                if (matches.Count > 0)
-                {
-                    tagAutocompleteList.ItemsSource = matches;
-                    tagAutocompletePopup.IsOpen = true;
-                }
-                else
-                {
-                    tagAutocompletePopup.IsOpen = false;
-                }
-            }
-            catch
+            Task.Delay(150, cts.Token).ContinueWith(t =>
             {
-                tagAutocompletePopup.IsOpen = false;
-            }
+                if (t.IsCanceled) return;
+                Dispatcher.Invoke(() =>
+                {
+                    if (cts.IsCancellationRequested) return;
+                    try
+                    {
+                        if (_tagsCacheDirty || _allTagsCache == null)
+                        {
+                            _allTagsCache = _databaseService.GetAllTags();
+                            _tagsCacheDirty = false;
+                        }
+                        var existing = GetCurrentTagsFromChips();
+                        var matches = _allTagsCache
+                            .Where(t2 => t2.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0)
+                            .Where(t2 => !existing.Contains(t2, StringComparer.OrdinalIgnoreCase))
+                            .Take(8)
+                            .ToList();
+
+                        if (matches.Count > 0)
+                        {
+                            tagAutocompleteList.ItemsSource = matches;
+                            tagAutocompletePopup.IsOpen = true;
+                        }
+                        else
+                        {
+                            tagAutocompletePopup.IsOpen = false;
+                        }
+                    }
+                    catch
+                    {
+                        tagAutocompletePopup.IsOpen = false;
+                    }
+                });
+            }, TaskScheduler.Default);
         }
 
         private void TagAutocompleteList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -1496,19 +1539,25 @@ namespace FluxDB.Views
             }
         }
 
-        private void BtnSaveTags_Click(object sender, RoutedEventArgs e)
+        private async void BtnSaveTags_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedFile == null || _selectedFile.IsFolder || _databaseService == null) return;
 
             try
             {
                 var tags = GetCurrentTagsFromChips();
-                _databaseService.SetTagsForFile(_selectedFile.Id, tags);
-                _databaseService.SetNoteForFile(_selectedFile.Id, txtNotes.Text);
+                var fileId = _selectedFile.Id;
+                var note = txtNotes.Text;
+                await Task.Run(() =>
+                {
+                    _databaseService.SetTagsForFile(fileId, tags);
+                    _databaseService.SetNoteForFile(fileId, note);
+                });
+                _tagsCacheDirty = true;
 
                 _selectedFile.Tags = new List<string>(tags);
                 _selectedFile.TagsText = string.Join(", ", tags);
-                _selectedFile.Note = txtNotes.Text;
+                _selectedFile.Note = note;
 
                 txtStatus.Text = "Saved";
             }
@@ -1594,16 +1643,16 @@ namespace FluxDB.Views
 
         private void IndexerService_ProgressChanged(object sender, IndexProgressEventArgs e)
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.BeginInvoke(new Action(() =>
             {
                 progressBar.Value = Math.Min(100.0, Math.Max(0.0, e.Percentage));
                 txtProgressStatus.Text = $"Indexing: {e.Current}/{e.Total} ({e.Percentage:F0}%)";
-            });
+            }));
         }
 
         private void IndexerService_StatusChanged(object sender, string status)
         {
-            Dispatcher.Invoke(() => txtProgressStatus.Text = status);
+            Dispatcher.BeginInvoke(new Action(() => txtProgressStatus.Text = status));
         }
 
         #endregion
@@ -1828,10 +1877,13 @@ namespace FluxDB.Views
             btnRefresh.IsEnabled = true;
             txtCurrentFolder.Text = initialView;
 
-            if (HasExistingIndex(folderPath) && _databaseService.GetFileCount() > 0)
+            if (HasExistingIndex(folderPath))
             {
-                var result = MessageBox.Show(
-                    $"This folder already has an index with {_databaseService.GetFileCount()} files.\n\n" +
+                var existingCount = _databaseService.GetFileCount();
+                if (existingCount > 0)
+                {
+                    var result = MessageBox.Show(
+                        $"This folder already has an index with {existingCount} files.\n\n" +
                     "Do you want to refresh the index?\n\nYes = Refresh | No = Use existing",
                     "Existing Index Found", MessageBoxButton.YesNo, MessageBoxImage.Question);
 
@@ -1843,6 +1895,7 @@ namespace FluxDB.Views
                     if (persistence.Sort)
                         ApplySavedSort(folderPath);
                     txtStatus.Text = "Loaded existing index";
+                }
                 }
             }
             else
@@ -1906,19 +1959,22 @@ namespace FluxDB.Views
                 });
             }
 
-            var allFiles = await Task.Run(() => _databaseService.GetFilesDirectlyInFolder(currentFolder));
-            var filesInFolder = allFiles
-                .Where(f => string.Equals(Path.GetDirectoryName(f.Path), currentFolder, StringComparison.OrdinalIgnoreCase))
-                .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
-                .Where(f =>
-                {
-                    try { return (File.GetAttributes(f.Path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
-                    catch { return false; }
-                })
-                .Where(MatchesFilter)
-                .OrderBy(f => f.Name);
+            var allFilesFiltered = await Task.Run(() =>
+            {
+                var allFiles = _databaseService.GetFilesDirectlyInFolder(currentFolder);
+                return allFiles
+                    .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
+                    .Where(f =>
+                    {
+                        try { return (File.GetAttributes(f.Path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
+                        catch { return false; }
+                    })
+                    .Where(MatchesFilter)
+                    .OrderBy(f => f.Name)
+                    .ToList();
+            });
 
-            items.AddRange(filesInFolder);
+            items.AddRange(allFilesFiltered);
             dgFiles.ItemsSource = items;
 
             var folderCount = items.Count(i => i.IsFolder);
@@ -1957,6 +2013,23 @@ namespace FluxDB.Views
             await Task.Run(() =>
             {
                 var fullDestRoot = Path.GetFullPath(destinationFolder);
+
+                // Pre-load source directory files to avoid per-file N+1 queries
+                var srcDirFiles = new Dictionary<string, Dictionary<string, FileEntry>>(StringComparer.OrdinalIgnoreCase);
+                if (move && _databaseService != null)
+                {
+                    var srcDirs = sourcePaths
+                        .Where(s => File.Exists(s))
+                        .Select(s => Path.GetDirectoryName(s))
+                        .Where(d => d != null)
+                        .Distinct(StringComparer.OrdinalIgnoreCase);
+                    foreach (var dir in srcDirs)
+                    {
+                        var files = _databaseService.GetFilesInFolder(dir);
+                        srcDirFiles[dir] = files.ToDictionary(f => f.Path, StringComparer.OrdinalIgnoreCase);
+                    }
+                }
+
                 foreach (var src in sourcePaths)
                 {
                     try
@@ -2002,10 +2075,12 @@ namespace FluxDB.Views
                                 File.Delete(src);
                                 if (_databaseService != null)
                                 {
-                                    var files = _databaseService.GetFilesInFolder(Path.GetDirectoryName(src));
-                                    var dbFile = files.FirstOrDefault(f => f.Path == src);
-                                    if (dbFile != null)
+                                    var srcDir = Path.GetDirectoryName(src);
+                                    if (srcDirFiles.TryGetValue(srcDir ?? "", out var dirFiles) &&
+                                        dirFiles.TryGetValue(src, out var dbFile))
+                                    {
                                         _databaseService.UpdateFilePathAndName(dbFile.Id, dest, Path.GetFileName(dest));
+                                    }
                                 }
                             }
                         }
@@ -2159,63 +2234,11 @@ namespace FluxDB.Views
             _previewCts = null;
             _toastTimer?.Dispose();
             _toastTimer = null;
-            try { webPdfPreview?.Dispose(); } catch { }
+            try { _webPdfPreview?.Dispose(); } catch { }
             _databaseService?.Dispose();
+            _settingsService?.Flush();
             LoggingService.Shutdown();
             base.OnClosed(e);
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct SIZE
-        {
-            public int cx;
-            public int cy;
-        }
-
-        [ComImport]
-        [Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b")]
-        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        private interface IShellItemImageFactory
-        {
-            void GetImage(SIZE size, int flags, out IntPtr phbm);
-        }
-
-        [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
-        private static extern int SHCreateItemFromParsingName([MarshalAs(UnmanagedType.LPWStr)] string pszPath, IntPtr pbc, [In] ref Guid riid, out IShellItemImageFactory ppv);
-
-        [DllImport("gdi32.dll")]
-        private static extern bool DeleteObject(IntPtr hObject);
-
-        private const int SIIGBF_RESIZETOFIT = 0x00;
-        private const int SIIGBF_THUMBNAILONLY = 0x08;
-
-        private BitmapSource GetShellThumbnail(string path, int size)
-        {
-            try
-            {
-                var iid = ShellItemIID;
-                var hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out var factory);
-                if (hr != 0 || factory == null) return null;
-
-                var sz = new SIZE { cx = size, cy = size };
-                factory.GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_THUMBNAILONLY, out var hBitmap);
-                if (hBitmap == IntPtr.Zero) return null;
-
-                try
-                {
-                    var bitmap = Imaging.CreateBitmapSourceFromHBitmap(hBitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(size, size));
-                    bitmap.Freeze();
-                    return bitmap;
-                }
-                finally
-                {
-                    DeleteObject(hBitmap);
-                }
-            }
-            catch
-            {
-                return null;
-            }
         }
     }
 }

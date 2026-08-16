@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using FluxDB.Models;
 using Newtonsoft.Json;
 
@@ -21,7 +23,7 @@ namespace FluxDB.Services
 
         public static readonly List<DevSettingDefinition> All = new List<DevSettingDefinition>
         {
-            new DevSettingDefinition { Key = SearchDebounceKey, DefaultValue = "25", Description = "Verzögerung in ms, bevor die Suche nach der Eingabe startet." },
+            new DevSettingDefinition { Key = SearchDebounceKey, DefaultValue = "250", Description = "Verzögerung in ms, bevor die Suche nach der Eingabe startet." },
             new DevSettingDefinition { Key = PreviewMaxCharsKey, DefaultValue = "5000", Description = "Maximale Zeichenanzahl, die in der Textvorschau angezeigt wird." },
             new DevSettingDefinition { Key = NavigationHistorySizeKey, DefaultValue = "50", Description = "Maximale Anzahl an Einträgen im Navigationsverlauf (Zurück/Vorwärts)." },
             new DevSettingDefinition { Key = RecentFoldersMaxKey, DefaultValue = "10", Description = "Maximale Anzahl gespeicherter zuletzt geöffneter Ordner." },
@@ -51,6 +53,8 @@ namespace FluxDB.Services
         private readonly string _settingsPath;
         private readonly object _fileLock = new object();
         private AppSettings _cachedSettings;
+        private bool _saveDirty;
+        private CancellationTokenSource _saveCts;
 
         public SettingsService()
         {
@@ -105,23 +109,53 @@ namespace FluxDB.Services
         }
 
         /// <summary>
-        /// Save settings to file
+        /// Save settings to file (debounced, in-memory cache updated immediately)
         /// </summary>
         public void Save(AppSettings settings)
         {
             lock (_fileLock)
             {
+                _cachedSettings = settings;
+                _saveDirty = true;
+            }
+
+            _saveCts?.Cancel();
+            _saveCts = new CancellationTokenSource();
+            var ct = _saveCts.Token;
+
+            _ = Task.Run(async () =>
+            {
                 try
                 {
-                    var json = JsonConvert.SerializeObject(settings, Formatting.Indented);
-                    File.WriteAllText(_settingsPath, json, System.Text.Encoding.UTF8);
-                    _cachedSettings = settings;
+                    await Task.Delay(500, ct);
+                    if (ct.IsCancellationRequested) return;
+                    Flush();
                 }
-                catch (Exception ex)
-                {
-                    _cachedSettings = null;
-                    System.Diagnostics.Debug.WriteLine($"Failed to save settings: {ex.Message}");
-                }
+                catch (OperationCanceledException) { }
+            }, ct);
+        }
+
+        /// <summary>
+        /// Immediately write any pending settings to disk
+        /// </summary>
+        public void Flush()
+        {
+            AppSettings toWrite;
+            lock (_fileLock)
+            {
+                if (!_saveDirty || _cachedSettings == null) return;
+                toWrite = _cachedSettings;
+                _saveDirty = false;
+            }
+
+            try
+            {
+                var json = JsonConvert.SerializeObject(toWrite, Formatting.Indented);
+                File.WriteAllText(_settingsPath, json, System.Text.Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to save settings: {ex.Message}");
             }
         }
 

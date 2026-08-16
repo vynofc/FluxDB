@@ -21,27 +21,27 @@ namespace FluxDB.Services
 
         public void ExportToJson(string filePath, string rootFolder)
         {
-            var files = _database.GetAllFiles();
+            var totalFiles = _database.GetFileCount();
             using (var writer = new StreamWriter(filePath, false, Encoding.UTF8))
             using (var jsonWriter = new JsonTextWriter(writer) { Formatting = Formatting.Indented })
             {
-                WriteExport(jsonWriter, files, rootFolder);
+                WriteExport(jsonWriter, _database.EnumerateAllFiles(), totalFiles, rootFolder);
             }
         }
 
         public void ExportToGzip(string filePath, string rootFolder)
         {
-            var files = _database.GetAllFiles();
+            var totalFiles = _database.GetFileCount();
             using (var fileStream = File.Create(filePath))
             using (var gzipStream = new GZipStream(fileStream, CompressionLevel.Optimal))
             using (var writer = new StreamWriter(gzipStream, Encoding.UTF8))
             using (var jsonWriter = new JsonTextWriter(writer))
             {
-                WriteExport(jsonWriter, files, rootFolder);
+                WriteExport(jsonWriter, _database.EnumerateAllFiles(), totalFiles, rootFolder);
             }
         }
 
-        private void WriteExport(JsonTextWriter jsonWriter, List<FileEntry> files, string rootFolder)
+        private void WriteExport(JsonTextWriter jsonWriter, IEnumerable<FileEntry> files, int totalFiles, string rootFolder)
         {
             jsonWriter.WriteStartObject();
             jsonWriter.WritePropertyName("version");
@@ -51,7 +51,7 @@ namespace FluxDB.Services
             jsonWriter.WritePropertyName("rootFolder");
             jsonWriter.WriteValue(rootFolder);
             jsonWriter.WritePropertyName("totalFiles");
-            jsonWriter.WriteValue(files.Count);
+            jsonWriter.WriteValue(totalFiles);
             jsonWriter.WritePropertyName("files");
             jsonWriter.WriteStartArray();
 

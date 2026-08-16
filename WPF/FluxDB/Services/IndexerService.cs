@@ -27,7 +27,12 @@ namespace FluxDB.Services
         /// <summary>
         /// Scan a folder and index all files
         /// </summary>
-        public async Task<IndexResult> ScanFolderAsync(string rootPath, CancellationToken cancellationToken = default)
+        public Task<IndexResult> ScanFolderAsync(string rootPath, CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => ScanFolderCore(rootPath, cancellationToken), cancellationToken);
+        }
+
+        private IndexResult ScanFolderCore(string rootPath, CancellationToken cancellationToken)
         {
             var result = new IndexResult
             {
@@ -42,25 +47,10 @@ namespace FluxDB.Services
                 return result;
             }
 
-            LoggingService.LogDebug($"ScanFolderAsync started: root={rootPath}");
+            if (LoggingService.IsDebugMode) LoggingService.LogDebug($"ScanFolderAsync started: root={rootPath}");
 
-            // Phase 1: Count files (iterative, no recursion)
-            StatusChanged?.Invoke(this, "Counting files...");
+            StatusChanged?.Invoke(this, "Scanning files...");
             var skippedDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            await Task.Run(() =>
-            {
-                try
-                {
-                    result.FilesIndexed = EnumerateAllFiles(rootPath, cancellationToken, skippedDirs).Count();
-                }
-                catch (UnauthorizedAccessException) { }
-                catch (DirectoryNotFoundException) { }
-            }, cancellationToken);
-            result.TotalFiles = result.FilesIndexed;
-            result.FilesIndexed = 0;
-
-            LoggingService.LogDebug($"File count complete: {result.TotalFiles} files found under {rootPath}");
-            StatusChanged?.Invoke(this, $"Found {result.TotalFiles} files. Indexing...");
 
             if (cancellationToken.IsCancellationRequested)
             {
@@ -69,13 +59,16 @@ namespace FluxDB.Services
                 return result;
             }
 
-            // Phase 2: Index files (streaming enumeration, no intermediate list)
-            var existingPaths = new HashSet<string>();
+            // Phase 2: Index files (streaming enumeration, no intermediate list, no pre-count)
+            var existingPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var knownFiles = _database.GetAllFileMetadata();
+            result.TotalFiles = 0; // Will be updated during scan
             int processed = 0;
             var BatchSize = new SettingsService().GetDevSettingInt(DevSettingsRegistry.IndexerBatchSizeKey);
             if (BatchSize <= 0) BatchSize = 1000;
             const int MaxPathLength = 260;
             var currentTransaction = _database.BeginTransaction();
+            var lastProgressReport = DateTime.MinValue;
 
             try
             {
@@ -87,49 +80,66 @@ namespace FluxDB.Services
                         break;
                     }
 
+                    result.TotalFiles++;
+
                     try
                     {
-                        // Windows MAX_PATH limit — skip paths that would fail in the OS/DB layer
+                        // Windows MAX_PATH limit
                         if (filePath.Length >= MaxPathLength)
                         {
-                            result.Errors.Add($"Path too long (skipped): {filePath}");
+                            result.AddError($"Path too long (skipped): {filePath}");
                             processed++;
                             continue;
                         }
 
                         var fi = new FileInfo(filePath);
-                        var fileEntry = new FileEntry
-                        {
-                            Path = filePath,
-                            Name = fi.Name,
-                            Extension = fi.Extension,
-                            Size = fi.Length,
-                            CreatedAt = fi.CreationTime,
-                            ModifiedAt = fi.LastWriteTime,
-                            Deleted = false,
-                            LastIndexedAt = DateTime.Now
-                        };
 
-                        _database.UpsertFile(fileEntry, currentTransaction);
-                        existingPaths.Add(filePath);
-                        result.FilesIndexed++;
+                        // Incremental: only upsert if new or changed
+                        bool isKnown = knownFiles.TryGetValue(filePath, out var known);
+                        if (isKnown && known.Size == fi.Length && known.ModifiedAt == fi.LastWriteTime)
+                        {
+                            existingPaths.Add(filePath);
+                            result.FilesIndexed++;
+                        }
+                        else
+                        {
+                            var fileEntry = new FileEntry
+                            {
+                                Path = filePath,
+                                Name = fi.Name,
+                                Extension = fi.Extension,
+                                Size = fi.Length,
+                                CreatedAt = fi.CreationTime,
+                                ModifiedAt = fi.LastWriteTime,
+                                Deleted = false,
+                                LastIndexedAt = DateTime.Now
+                            };
+
+                            _database.UpsertFile(fileEntry, currentTransaction);
+                            existingPaths.Add(filePath);
+                            result.FilesIndexed++;
+                        }
                     }
                     catch (Exception ex)
                     {
-                        result.Errors.Add($"{filePath}: {ex.Message}");
+                        result.AddError($"{filePath}: {ex.Message}");
                     }
 
                     processed++;
 
-                    if (processed % BatchSize == 0)
+                    if (processed % BatchSize == 0 && !result.Cancelled)
                     {
-                        await CommitBatchWithRetry(currentTransaction);
+                        CommitBatchWithRetryAsync(currentTransaction).GetAwaiter().GetResult();
                         currentTransaction.Dispose();
+                        _database.InvalidateUpsertCommand();
                         currentTransaction = _database.BeginTransaction();
                     }
 
-                    if (processed % 100 == 0 || processed == result.TotalFiles)
+                    var now = DateTime.UtcNow;
+                    bool isLast = processed == result.TotalFiles;
+                    if (processed % 500 == 0 || isLast || (now - lastProgressReport).TotalMilliseconds >= 100)
                     {
+                        lastProgressReport = now;
                         var progress = result.TotalFiles > 0
                             ? Math.Min(100.0, (double)processed / result.TotalFiles * 100)
                             : 0.0;
@@ -145,7 +155,7 @@ namespace FluxDB.Services
 
                 if (!result.Cancelled)
                 {
-                    await CommitBatchWithRetry(currentTransaction);
+                    CommitBatchWithRetryAsync(currentTransaction).GetAwaiter().GetResult();
                 }
                 else
                 {
@@ -159,6 +169,7 @@ namespace FluxDB.Services
             }
             finally
             {
+                _database.InvalidateUpsertCommand();
                 try { currentTransaction.Dispose(); } catch { }
             }
 
@@ -171,13 +182,13 @@ namespace FluxDB.Services
 
             result.EndTime = DateTime.Now;
             result.Success = !result.Cancelled;
-            LoggingService.LogDebug($"ScanFolderAsync done: success={result.Success} cancelled={result.Cancelled} indexed={result.FilesIndexed}/{result.TotalFiles} errors={result.Errors.Count} duration={result.Duration.TotalSeconds:F2}s");
+            if (LoggingService.IsDebugMode) LoggingService.LogDebug($"ScanFolderAsync done: success={result.Success} cancelled={result.Cancelled} indexed={result.FilesIndexed}/{result.TotalFiles} errors={result.Errors.Count} duration={result.Duration.TotalSeconds:F2}s");
             StatusChanged?.Invoke(this, result.Cancelled ? "Cancelled" : "Indexing complete!");
 
             return result;
         }
 
-        private async Task CommitBatchWithRetry(SQLiteTransaction transaction)
+        private async Task CommitBatchWithRetryAsync(SQLiteTransaction transaction)
         {
             const int maxRetries = 3;
             int delayMs = 100;
@@ -272,6 +283,8 @@ namespace FluxDB.Services
 
     public class IndexResult
     {
+        private const int MaxErrors = 1000;
+
         public bool Success { get; set; }
         public bool Cancelled { get; set; }
         public string ErrorMessage { get; set; }
@@ -281,6 +294,14 @@ namespace FluxDB.Services
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
         public TimeSpan Duration => EndTime - StartTime;
-        public List<string> Errors { get; set; } = new List<string>();
+        public List<string> Errors { get; } = new List<string>();
+        public int TotalErrors { get; private set; }
+
+        public void AddError(string error)
+        {
+            TotalErrors++;
+            if (Errors.Count < MaxErrors)
+                Errors.Add(error);
+        }
     }
 }

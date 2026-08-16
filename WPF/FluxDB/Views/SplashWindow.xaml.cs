@@ -34,7 +34,13 @@ namespace FluxDB.Views
                     try
                     {
                         var iconUri = new Uri(icoPath);
-                        this.Icon = BitmapFrame.Create(iconUri);
+                        var iconBmp = new BitmapImage();
+                        iconBmp.BeginInit();
+                        iconBmp.UriSource = iconUri;
+                        iconBmp.CacheOption = BitmapCacheOption.OnLoad;
+                        iconBmp.EndInit();
+                        iconBmp.Freeze();
+                        this.Icon = iconBmp;
 
                         var bmp = new BitmapImage();
                         bmp.BeginInit();
@@ -43,6 +49,7 @@ namespace FluxDB.Views
                         bmp.DecodePixelHeight = 180;
                         bmp.CacheOption = BitmapCacheOption.OnLoad;
                         bmp.EndInit();
+                        bmp.Freeze();
                         imgLogo.Source = bmp;
                     }
                     catch (Exception ex) { LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}"); }
@@ -52,7 +59,13 @@ namespace FluxDB.Views
                     try
                     {
                         var pngUri = new Uri(pngPath);
-                        this.Icon = BitmapFrame.Create(pngUri);
+                        var iconBmp = new BitmapImage();
+                        iconBmp.BeginInit();
+                        iconBmp.UriSource = pngUri;
+                        iconBmp.CacheOption = BitmapCacheOption.OnLoad;
+                        iconBmp.EndInit();
+                        iconBmp.Freeze();
+                        this.Icon = iconBmp;
 
                         var bmp = new BitmapImage();
                         bmp.BeginInit();
@@ -61,6 +74,7 @@ namespace FluxDB.Views
                         bmp.DecodePixelHeight = 180;
                         bmp.CacheOption = BitmapCacheOption.OnLoad;
                         bmp.EndInit();
+                        bmp.Freeze();
                         imgLogo.Source = bmp;
                     }
                     catch (Exception ex) { LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}"); }
@@ -127,7 +141,7 @@ namespace FluxDB.Views
                 var assembly = Assembly.GetExecutingAssembly();
                 var exeDir = Path.GetDirectoryName(assembly.Location) ?? ".";
 
-                LoggingService.LogDebug($"CheckForUpdatesAsync: localVersion={localVersionStr} exeDir={exeDir} skipUpdate={skipUpdate} autoInstall={autoInstall}");
+                if (LoggingService.IsDebugMode) LoggingService.LogDebug($"CheckForUpdatesAsync: localVersion={localVersionStr} exeDir={exeDir} skipUpdate={skipUpdate} autoInstall={autoInstall}");
 
                 var releases = await FetchAllReleasesAsync();
                 if (releases == null || releases.Count == 0) return true;
