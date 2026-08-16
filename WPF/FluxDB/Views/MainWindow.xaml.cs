@@ -1191,6 +1191,7 @@ namespace FluxDB.Views
             if (settingsWindow.ShowDialog() == true)
             {
                 _settingsService.Save(settingsWindow.Settings);
+                RefreshCurrentFolderView();
             }
         }
 
@@ -1993,9 +1994,11 @@ namespace FluxDB.Views
             });
 
             Dictionary<string, List<string>> folderTags = null;
-            if (directories.Count > 0)
+            var folderTagsSettings = _settingsService?.Load();
+            if (directories.Count > 0 && (folderTagsSettings?.FolderTagsEnabled ?? true))
             {
-                folderTags = await Task.Run(() => _databaseService.GetAggregatedTagsForFolders(directories));
+                var depth = folderTagsSettings?.FolderTagsDepth ?? 0;
+                folderTags = await Task.Run(() => _databaseService.GetAggregatedTagsForFolders(directories, depth));
             }
 
             foreach (var dir in directories)

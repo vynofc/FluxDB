@@ -984,9 +984,10 @@ namespace FluxDB.Services
 
         /// <summary>
         /// Returns a map of direct child folder path -> aggregated tags, aggregated recursively
-        /// from files inside each folder.
+        /// from files inside each folder up to the given depth.
+        /// depth 0 = unlimited, 1 = files directly in folder, 2 = files in folder + one level of subfolders, etc.
         /// </summary>
-        public Dictionary<string, List<string>> GetAggregatedTagsForFolders(List<string> childFolderPaths)
+        public Dictionary<string, List<string>> GetAggregatedTagsForFolders(List<string> childFolderPaths, int depth = 0)
         {
             ThrowIfDisposed();
             var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -998,24 +999,85 @@ namespace FluxDB.Services
                 foreach (var folder in childFolderPaths)
                 {
                     var prefix = folder.EndsWith("\\") ? folder : folder + "\\";
-                    var sql = @"
-                        SELECT DISTINCT t.name
-                        FROM files f
-                        INNER JOIN file_tags ft ON f.id = ft.file_id
-                        INNER JOIN tags t ON ft.tag_id = t.id
-                        WHERE f.deleted = 0 AND f.path LIKE @folderPrefix
-                        ORDER BY t.name";
+                    List<string> tags;
 
-                    var tags = new List<string>();
-                    using (var cmd = new SQLiteCommand(sql, _connection, transaction))
+                    if (depth == 1)
                     {
-                        cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
-                        using (var r = cmd.ExecuteReader())
+                        // Only files directly in this folder (no subfolders)
+                        tags = new List<string>();
+                        var sqlDirect = @"
+                            SELECT DISTINCT t.name
+                            FROM files f
+                            INNER JOIN file_tags ft ON f.id = ft.file_id
+                            INNER JOIN tags t ON ft.tag_id = t.id
+                            WHERE f.deleted = 0 AND f.parent_path = @folder
+                            ORDER BY t.name";
+                        using (var cmd = new SQLiteCommand(sqlDirect, _connection, transaction))
                         {
-                            while (r.Read())
-                                tags.Add(r.GetString(0));
+                            cmd.Parameters.AddWithValue("@folder", folder.TrimEnd('\\'));
+                            using (var r = cmd.ExecuteReader())
+                            {
+                                while (r.Read())
+                                    tags.Add(r.GetString(0));
+                            }
                         }
                     }
+                    else if (depth > 1)
+                    {
+                        // Files up to the given depth: collect all file paths under this folder,
+                        // then filter in C# by counting path separators relative to the folder.
+                        tags = new List<string>();
+                        var sqlPaths = @"
+                            SELECT f.path, t.name
+                            FROM files f
+                            INNER JOIN file_tags ft ON f.id = ft.file_id
+                            INNER JOIN tags t ON ft.tag_id = t.id
+                            WHERE f.deleted = 0 AND f.path LIKE @folderPrefix";
+                        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        using (var cmd = new SQLiteCommand(sqlPaths, _connection, transaction))
+                        {
+                            cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
+                            using (var r = cmd.ExecuteReader())
+                            {
+                                while (r.Read())
+                                {
+                                    var fullPath = r.GetString(0);
+                                    var tagName = r.GetString(1);
+                                    var relative = fullPath.Substring(prefix.Length);
+                                    var separators = 0;
+                                    foreach (var c in relative)
+                                        if (c == '\\') separators++;
+                                    // separators == 0 means the file is directly in the folder (depth 1)
+                                    // separators == 1 means the file is in a subfolder (depth 2), etc.
+                                    if (separators < depth && seen.Add(tagName))
+                                        tags.Add(tagName);
+                                }
+                            }
+                        }
+                        tags.Sort(StringComparer.OrdinalIgnoreCase);
+                    }
+                    else
+                    {
+                        // Unlimited depth
+                        tags = new List<string>();
+                        var sql = @"
+                            SELECT DISTINCT t.name
+                            FROM files f
+                            INNER JOIN file_tags ft ON f.id = ft.file_id
+                            INNER JOIN tags t ON ft.tag_id = t.id
+                            WHERE f.deleted = 0 AND f.path LIKE @folderPrefix
+                            ORDER BY t.name";
+                        using (var cmd = new SQLiteCommand(sql, _connection, transaction))
+                        {
+                            cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
+                            using (var r = cmd.ExecuteReader())
+                            {
+                                while (r.Read())
+                                    tags.Add(r.GetString(0));
+                            }
+                        }
+                    }
+
                     result[folder] = tags;
                 }
                 transaction.Commit();
