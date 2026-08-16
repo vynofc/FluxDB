@@ -34,6 +34,18 @@ namespace FluxDB.Models
         public string LastRootFolder { get; set; }
         public bool AutoUpdateCheck { get; set; } = false;
         public bool SearchInPathEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Show aggregated tags from contained files on folder entries.
+        /// </summary>
+        public bool FolderTagsEnabled { get; set; } = true;
+
+        /// <summary>
+        /// How deep to aggregate tags from subfolders.
+        /// 0 = unlimited, 1 = files directly in folder only, 2 = files in folder + one level of subfolders, etc.
+        /// </summary>
+        public int FolderTagsDepth { get; set; } = 0;
+
         public string Theme { get; set; } = "Dark";
         public List<string> RecentFolders { get; set; } = new List<string>();
         public Dictionary<string, bool> ColumnVisibility { get; set; } = new Dictionary<string, bool>();

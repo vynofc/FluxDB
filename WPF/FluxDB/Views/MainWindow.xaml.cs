@@ -1191,6 +1191,7 @@ namespace FluxDB.Views
             if (settingsWindow.ShowDialog() == true)
             {
                 _settingsService.Save(settingsWindow.Settings);
+                RefreshCurrentFolderView();
             }
         }
 
@@ -1345,14 +1346,6 @@ namespace FluxDB.Views
                 return;
             }
 
-            if (_selectedFile.IsFolder)
-            {
-                txtNoSelection.Visibility = Visibility.Visible;
-                pnlFileDetails.Visibility = Visibility.Collapsed;
-                txtNoSelection.Text = $"Folder: {_selectedFile.Name}";
-                return;
-            }
-
             txtNoSelection.Visibility = Visibility.Collapsed;
             pnlFileDetails.Visibility = Visibility.Visible;
 
@@ -1361,7 +1354,19 @@ namespace FluxDB.Views
             txtFileSize.Text = _selectedFile.SizeDisplay;
             txtFileCreated.Text = _selectedFile.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
             txtFileModified.Text = _selectedFile.ModifiedAt.ToString("yyyy-MM-dd HH:mm:ss");
-            txtNotes.Text = _selectedFile.Note ?? "";
+
+            if (_selectedFile.IsFolder)
+            {
+                txtNotes.Text = "";
+                txtNotes.IsEnabled = false;
+                btnSaveTags.Content = "Apply tags to all files in folder";
+            }
+            else
+            {
+                txtNotes.Text = _selectedFile.Note ?? "";
+                txtNotes.IsEnabled = true;
+                btnSaveTags.Content = "Save";
+            }
 
             RebuildTagChips(_selectedFile.Tags);
             txtTagInput.Text = "";
@@ -1401,10 +1406,47 @@ namespace FluxDB.Views
             return pnlTagChips.Children.OfType<TagChip>().Select(c => c.TagName).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
         }
 
+        private void UpdateDataGridItem(FileEntry entry)
+        {
+            if (dgFiles.ItemsSource is not List<FileEntry> items) return;
+            var idx = items.IndexOf(entry);
+            if (idx < 0) return;
+
+            // Force the DataGrid to re-evaluate the row by replacing the item
+            items[idx] = entry;
+            dgFiles.Items.Refresh();
+        }
+
         private void AutoSaveTags()
         {
-            if (_selectedFile == null || _selectedFile.IsFolder || _databaseService == null) return;
+            if (_selectedFile == null || _databaseService == null) return;
             var tags = GetCurrentTagsFromChips();
+
+            if (_selectedFile.IsFolder)
+            {
+                var folderPath = _selectedFile.Path;
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        _databaseService.SetTagsForFolderRecursive(folderPath, tags);
+                        _tagsCacheDirty = true;
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            _selectedFile.Tags = new List<string>(tags);
+                            _selectedFile.TagsText = string.Join(", ", tags);
+                            txtStatus.Text = $"Tags applied to folder: {_selectedFile.Name}";
+                            RefreshCurrentFolderView();
+                        }));
+                    }
+                    catch (Exception ex)
+                    {
+                        LoggingService.Log($"AutoSaveTags (folder) failed: {ex.Message}");
+                    }
+                });
+                return;
+            }
+
             var fileId = _selectedFile.Id;
             _ = Task.Run(() =>
             {
@@ -1417,6 +1459,7 @@ namespace FluxDB.Views
                         _selectedFile.Tags = new List<string>(tags);
                         _selectedFile.TagsText = string.Join(", ", tags);
                         txtStatus.Text = "Saved";
+                        UpdateDataGridItem(_selectedFile);
                     }));
                 }
                 catch (Exception ex)
@@ -1549,11 +1592,24 @@ namespace FluxDB.Views
 
         private async void BtnSaveTags_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedFile == null || _selectedFile.IsFolder || _databaseService == null) return;
+            if (_selectedFile == null || _databaseService == null) return;
 
             try
             {
                 var tags = GetCurrentTagsFromChips();
+
+                if (_selectedFile.IsFolder)
+                {
+                    var folderPath = _selectedFile.Path;
+                    var affected = await Task.Run(() => _databaseService.SetTagsForFolderRecursive(folderPath, tags));
+                    _tagsCacheDirty = true;
+                    _selectedFile.Tags = new List<string>(tags);
+                    _selectedFile.TagsText = string.Join(", ", tags);
+                    txtStatus.Text = $"Tags applied to {affected} file(s) in folder";
+                    RefreshCurrentFolderView();
+                    return;
+                }
+
                 var fileId = _selectedFile.Id;
                 var note = txtNotes.Text;
                 await Task.Run(() =>
@@ -1568,6 +1624,7 @@ namespace FluxDB.Views
                 _selectedFile.Note = note;
 
                 txtStatus.Text = "Saved";
+                UpdateDataGridItem(_selectedFile);
             }
             catch (Exception ex)
             {
@@ -1950,13 +2007,21 @@ namespace FluxDB.Views
                 catch { return new List<string>(); }
             });
 
+            Dictionary<string, List<string>> folderTags = null;
+            var folderTagsSettings = _settingsService?.Load();
+            if (directories.Count > 0 && (folderTagsSettings?.FolderTagsEnabled ?? true))
+            {
+                var depth = folderTagsSettings?.FolderTagsDepth ?? 0;
+                folderTags = await Task.Run(() => _databaseService.GetAggregatedTagsForFolders(directories, depth));
+            }
+
             foreach (var dir in directories)
             {
                 if (taggedDirectories != null && !taggedDirectories.Contains(dir))
                     continue;
 
                 var dirInfo = new DirectoryInfo(dir);
-                items.Add(new FileEntry
+                var entry = new FileEntry
                 {
                     Id = -1,
                     Path = dir,
@@ -1964,7 +2029,15 @@ namespace FluxDB.Views
                     IsFolder = true,
                     CreatedAt = dirInfo.CreationTime,
                     ModifiedAt = dirInfo.LastWriteTime
-                });
+                };
+
+                if (folderTags != null && folderTags.TryGetValue(dir, out var tags) && tags.Count > 0)
+                {
+                    entry.Tags = tags;
+                    entry.TagsText = string.Join(", ", tags);
+                }
+
+                items.Add(entry);
             }
 
             var allFilesFiltered = await Task.Run(() =>

@@ -44,11 +44,26 @@ namespace FluxDB.Views
             txtCurrentVersion.Text = App.GetLocalVersion();
             chkAutoUpdate.IsChecked = Settings.AutoUpdateCheck;
             chkSearchInPath.IsChecked = Settings.SearchInPathEnabled;
+            chkFolderTagsEnabled.IsChecked = Settings.FolderTagsEnabled;
 
             cmbTheme.Items.Add("Dark");
             cmbTheme.Items.Add("Light");
             cmbTheme.Items.Add("High Contrast");
             cmbTheme.SelectedItem = Settings.Theme ?? "Dark";
+
+            var depth = Settings.FolderTagsDepth;
+            foreach (System.Windows.Controls.ComboBoxItem item in cmbFolderTagsDepth.Items)
+            {
+                if (item.Tag?.ToString() == depth.ToString())
+                {
+                    cmbFolderTagsDepth.SelectedItem = item;
+                    break;
+                }
+            }
+            if (cmbFolderTagsDepth.SelectedItem == null)
+                cmbFolderTagsDepth.SelectedIndex = 0;
+
+            UpdateFolderTagsDepthVisibility();
 
             var p = Settings.Persistence ?? new PersistenceOptions();
             chkPersistLastRootFolder.IsChecked = p.LastRootFolder;
@@ -57,6 +72,16 @@ namespace FluxDB.Views
             chkPersistSort.IsChecked = p.Sort;
             chkPersistColumnVisibility.IsChecked = p.ColumnVisibility;
             chkPersistRecentFolders.IsChecked = p.RecentFolders;
+        }
+
+        private void ChkFolderTagsEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            UpdateFolderTagsDepthVisibility();
+        }
+
+        private void UpdateFolderTagsDepthVisibility()
+        {
+            pnlFolderTagsDepth.IsEnabled = chkFolderTagsEnabled.IsChecked == true;
         }
 
         private void UpdateUpdateStatus()
@@ -157,6 +182,12 @@ namespace FluxDB.Views
         {
             Settings.AutoUpdateCheck = chkAutoUpdate.IsChecked ?? false;
             Settings.SearchInPathEnabled = chkSearchInPath.IsChecked ?? false;
+            Settings.FolderTagsEnabled = chkFolderTagsEnabled.IsChecked ?? true;
+            if (cmbFolderTagsDepth.SelectedItem is System.Windows.Controls.ComboBoxItem depthItem
+                && int.TryParse(depthItem.Tag?.ToString(), out var depth))
+            {
+                Settings.FolderTagsDepth = depth;
+            }
             Settings.Theme = cmbTheme.SelectedItem as string ?? "Dark";
 
             if (Settings.Persistence == null)
