@@ -1236,12 +1236,13 @@ namespace FluxDB.Views
             }
 
             var folder = _currentViewFolder ?? _currentRootFolder;
+            var includePath = _settingsService?.Load()?.SearchInPathEnabled ?? false;
             _searchCts?.Cancel();
             _searchCts = new CancellationTokenSource();
             var searchCt = _searchCts.Token;
             List<FileEntry> filtered = await Task.Run(() =>
             {
-                var results = _databaseService.SearchFiles(query, folder, searchCt);
+                var results = _databaseService.SearchFiles(query, folder, searchCt, includePath);
                 searchCt.ThrowIfCancellationRequested();
                 return results
                     .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
