@@ -34,7 +34,13 @@ namespace FluxDB.Views
                     try
                     {
                         var iconUri = new Uri(icoPath);
-                        this.Icon = BitmapFrame.Create(iconUri);
+                        var iconBmp = new BitmapImage();
+                        iconBmp.BeginInit();
+                        iconBmp.UriSource = iconUri;
+                        iconBmp.CacheOption = BitmapCacheOption.OnLoad;
+                        iconBmp.EndInit();
+                        iconBmp.Freeze();
+                        this.Icon = iconBmp;
 
                         var bmp = new BitmapImage();
                         bmp.BeginInit();
@@ -43,6 +49,7 @@ namespace FluxDB.Views
                         bmp.DecodePixelHeight = 180;
                         bmp.CacheOption = BitmapCacheOption.OnLoad;
                         bmp.EndInit();
+                        bmp.Freeze();
                         imgLogo.Source = bmp;
                     }
                     catch (Exception ex) { LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}"); }
@@ -52,7 +59,13 @@ namespace FluxDB.Views
                     try
                     {
                         var pngUri = new Uri(pngPath);
-                        this.Icon = BitmapFrame.Create(pngUri);
+                        var iconBmp = new BitmapImage();
+                        iconBmp.BeginInit();
+                        iconBmp.UriSource = pngUri;
+                        iconBmp.CacheOption = BitmapCacheOption.OnLoad;
+                        iconBmp.EndInit();
+                        iconBmp.Freeze();
+                        this.Icon = iconBmp;
 
                         var bmp = new BitmapImage();
                         bmp.BeginInit();
@@ -61,6 +74,7 @@ namespace FluxDB.Views
                         bmp.DecodePixelHeight = 180;
                         bmp.CacheOption = BitmapCacheOption.OnLoad;
                         bmp.EndInit();
+                        bmp.Freeze();
                         imgLogo.Source = bmp;
                     }
                     catch (Exception ex) { LoggingService.Log($"SplashWindow: Failed to load icon: {ex.Message}"); }
@@ -127,7 +141,7 @@ namespace FluxDB.Views
                 var assembly = Assembly.GetExecutingAssembly();
                 var exeDir = Path.GetDirectoryName(assembly.Location) ?? ".";
 
-                LoggingService.LogDebug($"CheckForUpdatesAsync: localVersion={localVersionStr} exeDir={exeDir} skipUpdate={skipUpdate} autoInstall={autoInstall}");
+                if (LoggingService.IsDebugMode) LoggingService.LogDebug($"CheckForUpdatesAsync: localVersion={localVersionStr} exeDir={exeDir} skipUpdate={skipUpdate} autoInstall={autoInstall}");
 
                 var releases = await FetchAllReleasesAsync();
                 if (releases == null || releases.Count == 0) return true;
@@ -180,6 +194,12 @@ namespace FluxDB.Views
                     return true;
                 }
 
+                if (localVersionStr.EndsWith("-debug", StringComparison.OrdinalIgnoreCase))
+                {
+                    LoggingService.Log($"Update available ({App.AvailableTag}) but local build is a debug build. Skipping auto-install.");
+                    return true;
+                }
+
                 if (App.IsBetaUpdate)
                 {
                     LoggingService.Log($"Beta update available ({latestBetaTag}), skipping auto-install.");
@@ -195,7 +215,7 @@ namespace FluxDB.Views
                 var installerPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
                 if (!File.Exists(installerPath))
                 {
-                    var ok = await DownloadInstallerAsync(exeDir, latestStableTag);
+                    var ok = await UpdateService.DownloadInstallerAsync(exeDir, latestStableTag);
                     if (!ok) return true;
                 }
 
@@ -236,70 +256,6 @@ namespace FluxDB.Views
                 LoggingService.Log($"FetchAllReleasesAsync failed: {ex.Message}");
                 return null;
             }
-        }
-
-        private async Task<bool> DownloadInstallerAsync(string exeDir, string tag)
-        {
-            try
-            {
-                var url = $"https://github.com/vynofc/FluxDB/releases/download/{Uri.EscapeDataString(tag)}/FluxDB-Installer.exe";
-                var destPath = Path.Combine(exeDir, "FluxDB-Installer.exe");
-
-                using (var http = new HttpClient())
-                {
-                    http.Timeout = TimeSpan.FromMinutes(5);
-                    var bytes = await http.GetByteArrayAsync(url);
-
-                    var verified = await VerifyInstallerChecksumAsync(http, url, bytes);
-                    if (!verified)
-                    {
-                        LoggingService.Log("DownloadInstallerAsync: checksum mismatch, aborting install");
-                        return false;
-                    }
-
-                    await File.WriteAllBytesAsync(destPath, bytes);
-                }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                LoggingService.Log($"DownloadInstallerAsync failed: {ex}");
-                return false;
-            }
-        }
-
-        private async Task<bool> VerifyInstallerChecksumAsync(HttpClient http, string installerUrl, byte[] installerBytes)
-        {
-            string expectedHash;
-            try
-            {
-                expectedHash = (await http.GetStringAsync(installerUrl + ".sha256"))?.Trim();
-            }
-            catch (Exception ex)
-            {
-                // Older releases have no checksum asset — proceed without verification
-                LoggingService.Log($"Checksum file not available, skipping verification: {ex.Message}");
-                return true;
-            }
-
-            if (string.IsNullOrWhiteSpace(expectedHash))
-            {
-                LoggingService.Log("Checksum file is empty, skipping verification");
-                return true;
-            }
-
-            expectedHash = expectedHash.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0];
-
-            using (var sha = System.Security.Cryptography.SHA256.Create())
-            {
-                var actualHash = BitConverter.ToString(sha.ComputeHash(installerBytes)).Replace("-", "");
-                if (!actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
-                {
-                    LoggingService.Log($"Checksum mismatch: expected={expectedHash} actual={actualHash}");
-                    return false;
-                }
-            }
-            return true;
         }
     }
 }

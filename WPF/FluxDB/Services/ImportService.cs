@@ -48,7 +48,7 @@ namespace FluxDB.Services
                                 ModifiedAt = DateTime.TryParse(file.ModifiedAt, out var ma) ? ma : DateTime.MinValue,
                                 Deleted = false,
                                 LastIndexedAt = DateTime.Now,
-                                Tags = file.Tags ?? new List<string>(),
+                                Tags = file.Tags,
                                 Note = file.Note ?? ""
                             };
 

@@ -32,7 +32,7 @@ namespace FluxDB.Services
             }
         }
 
-        private static readonly Queue<string> _writeQueue = new Queue<string>();
+        private static Queue<string> _writeQueue = new Queue<string>();
         private static bool _isProcessingQueue = false;
         private static StreamWriter _logWriter;
         private static readonly object _writerLock = new object();
@@ -41,22 +41,35 @@ namespace FluxDB.Services
         {
             if (_logWriter == null)
             {
-                _logWriter = new StreamWriter(_logFilePath, true, Encoding.UTF8) { AutoFlush = true };
+                _logWriter = new StreamWriter(_logFilePath, true, Encoding.UTF8) { AutoFlush = false };
             }
             return _logWriter;
         }
 
+        private static DateTime _lastFlush = DateTime.MinValue;
+
+        private static int _cachedMaxBufferLines = -1;
+
         private static int GetMaxBufferLines()
         {
+            if (_cachedMaxBufferLines > 0)
+                return _cachedMaxBufferLines;
+
             try
             {
                 var v = new SettingsService().GetDevSettingInt(DevSettingsRegistry.LogBufferLinesKey);
-                return v > 0 ? v : 2000;
+                _cachedMaxBufferLines = v > 0 ? v : 2000;
             }
             catch
             {
-                return 2000;
+                _cachedMaxBufferLines = 2000;
             }
+            return _cachedMaxBufferLines;
+        }
+
+        public static void InvalidateCachedSettings()
+        {
+            _cachedMaxBufferLines = -1;
         }
 
         public static void Log(string message)
@@ -70,7 +83,11 @@ namespace FluxDB.Services
                     var maxBuffer = GetMaxBufferLines();
                     _buffer.Add(line);
                     if (_buffer.Count > maxBuffer)
+                    {
                         _buffer.RemoveRange(0, _buffer.Count - maxBuffer);
+                        if (_buffer.Capacity > 4 * _buffer.Count)
+                            _buffer.TrimExcess();
+                    }
 
                     _writeQueue.Enqueue(line);
                     if (!_isProcessingQueue)
@@ -92,7 +109,7 @@ namespace FluxDB.Services
             {
                 while (true)
                 {
-                    string[] linesToWrite;
+                    Queue<string> linesToWrite;
                     lock (_lock)
                     {
                         if (_writeQueue.Count == 0)
@@ -100,19 +117,29 @@ namespace FluxDB.Services
                             _isProcessingQueue = false;
                             return;
                         }
-                        linesToWrite = _writeQueue.ToArray();
-                        _writeQueue.Clear();
+                        linesToWrite = _writeQueue;
+                        _writeQueue = new Queue<string>();
                     }
 
                     try
                     {
                         var sb = new StringBuilder();
-                        foreach (var line in linesToWrite)
-                            sb.AppendLine(line);
+                        while (linesToWrite.Count > 0)
+                            sb.AppendLine(linesToWrite.Dequeue());
 
                         lock (_writerLock)
                         {
-                            GetWriter().Write(sb.ToString());
+                            var writer = GetWriter();
+                            writer.Write(sb.ToString());
+
+                            var now = DateTime.UtcNow;
+                            bool queueEmpty;
+                            lock (_lock) { queueEmpty = _writeQueue.Count == 0; }
+                            if (queueEmpty || (now - _lastFlush).TotalSeconds >= 2)
+                            {
+                                writer.Flush();
+                                _lastFlush = now;
+                            }
                         }
                     }
                     catch
@@ -157,7 +184,29 @@ namespace FluxDB.Services
 
         public static void Shutdown()
         {
+            // Drain remaining queue
+            Queue<string> remaining;
             lock (_lock)
+            {
+                remaining = _writeQueue;
+                _writeQueue = new Queue<string>();
+            }
+            if (remaining.Count > 0)
+            {
+                try
+                {
+                    var sb = new StringBuilder();
+                    while (remaining.Count > 0)
+                        sb.AppendLine(remaining.Dequeue());
+                    lock (_writerLock)
+                    {
+                        GetWriter().Write(sb.ToString());
+                    }
+                }
+                catch { }
+            }
+
+            lock (_writerLock)
             {
                 _logWriter?.Flush();
                 _logWriter?.Dispose();

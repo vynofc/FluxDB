@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Reflection;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace FluxDB
 {
@@ -17,6 +18,26 @@ namespace FluxDB
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            DispatcherUnhandledException += (s, args) =>
+            {
+                Services.LoggingService.Log($"Unhandled dispatcher exception: {args.Exception}");
+                MessageBox.Show("An unexpected error occurred:\n" + args.Exception.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                args.Handled = true;
+            };
+
+            TaskScheduler.UnobservedTaskException += (s, args) =>
+            {
+                Services.LoggingService.Log($"Unobserved task exception: {args.Exception}");
+                args.SetObserved();
+            };
+
+            AppDomain.CurrentDomain.UnhandledException += (s, args) =>
+            {
+                if (args.ExceptionObject is Exception ex)
+                    Services.LoggingService.Log($"Unhandled domain exception: {ex}");
+            };
+
             var ver = GetLocalVersion();
             bool debugMode = ver.EndsWith("-debug", StringComparison.OrdinalIgnoreCase);
 #if DEBUG

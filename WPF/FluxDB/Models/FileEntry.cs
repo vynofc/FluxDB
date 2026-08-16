@@ -1,10 +1,9 @@
-using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using Wpf.Ui.Controls;
 
 namespace FluxDB.Models
 {
-    public partial class FileEntry : ObservableObject
+    public class FileEntry
     {
         private static readonly Dictionary<string, (SymbolRegular Symbol, string Color)> IconLookup = new()
         {
@@ -26,53 +25,43 @@ namespace FluxDB.Models
             [".json"] = (SymbolRegular.Code24, "#00CED1"), [".sql"] = (SymbolRegular.Code24, "#00CED1"), [".php"] = (SymbolRegular.Code24, "#00CED1"),
         };
 
-        [ObservableProperty]
         private int _id;
-
-        [ObservableProperty]
         private string _path;
-
-        [ObservableProperty]
         private string _name;
-
-        [ObservableProperty]
         private string _extension;
-
-        [ObservableProperty]
         private long _size;
-
-        [ObservableProperty]
         private DateTime _createdAt;
-
-        [ObservableProperty]
         private DateTime _modifiedAt;
-
-        [ObservableProperty]
         private bool _deleted;
-
-        [ObservableProperty]
         private DateTime _lastIndexedAt;
-
-        [ObservableProperty]
         private string _tagsText;
-
-        [ObservableProperty]
         private string _note;
-
-        [ObservableProperty]
         private bool _isFolder;
+
+        public int Id { get => _id; set => _id = value; }
+        public string Path { get => _path; set => _path = value; }
+        public string Name { get => _name; set => _name = value; }
+        public string Extension { get => _extension; set { _extension = value; InvalidateCache(); } }
+        public long Size { get => _size; set { _size = value; _cachedSizeDisplay = null; } }
+        public DateTime CreatedAt { get => _createdAt; set => _createdAt = value; }
+        public DateTime ModifiedAt { get => _modifiedAt; set => _modifiedAt = value; }
+        public bool Deleted { get => _deleted; set => _deleted = value; }
+        public DateTime LastIndexedAt { get => _lastIndexedAt; set => _lastIndexedAt = value; }
+        public string TagsText { get => _tagsText; set => _tagsText = value; }
+        public string Note { get => _note; set => _note = value; }
+        public bool IsFolder { get => _isFolder; set { _isFolder = value; InvalidateCache(); } }
 
         private SymbolRegular _cachedIconSymbol;
         private string _cachedSizeDisplay;
-        private bool _cacheValid;
+        private string _cachedTypeDisplay;
 
-        public List<string> Tags { get; set; } = new List<string>();
+        public List<string> Tags { get; set; }
 
         public string SizeDisplay
         {
             get
             {
-                if (_cacheValid && _cachedSizeDisplay != null) return _cachedSizeDisplay;
+                if (_cachedSizeDisplay != null) return _cachedSizeDisplay;
                 if (_isFolder) { _cachedSizeDisplay = ""; return _cachedSizeDisplay; }
                 if (_size < 1024) _cachedSizeDisplay = _size + " B";
                 else if (_size < 1024 * 1024) _cachedSizeDisplay = (_size / 1024.0).ToString("F1") + " KB";
@@ -86,7 +75,7 @@ namespace FluxDB.Models
         {
             get
             {
-                if (_cacheValid && _cachedIconSymbol != default) return _cachedIconSymbol;
+                if (_cachedIconSymbol != default) return _cachedIconSymbol;
                 return _cachedIconSymbol = _isFolder ? SymbolRegular.Folder24 : GetExtLookup().Symbol;
             }
         }
@@ -95,8 +84,7 @@ namespace FluxDB.Models
         {
             get
             {
-                var color = _isFolder ? "#DCB67A" : GetExtLookup().Color;
-                return new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
+                return UiBrushes.GetIconColorBrush(_isFolder ? "#DCB67A" : GetExtLookup().Color);
             }
         }
 
@@ -104,38 +92,82 @@ namespace FluxDB.Models
         {
             get
             {
-                if (_isFolder) return "Folder";
-                return string.IsNullOrEmpty(_extension) ? "File" : _extension.TrimStart('.').ToUpper();
+                if (_cachedTypeDisplay != null) return _cachedTypeDisplay;
+                if (_isFolder) { _cachedTypeDisplay = "Folder"; return _cachedTypeDisplay; }
+                _cachedTypeDisplay = string.IsNullOrEmpty(_extension) ? "File" : _extension.TrimStart('.').ToUpper();
+                return _cachedTypeDisplay;
             }
         }
 
-        partial void OnExtensionChanged(string value)
+        private void InvalidateCache()
         {
-            _cacheValid = false;
-            OnPropertyChanged(nameof(IconSymbol));
-            OnPropertyChanged(nameof(IconColorBrush));
-            OnPropertyChanged(nameof(TypeDisplay));
-        }
-
-        partial void OnSizeChanged(long value)
-        {
-            _cacheValid = false;
-            OnPropertyChanged(nameof(SizeDisplay));
-        }
-
-        partial void OnIsFolderChanged(bool value)
-        {
-            _cacheValid = false;
-            OnPropertyChanged(nameof(IconSymbol));
-            OnPropertyChanged(nameof(IconColorBrush));
-            OnPropertyChanged(nameof(SizeDisplay));
-            OnPropertyChanged(nameof(TypeDisplay));
+            _cachedIconSymbol = default;
+            _cachedSizeDisplay = null;
+            _cachedTypeDisplay = null;
         }
 
         private (SymbolRegular Symbol, string Color) GetExtLookup()
         {
             var ext = (_extension ?? "").ToLower();
             return IconLookup.TryGetValue(ext, out var value) ? value : (SymbolRegular.Document24, "#BDC3C7");
+        }
+    }
+
+    internal static class UiBrushes
+    {
+        private static readonly Dictionary<string, Brush> _brushes = new Dictionary<string, Brush>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object _lock = new object();
+
+        static UiBrushes()
+        {
+            Register("#9B59B6");
+            Register("#2ECC71");
+            Register("#E74C3C");
+            Register("#3498DB");
+            Register("#27AE60");
+            Register("#E67E22");
+            Register("#95A5A6");
+            Register("#00CED1");
+            Register("#BDC3C7");
+            Register("#DCB67A");
+            Register("#0078D4");
+            Register("#107C10");
+            Register("#D83B01");
+            Register("#5C2D91");
+            Register("#E81123");
+            Register("#008272");
+            Register("#E74856");
+            Register("#8764B8");
+            Register("#00B7C3");
+            Register("#038387");
+        }
+
+        private static void Register(string hex)
+        {
+            var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+            brush.Freeze();
+            _brushes[hex] = brush;
+        }
+
+        public static Brush GetIconColorBrush(string hex)
+        {
+            lock (_lock)
+            {
+                if (_brushes.TryGetValue(hex, out var brush)) return brush;
+                var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+                b.Freeze();
+                _brushes[hex] = b;
+                return b;
+            }
+        }
+
+        public static Brush BreadcrumbBlue { get; } = CreateFrozen(0, 120, 212);
+
+        private static Brush CreateFrozen(byte r, byte g, byte b)
+        {
+            var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+            brush.Freeze();
+            return brush;
         }
     }
 }
