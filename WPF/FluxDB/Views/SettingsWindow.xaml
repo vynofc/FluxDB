@@ -108,6 +108,27 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="Preferences">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,20,0,0">
+                        <TextBlock Text="Search" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"
+                                   Foreground="{DynamicResource AccentFillColorDefaultBrush}"/>
+
+                        <Border Padding="15" CornerRadius="4"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                            <StackPanel>
+                                <CheckBox x:Name="chkSearchInPath"
+                                          Content="Include folder names in search (slower, finds files inside matching folders)"
+                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                          Margin="0,0,0,5"/>
+                                <TextBlock Text="When enabled, searching for a term will also match files located in folders whose name contains the term. When disabled, only file names, notes and tags are searched."
+                                           FontSize="11" Opacity="0.6" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="Data">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="0,20,0,0">

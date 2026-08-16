@@ -43,6 +43,7 @@ namespace FluxDB.Views
         {
             txtCurrentVersion.Text = App.GetLocalVersion();
             chkAutoUpdate.IsChecked = Settings.AutoUpdateCheck;
+            chkSearchInPath.IsChecked = Settings.SearchInPathEnabled;
 
             cmbTheme.Items.Add("Dark");
             cmbTheme.Items.Add("Light");
@@ -155,6 +156,7 @@ namespace FluxDB.Views
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
             Settings.AutoUpdateCheck = chkAutoUpdate.IsChecked ?? false;
+            Settings.SearchInPathEnabled = chkSearchInPath.IsChecked ?? false;
             Settings.Theme = cmbTheme.SelectedItem as string ?? "Dark";
 
             if (Settings.Persistence == null)

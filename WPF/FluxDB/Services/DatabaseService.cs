@@ -752,7 +752,7 @@ namespace FluxDB.Services
             }
         }
 
-        public List<FileEntry> SearchFiles(string query, string folderPath, CancellationToken ct = default)
+        public List<FileEntry> SearchFiles(string query, string folderPath, CancellationToken ct = default, bool includePath = true)
         {
             ThrowIfDisposed();
             if (string.IsNullOrWhiteSpace(query))
@@ -769,7 +769,7 @@ namespace FluxDB.Services
             {
                 try
                 {
-                    return SearchFilesFts(query, folderPath, prefix, ct);
+                    return SearchFilesFts(query, folderPath, prefix, ct, includePath);
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
@@ -780,6 +780,7 @@ namespace FluxDB.Services
                 }
             }
 
+            var pathCondition = includePath ? " OR f.path LIKE @q" : "";
             var sql = @"
                 SELECT f.*, n.note, GROUP_CONCAT(t.name, char(0)) as tags_text
                 FROM files f
@@ -787,7 +788,7 @@ namespace FluxDB.Services
                 LEFT JOIN file_tags ft ON f.id = ft.file_id
                 LEFT JOIN tags t ON ft.tag_id = t.id
                 WHERE f.deleted=0 AND f.path LIKE @folderPrefix
-                  AND (f.name LIKE @q OR f.path LIKE @q OR n.note LIKE @q
+                  AND (f.name LIKE @q" + pathCondition + @" OR n.note LIKE @q
                    OR EXISTS (SELECT 1 FROM file_tags ft2 JOIN tags t2 ON ft2.tag_id = t2.id
                               WHERE ft2.file_id = f.id AND t2.name LIKE @qPrefix))
                 GROUP BY f.id";
@@ -815,10 +816,10 @@ namespace FluxDB.Services
             return files;
         }
 
-        private List<FileEntry> SearchFilesFts(string query, string folderPath, string prefix, CancellationToken ct)
+        private List<FileEntry> SearchFilesFts(string query, string folderPath, string prefix, CancellationToken ct, bool includePath = true)
         {
             var files = new List<FileEntry>();
-            var ftsQuery = BuildFtsQuery(query);
+            var ftsQuery = includePath ? BuildFtsQuery(query) : BuildFtsQueryNameOnly(query);
             if (string.IsNullOrEmpty(ftsQuery))
                 throw new ArgumentException("Empty FTS query");
 
@@ -901,6 +902,21 @@ namespace FluxDB.Services
                 if (string.IsNullOrEmpty(sanitized)) continue;
                 if (sb.Length > 0) sb.Append(" OR ");
                 sb.Append('"').Append(sanitized.Replace("\"", "\"\"")).Append("\"*");
+            }
+            return sb.Length > 0 ? sb.ToString() : null;
+        }
+
+        private static string BuildFtsQueryNameOnly(string query)
+        {
+            var tokens = query.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0) return null;
+            var sb = new System.Text.StringBuilder();
+            foreach (var token in tokens)
+            {
+                var sanitized = new string(token.Where(c => char.IsLetterOrDigit(c) || c == '_' || c == '.' || c == '-').ToArray());
+                if (string.IsNullOrEmpty(sanitized)) continue;
+                if (sb.Length > 0) sb.Append(" OR ");
+                sb.Append("{name} : \"").Append(sanitized.Replace("\"", "\"\"")).Append("\"*");
             }
             return sb.Length > 0 ? sb.ToString() : null;
         }
