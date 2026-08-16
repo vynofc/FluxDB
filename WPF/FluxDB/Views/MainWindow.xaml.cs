@@ -609,7 +609,14 @@ namespace FluxDB.Views
 
                 if (_databaseService != null)
                 {
-                    RefreshCurrentFolderView();
+                    if (!string.IsNullOrWhiteSpace(txtSearch?.Text))
+                    {
+                        PerformSearch();
+                    }
+                    else
+                    {
+                        RefreshCurrentFolderView();
+                    }
                 }
             }
         }
