@@ -954,6 +954,102 @@ namespace FluxDB.Services
             return result;
         }
 
+        /// <summary>
+        /// Returns all distinct tags of files recursively contained in the given folder.
+        /// </summary>
+        public List<string> GetTagsForFolderRecursive(string folderPath)
+        {
+            ThrowIfDisposed();
+            var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
+            var sql = @"
+                SELECT DISTINCT t.name
+                FROM files f
+                INNER JOIN file_tags ft ON f.id = ft.file_id
+                INNER JOIN tags t ON ft.tag_id = t.id
+                WHERE f.deleted = 0 AND f.path LIKE @folderPrefix
+                ORDER BY t.name";
+
+            var tags = new List<string>();
+            using (var cmd = new SQLiteCommand(sql, _connection))
+            {
+                cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                        tags.Add(r.GetString(0));
+                }
+            }
+            return tags;
+        }
+
+        /// <summary>
+        /// Returns a map of direct child folder path -> aggregated tags, aggregated recursively
+        /// from files inside each folder.
+        /// </summary>
+        public Dictionary<string, List<string>> GetAggregatedTagsForFolders(List<string> childFolderPaths)
+        {
+            ThrowIfDisposed();
+            var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            if (childFolderPaths == null || childFolderPaths.Count == 0)
+                return result;
+
+            using (var transaction = _connection.BeginTransaction())
+            {
+                foreach (var folder in childFolderPaths)
+                {
+                    var prefix = folder.EndsWith("\\") ? folder : folder + "\\";
+                    var sql = @"
+                        SELECT DISTINCT t.name
+                        FROM files f
+                        INNER JOIN file_tags ft ON f.id = ft.file_id
+                        INNER JOIN tags t ON ft.tag_id = t.id
+                        WHERE f.deleted = 0 AND f.path LIKE @folderPrefix
+                        ORDER BY t.name";
+
+                    var tags = new List<string>();
+                    using (var cmd = new SQLiteCommand(sql, _connection, transaction))
+                    {
+                        cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
+                        using (var r = cmd.ExecuteReader())
+                        {
+                            while (r.Read())
+                                tags.Add(r.GetString(0));
+                        }
+                    }
+                    result[folder] = tags;
+                }
+                transaction.Commit();
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Applies the given tags to all files recursively inside the folder (replaces each file's tags).
+        /// Returns the number of affected files.
+        /// </summary>
+        public int SetTagsForFolderRecursive(string folderPath, List<string> tags)
+        {
+            ThrowIfDisposed();
+            var prefix = folderPath.EndsWith("\\") ? folderPath : folderPath + "\\";
+
+            var fileIds = new List<long>();
+            using (var cmd = new SQLiteCommand("SELECT id FROM files WHERE deleted = 0 AND path LIKE @folderPrefix", _connection))
+            {
+                cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                        fileIds.Add(r.GetInt64(0));
+                }
+            }
+
+            if (fileIds.Count == 0)
+                return 0;
+
+            SetTagsForFiles(fileIds, tags ?? new List<string>());
+            return fileIds.Count;
+        }
+
         public void UpdateFilePathAndName(int fileId, string newPath, string newName)
         {
             ThrowIfDisposed();
