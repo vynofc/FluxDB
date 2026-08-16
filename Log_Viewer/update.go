@@ -31,6 +31,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tailTick()
 
 	case errMsg:
+		m.err = msg.error
+		m.ready = true
 		return m, nil
 	}
 
@@ -42,6 +44,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c", "esc", "q":
 		return m, tea.Quit
 	case "r":
+		m.err = nil
+		m.ready = false
 		return m, loadLogCmd(m.logPath)
 	case "up", "k":
 		m.viewport.LineUp(1)
@@ -78,18 +82,22 @@ func (m *model) tail() {
 	}
 	defer f.Close()
 
-	f.Seek(m.lastSize, 0)
+	if _, err := f.Seek(m.lastSize, 0); err != nil {
+		return
+	}
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	bytesRead := int64(0)
 	for scanner.Scan() {
 		raw := scanner.Text()
 		m.lines = append(m.lines, raw)
 		m.styledLines = append(m.styledLines, styleLogLine(raw))
+		bytesRead += int64(len(raw)) + 1 // +1 for the newline consumed by Scan
 	}
 	if err := scanner.Err(); err != nil {
 		log.Printf("Fehler beim Lesen der Logdatei: %v", err)
 	}
-	m.lastSize = info.Size()
+	m.lastSize += bytesRead
 	m.viewport.SetContent(strings.Join(m.styledLines, "\n"))
 	m.viewport.GotoBottom()
 }

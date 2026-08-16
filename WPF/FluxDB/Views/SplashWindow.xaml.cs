@@ -95,10 +95,10 @@ namespace FluxDB.Views
                 var main = new MainWindow();
                 Application.Current.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
                 main.Show();
-                Hide();
-                Close();
                 Application.Current.MainWindow = main;
                 Application.Current.ShutdownMode = System.Windows.ShutdownMode.OnMainWindowClose;
+                Hide();
+                Close();
 
                 _ = Task.Run(async () =>
                 {

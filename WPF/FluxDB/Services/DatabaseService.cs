@@ -333,22 +333,20 @@ namespace FluxDB.Services
                 WHERE (f.deleted = 0 OR @includeDeleted = 1)
                 GROUP BY f.id";
 
-            var cmd = new SQLiteCommand(sql, _connection);
-            cmd.Parameters.AddWithValue("@includeDeleted", includeDeleted ? 1 : 0);
-            var r = cmd.ExecuteReader();
-            try
+            var results = new List<FileEntry>();
+            using (var cmd = new SQLiteCommand(sql, _connection))
             {
-                var ordinals = GetOrdinals(r);
-                while (r.Read())
+                cmd.Parameters.AddWithValue("@includeDeleted", includeDeleted ? 1 : 0);
+                using (var r = cmd.ExecuteReader())
                 {
-                    yield return MapFileEntry(r, ordinals);
+                    var ordinals = GetOrdinals(r);
+                    while (r.Read())
+                    {
+                        results.Add(MapFileEntry(r, ordinals));
+                    }
                 }
             }
-            finally
-            {
-                r.Dispose();
-                cmd.Dispose();
-            }
+            return results;
         }
 
         public int GetFileCount()
@@ -660,7 +658,7 @@ namespace FluxDB.Services
                 if (scopePath != null)
                 {
                     var scopePrefix = scopePath.EndsWith("\\") ? scopePath : scopePath + "\\";
-                    whereClauses.Add("f.path LIKE @scopePrefix");
+                    whereClauses.Add("f.path LIKE @scopePrefix COLLATE NOCASE");
                     cmdParams.Add(new SQLiteParameter("@scopePrefix", scopePrefix + "%"));
                 }
 
@@ -671,7 +669,7 @@ namespace FluxDB.Services
                     foreach (var pp in preservedPaths)
                     {
                         var ppPrefix = pp.EndsWith("\\") ? pp : pp + "\\";
-                        preservedClauses.Add($"f.path NOT LIKE @preserved{idx}");
+                        preservedClauses.Add($"f.path NOT LIKE @preserved{idx} COLLATE NOCASE");
                         cmdParams.Add(new SQLiteParameter($"@preserved{idx}", ppPrefix + "%"));
                         idx++;
                     }
@@ -769,6 +767,7 @@ namespace FluxDB.Services
             if (LoggingService.IsDebugMode) LoggingService.LogDebug($"UpdateFolderPath: {oldPath} -> {newPath}");
             var oldPrefix = oldPath.EndsWith("\\") ? oldPath : oldPath + "\\";
             var newPrefix = newPath.EndsWith("\\") ? newPath : newPath + "\\";
+            var newName = Path.GetFileName(newPath.TrimEnd('\\'));
             using (var transaction = _connection.BeginTransaction())
             {
                 using (var cmd = new SQLiteCommand(
@@ -782,9 +781,40 @@ namespace FluxDB.Services
                     cmd.Parameters.AddWithValue("@newPrefix", newPrefix);
                     cmd.Parameters.AddWithValue("@oldLen", oldPrefix.Length);
                     cmd.Parameters.AddWithValue("@oldPrefix", oldPrefix + "%");
-                    cmd.Parameters.AddWithValue("@newName", Path.GetFileName(newPath));
+                    cmd.Parameters.AddWithValue("@newName", newName);
                     cmd.ExecuteNonQuery();
                 }
+
+                if (_ftsAvailable)
+                {
+                    // Only the folder row itself changes its name; children keep their names.
+                    // Refresh the FTS entry for every affected row whose name column changed.
+                    var affectedIds = new List<int>();
+                    using (var cmd = new SQLiteCommand(
+                        "SELECT id FROM files WHERE path = @newPath OR path LIKE @newPrefix",
+                        _connection, transaction))
+                    {
+                        cmd.Parameters.AddWithValue("@newPath", newPath);
+                        cmd.Parameters.AddWithValue("@newPrefix", newPrefix + "%");
+                        using (var r = cmd.ExecuteReader())
+                        {
+                            while (r.Read())
+                                affectedIds.Add(r.GetInt32(0));
+                        }
+                    }
+                    foreach (var id in affectedIds)
+                    {
+                        string name = null;
+                        using (var cmd = new SQLiteCommand("SELECT name FROM files WHERE id=@id", _connection, transaction))
+                        {
+                            cmd.Parameters.AddWithValue("@id", id);
+                            name = cmd.ExecuteScalar() as string;
+                        }
+                        if (name != null)
+                            FtsUpsert(id, name, "", transaction);
+                    }
+                }
+
                 transaction.Commit();
             }
         }
@@ -1036,84 +1066,46 @@ namespace FluxDB.Services
                 foreach (var folder in childFolderPaths)
                 {
                     var prefix = folder.EndsWith("\\") ? folder : folder + "\\";
-                    List<string> tags;
 
-                    if (depth == 1)
+                    // Unified implementation: fetch all tagged file paths under this folder,
+                    // then filter by depth in C# using separator counting.
+                    // depth 0 = unlimited, 1 = direct files only, 2 = one subfolder level, etc.
+                    var tags = new List<string>();
+                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var sqlPaths = @"
+                        SELECT f.path, t.name
+                        FROM files f
+                        INNER JOIN file_tags ft ON f.id = ft.file_id
+                        INNER JOIN tags t ON ft.tag_id = t.id
+                        WHERE f.deleted = 0 AND f.path LIKE @folderPrefix";
+                    using (var cmd = new SQLiteCommand(sqlPaths, _connection, transaction))
                     {
-                        // Only files directly in this folder (no subfolders)
-                        tags = new List<string>();
-                        var sqlDirect = @"
-                            SELECT DISTINCT t.name
-                            FROM files f
-                            INNER JOIN file_tags ft ON f.id = ft.file_id
-                            INNER JOIN tags t ON ft.tag_id = t.id
-                            WHERE f.deleted = 0 AND f.parent_path = @folder
-                            ORDER BY t.name";
-                        using (var cmd = new SQLiteCommand(sqlDirect, _connection, transaction))
+                        cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
+                        using (var r = cmd.ExecuteReader())
                         {
-                            cmd.Parameters.AddWithValue("@folder", folder.TrimEnd('\\'));
-                            using (var r = cmd.ExecuteReader())
+                            while (r.Read())
                             {
-                                while (r.Read())
-                                    tags.Add(r.GetString(0));
-                            }
-                        }
-                    }
-                    else if (depth > 1)
-                    {
-                        // Files up to the given depth: collect all file paths under this folder,
-                        // then filter in C# by counting path separators relative to the folder.
-                        tags = new List<string>();
-                        var sqlPaths = @"
-                            SELECT f.path, t.name
-                            FROM files f
-                            INNER JOIN file_tags ft ON f.id = ft.file_id
-                            INNER JOIN tags t ON ft.tag_id = t.id
-                            WHERE f.deleted = 0 AND f.path LIKE @folderPrefix";
-                        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        using (var cmd = new SQLiteCommand(sqlPaths, _connection, transaction))
-                        {
-                            cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
-                            using (var r = cmd.ExecuteReader())
-                            {
-                                while (r.Read())
+                                var fullPath = r.GetString(0);
+                                var tagName = r.GetString(1);
+
+                                if (depth > 0)
                                 {
-                                    var fullPath = r.GetString(0);
-                                    var tagName = r.GetString(1);
                                     var relative = fullPath.Substring(prefix.Length);
                                     var separators = 0;
                                     foreach (var c in relative)
                                         if (c == '\\') separators++;
                                     // separators == 0 means the file is directly in the folder (depth 1)
                                     // separators == 1 means the file is in a subfolder (depth 2), etc.
-                                    if (separators < depth && seen.Add(tagName))
-                                        tags.Add(tagName);
+                                    if (separators >= depth)
+                                        continue;
                                 }
-                            }
-                        }
-                        tags.Sort(StringComparer.OrdinalIgnoreCase);
-                    }
-                    else
-                    {
-                        // Unlimited depth
-                        tags = new List<string>();
-                        var sql = @"
-                            SELECT DISTINCT t.name
-                            FROM files f
-                            INNER JOIN file_tags ft ON f.id = ft.file_id
-                            INNER JOIN tags t ON ft.tag_id = t.id
-                            WHERE f.deleted = 0 AND f.path LIKE @folderPrefix
-                            ORDER BY t.name";
-                        using (var cmd = new SQLiteCommand(sql, _connection, transaction))
-                        {
-                            cmd.Parameters.AddWithValue("@folderPrefix", prefix + "%");
-                            using (var r = cmd.ExecuteReader())
-                            {
-                                while (r.Read())
-                                    tags.Add(r.GetString(0));
+
+                                if (seen.Add(tagName))
+                                    tags.Add(tagName);
                             }
                         }
                     }
+                    tags.Sort(StringComparer.OrdinalIgnoreCase);
 
                     result[folder] = tags;
                 }
@@ -1152,13 +1144,19 @@ namespace FluxDB.Services
         public void UpdateFilePathAndName(int fileId, string newPath, string newName)
         {
             ThrowIfDisposed();
-            using (var cmd = new SQLiteCommand("UPDATE files SET path=@p,name=@n,extension=@e WHERE id=@id", _connection))
+            using (var transaction = _connection.BeginTransaction())
             {
-                cmd.Parameters.AddWithValue("@id", fileId);
-                cmd.Parameters.AddWithValue("@p", newPath);
-                cmd.Parameters.AddWithValue("@n", newName);
-                cmd.Parameters.AddWithValue("@e", Path.GetExtension(newName));
-                cmd.ExecuteNonQuery();
+                using (var cmd = new SQLiteCommand("UPDATE files SET path=@p,name=@n,extension=@e WHERE id=@id", _connection, transaction))
+                {
+                    cmd.Parameters.AddWithValue("@id", fileId);
+                    cmd.Parameters.AddWithValue("@p", newPath);
+                    cmd.Parameters.AddWithValue("@n", newName);
+                    cmd.Parameters.AddWithValue("@e", Path.GetExtension(newName));
+                    cmd.ExecuteNonQuery();
+                }
+                if (_ftsAvailable)
+                    FtsUpsert(fileId, newName, "", transaction);
+                transaction.Commit();
             }
         }
 

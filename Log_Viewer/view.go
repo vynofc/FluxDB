@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,6 +27,7 @@ type model struct {
 	viewport    viewport.Model
 	lastSize    int64
 	ready       bool
+	err         error
 }
 
 func initialModel(logPath string) model {
@@ -75,6 +77,19 @@ func styleLogLine(raw string) string {
 	return sb.String()
 }
 
+func containsWord(s string, words ...string) bool {
+	for _, field := range strings.FieldsFunc(s, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}) {
+		for _, w := range words {
+			if field == w {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func parseLogLine(raw string) (log.Level, string, string, string) {
 	level := log.InfoLevel
 	ts := ""
@@ -90,11 +105,11 @@ func parseLogLine(raw string) (log.Level, string, string, string) {
 	}
 
 	lower := strings.ToLower(rest)
-	if strings.Contains(lower, "error") || strings.Contains(lower, "fehler") || strings.Contains(lower, "exception") {
+	if containsWord(lower, "error", "fehler", "exception") {
 		level = log.ErrorLevel
-	} else if strings.Contains(lower, "warn") || strings.Contains(lower, "warning") {
+	} else if containsWord(lower, "warn", "warning") {
 		level = log.WarnLevel
-	} else if strings.Contains(lower, "debug") || strings.Contains(lower, "trace") {
+	} else if containsWord(lower, "debug", "trace") {
 		level = log.DebugLevel
 	}
 
@@ -111,6 +126,12 @@ func parseLogLine(raw string) (log.Level, string, string, string) {
 }
 
 func (m model) View() string {
+	if m.err != nil {
+		errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E81123")).Bold(true)
+		return appStyle.Render(titleStyle.Render("FluxDB Log Viewer "+version) + "\n\n" +
+			errStyle.Render("Fehler: "+m.err.Error()) + "\n\n" +
+			helpStyle.Render("R Neu laden  |  Esc/Q Beenden"))
+	}
 	if !m.ready {
 		return appStyle.Render(titleStyle.Render("FluxDB Log Viewer "+version) + "\n\n" + dimStyle.Render("Lade..."))
 	}
@@ -126,7 +147,7 @@ func loadLogCmd(path string) tea.Cmd {
 	return func() tea.Msg {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return logLinesMsg(nil)
+			return errMsg{err}
 		}
 		content := strings.TrimRight(string(data), "\n")
 		if content == "" {

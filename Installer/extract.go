@@ -62,6 +62,11 @@ func extractCmd(zipPath, customPath, tag string) tea.Cmd {
 }
 
 func extractFile(f *zip.File, destDir string) error {
+	// Reject symlinks to prevent ZIP-Slip via symlink targets
+	if f.FileInfo().Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("symlinks sind nicht erlaubt: %s", f.Name)
+	}
+
 	rc, err := f.Open()
 	if err != nil {
 		return err
@@ -87,8 +92,12 @@ func extractFile(f *zip.File, destDir string) error {
 	// Rename locked files (e.g. running .exe) before overwriting
 	if _, statErr := os.Stat(targetPath); statErr == nil {
 		oldPath := targetPath + ".old"
+		_ = os.Remove(oldPath) // clean up stale .old from previous run
 		if err := os.Rename(targetPath, oldPath); err != nil {
-			_ = os.Remove(oldPath)
+			// File is locked; try to delete it directly
+			if removeErr := os.Remove(targetPath); removeErr != nil {
+				return fmt.Errorf("datei ist gesperrt und kann nicht ersetzt werden: %s", targetPath)
+			}
 		}
 	}
 

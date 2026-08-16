@@ -16,6 +16,7 @@ func startDownloadCmd(tag string, progressCh chan float64) tea.Cmd {
 		tmpDir := os.TempDir()
 		out, err := os.CreateTemp(tmpDir, fmt.Sprintf("FluxDB-%s-*.zip", tag))
 		if err != nil {
+			close(progressCh)
 			return errMsg{err: fmt.Errorf("temporaere datei erstellen fehlgeschlagen: %w", err)}
 		}
 		zipPath := out.Name()
@@ -25,6 +26,7 @@ func startDownloadCmd(tag string, progressCh chan float64) tea.Cmd {
 		if err != nil {
 			os.Remove(zipPath)
 			out.Close()
+			close(progressCh)
 			return errMsg{err: fmt.Errorf("download-request erstellen fehlgeschlagen: %w", err)}
 		}
 		req.Header.Set("User-Agent", "FluxDB-Installer")
@@ -33,6 +35,7 @@ func startDownloadCmd(tag string, progressCh chan float64) tea.Cmd {
 		if err != nil {
 			os.Remove(zipPath)
 			out.Close()
+			close(progressCh)
 			return errMsg{err: fmt.Errorf("download fehlgeschlagen: %w", err)}
 		}
 		defer resp.Body.Close()
@@ -40,6 +43,7 @@ func startDownloadCmd(tag string, progressCh chan float64) tea.Cmd {
 		if resp.StatusCode != http.StatusOK {
 			os.Remove(zipPath)
 			out.Close()
+			close(progressCh)
 			if resp.StatusCode == http.StatusNotFound {
 				return errMsg{err: fmt.Errorf("Release %s nicht gefunden", tag)}
 			}

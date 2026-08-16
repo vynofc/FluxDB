@@ -1247,23 +1247,30 @@ namespace FluxDB.Views
             _searchCts?.Cancel();
             _searchCts = new CancellationTokenSource();
             var searchCt = _searchCts.Token;
-            List<FileEntry> filtered = await Task.Run(() =>
+            try
             {
-                var results = _databaseService.SearchFiles(query, folder, searchCt, includePath);
-                searchCt.ThrowIfCancellationRequested();
-                return results
-                    .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
-                    .Where(f =>
-                    {
-                        try { return (File.GetAttributes(f.Path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
-                        catch { return false; }
-                    })
-                    .Where(MatchesFilter)
-                    .ToList();
-            }, searchCt);
-            dgFiles.ItemsSource = filtered;
-            txtFileCount.Text = $"{filtered.Count} found";
-            txtStatus.Text = $"Search results for: {query}";
+                List<FileEntry> filtered = await Task.Run(() =>
+                {
+                    var results = _databaseService.SearchFiles(query, folder, searchCt, includePath);
+                    searchCt.ThrowIfCancellationRequested();
+                    return results
+                        .Where(f => !f.Name.StartsWith(".") && !string.Equals(f.Name, "desktop.ini", StringComparison.OrdinalIgnoreCase))
+                        .Where(f =>
+                        {
+                            try { return (File.GetAttributes(f.Path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
+                            catch { return false; }
+                        })
+                        .Where(MatchesFilter)
+                        .ToList();
+                }, searchCt);
+                dgFiles.ItemsSource = filtered;
+                txtFileCount.Text = $"{filtered.Count} found";
+                txtStatus.Text = $"Search results for: {query}";
+            }
+            catch (OperationCanceledException)
+            {
+                // Search was superseded by a newer keystroke; ignore.
+            }
         }
 
         private void DgFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1402,7 +1409,12 @@ namespace FluxDB.Views
 
         private System.Windows.Media.Brush GetTagColor(string tag)
         {
-            var hash = Math.Abs(tag.GetHashCode());
+            int hash;
+            using (var md5 = System.Security.Cryptography.MD5.Create())
+            {
+                var bytes = md5.ComputeHash(Encoding.UTF8.GetBytes(tag));
+                hash = Math.Abs(BitConverter.ToInt32(bytes, 0));
+            }
             var colorHex = TagColors[hash % TagColors.Length];
             return UiBrushes.GetIconColorBrush(colorHex);
         }
@@ -1425,12 +1437,13 @@ namespace FluxDB.Views
 
         private void AutoSaveTags()
         {
-            if (_selectedFile == null || _databaseService == null) return;
+            var file = _selectedFile;
+            if (file == null || _databaseService == null) return;
             var tags = GetCurrentTagsFromChips();
 
-            if (_selectedFile.IsFolder)
+            if (file.IsFolder)
             {
-                var folderPath = _selectedFile.Path;
+                var folderPath = file.Path;
                 _ = Task.Run(() =>
                 {
                     try
@@ -1439,9 +1452,10 @@ namespace FluxDB.Views
                         _tagsCacheDirty = true;
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
-                            _selectedFile.Tags = new List<string>(tags);
-                            _selectedFile.TagsText = string.Join(", ", tags);
-                            txtStatus.Text = $"Tags applied to folder: {_selectedFile.Name}";
+                            if (!ReferenceEquals(_selectedFile, file)) return;
+                            file.Tags = new List<string>(tags);
+                            file.TagsText = string.Join(", ", tags);
+                            txtStatus.Text = $"Tags applied to folder: {file.Name}";
                             RefreshCurrentFolderView();
                         }));
                     }
@@ -1453,7 +1467,7 @@ namespace FluxDB.Views
                 return;
             }
 
-            var fileId = _selectedFile.Id;
+            var fileId = file.Id;
             _ = Task.Run(() =>
             {
                 try
@@ -1462,10 +1476,11 @@ namespace FluxDB.Views
                     _tagsCacheDirty = true;
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        _selectedFile.Tags = new List<string>(tags);
-                        _selectedFile.TagsText = string.Join(", ", tags);
+                        if (!ReferenceEquals(_selectedFile, file)) return;
+                        file.Tags = new List<string>(tags);
+                        file.TagsText = string.Join(", ", tags);
                         txtStatus.Text = "Saved";
-                        UpdateDataGridItem(_selectedFile);
+                        UpdateDataGridItem(file);
                     }));
                 }
                 catch (Exception ex)
@@ -2143,7 +2158,16 @@ namespace FluxDB.Views
                                 }
                                 else
                                 {
-                                    CopyDirectoryRecursive(src, dest);
+                                    try
+                                    {
+                                        CopyDirectoryRecursive(src, dest);
+                                    }
+                                    catch
+                                    {
+                                        // Rollback: remove partially copied destination tree
+                                        try { if (Directory.Exists(dest)) Directory.Delete(dest, true); } catch { }
+                                        throw;
+                                    }
                                     Directory.Delete(src, true);
                                 }
                                 if (_databaseService != null)

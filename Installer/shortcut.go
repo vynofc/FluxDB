@@ -52,7 +52,7 @@ $shortcut.Save()
 		tmpFile.Close()
 		defer os.Remove(tmpPath)
 
-		cmd := exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", tmpPath)
+		cmd := exec.Command("powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-WindowStyle", "Hidden", "-File", tmpPath)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return errMsg{err: fmt.Errorf("verknuepfung fehlgeschlagen: %w: %s", err, string(output))}

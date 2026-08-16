@@ -234,12 +234,17 @@ func (m *model) handleShortcutForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// listenProgress returns a tea.Cmd that blocks until the next progress value
+// arrives on ch, then returns it as a downloadProgressMsg. The caller is
+// expected to re-invoke listenProgress on each downloadProgressMsg to
+// continue receiving updates. When ch is closed, the command returns nil.
 func listenProgress(ch chan float64) tea.Cmd {
 	return func() tea.Msg {
-		for p := range ch {
-			return downloadProgressMsg(p)
+		p, ok := <-ch
+		if !ok {
+			return nil
 		}
-		return nil
+		return downloadProgressMsg(p)
 	}
 }
 

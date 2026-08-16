@@ -153,7 +153,12 @@ namespace FluxDB.Services
             try
             {
                 var json = JsonConvert.SerializeObject(toWrite, Formatting.Indented);
-                File.WriteAllText(_settingsPath, json, System.Text.Encoding.UTF8);
+                var tempPath = _settingsPath + ".tmp";
+                File.WriteAllText(tempPath, json, System.Text.Encoding.UTF8);
+                if (File.Exists(_settingsPath))
+                    File.Replace(tempPath, _settingsPath, null);
+                else
+                    File.Move(tempPath, _settingsPath);
             }
             catch (Exception ex)
             {
