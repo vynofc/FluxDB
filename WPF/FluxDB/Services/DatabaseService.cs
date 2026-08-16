@@ -124,6 +124,43 @@ namespace FluxDB.Services
                 MigrateToV2();
                 SetUserVersion(2);
             }
+            if (version < 3)
+            {
+                MigrateToV3();
+                SetUserVersion(3);
+            }
+        }
+
+        private void MigrateToV3()
+        {
+            using (var cmd = new SQLiteCommand(
+                @"CREATE TABLE IF NOT EXISTS device_info (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    creator_device_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    last_seen_device_id TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL
+                )", _connection))
+                cmd.ExecuteNonQuery();
+        }
+
+        /// <summary>
+        /// Registers the current device in the device_info table. On first insert the
+        /// device becomes the creator; on later calls only last_seen fields are updated.
+        /// </summary>
+        public void RegisterDevice(string deviceId)
+        {
+            ThrowIfDisposed();
+            var now = DateTime.Now.ToString("o");
+            using (var cmd = new SQLiteCommand(
+                @"INSERT INTO device_info (id, creator_device_id, created_at, last_seen_device_id, last_seen_at)
+                  VALUES (1, @d, @now, @d, @now)
+                  ON CONFLICT(id) DO UPDATE SET last_seen_device_id = @d, last_seen_at = @now", _connection))
+            {
+                cmd.Parameters.AddWithValue("@d", deviceId);
+                cmd.Parameters.AddWithValue("@now", now);
+                cmd.ExecuteNonQuery();
+            }
         }
 
         private bool _ftsAvailable;

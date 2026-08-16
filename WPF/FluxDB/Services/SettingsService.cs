@@ -95,6 +95,7 @@ namespace FluxDB.Services
                     {
                         var json = File.ReadAllText(_settingsPath);
                         _cachedSettings = JsonConvert.DeserializeObject<AppSettings>(json) ?? new AppSettings();
+                        _cachedSettings.DeviceId = DeviceIdentityService.GetOrCreateDeviceId();
                         return _cachedSettings;
                     }
                 }
@@ -104,6 +105,7 @@ namespace FluxDB.Services
                 }
 
                 _cachedSettings = new AppSettings();
+                _cachedSettings.DeviceId = DeviceIdentityService.GetOrCreateDeviceId();
                 return _cachedSettings;
             }
         }

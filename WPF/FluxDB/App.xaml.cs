@@ -46,6 +46,9 @@ namespace FluxDB
             FluxDB.Services.LoggingService.SetDebugMode(debugMode);
             if (debugMode)
                 FluxDB.Services.LoggingService.Log($"DEBUG MODE ACTIVE — version: {ver}");
+
+            var deviceId = Services.DeviceIdentityService.GetOrCreateDeviceId();
+            Services.LoggingService.Log($"Session started (Device ID: {deviceId})");
         }
 
         public static string GetLocalVersion()

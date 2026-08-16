@@ -63,5 +63,11 @@ namespace FluxDB.Models
 
         // Developer settings (dotted key -> value), editable via F9 dev settings window
         public Dictionary<string, string> DevSettings { get; set; } = new Dictionary<string, string>();
+
+        /// <summary>
+        /// Cached copy of the device ID. Never used as a source of truth;
+        /// always overwritten from DeviceIdentityService on load.
+        /// </summary>
+        public string DeviceId { get; set; }
     }
 }

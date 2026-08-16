@@ -140,6 +140,12 @@ namespace FluxDB.Views
 
             try
             {
+                _databaseService.RegisterDevice(DeviceIdentityService.GetOrCreateDeviceId());
+            }
+            catch (Exception ex) { LoggingService.Log($"Failed to register device in database: {ex.Message}"); }
+
+            try
+            {
                 if (File.Exists(dbPath))
                 {
                     var attr = File.GetAttributes(dbPath);
