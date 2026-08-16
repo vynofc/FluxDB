@@ -1406,6 +1406,17 @@ namespace FluxDB.Views
             return pnlTagChips.Children.OfType<TagChip>().Select(c => c.TagName).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
         }
 
+        private void UpdateDataGridItem(FileEntry entry)
+        {
+            if (dgFiles.ItemsSource is not List<FileEntry> items) return;
+            var idx = items.IndexOf(entry);
+            if (idx < 0) return;
+
+            // Force the DataGrid to re-evaluate the row by replacing the item
+            items[idx] = entry;
+            dgFiles.Items.Refresh();
+        }
+
         private void AutoSaveTags()
         {
             if (_selectedFile == null || _databaseService == null) return;
@@ -1425,6 +1436,7 @@ namespace FluxDB.Views
                             _selectedFile.Tags = new List<string>(tags);
                             _selectedFile.TagsText = string.Join(", ", tags);
                             txtStatus.Text = $"Tags applied to folder: {_selectedFile.Name}";
+                            RefreshCurrentFolderView();
                         }));
                     }
                     catch (Exception ex)
@@ -1447,6 +1459,7 @@ namespace FluxDB.Views
                         _selectedFile.Tags = new List<string>(tags);
                         _selectedFile.TagsText = string.Join(", ", tags);
                         txtStatus.Text = "Saved";
+                        UpdateDataGridItem(_selectedFile);
                     }));
                 }
                 catch (Exception ex)
@@ -1611,6 +1624,7 @@ namespace FluxDB.Views
                 _selectedFile.Note = note;
 
                 txtStatus.Text = "Saved";
+                UpdateDataGridItem(_selectedFile);
             }
             catch (Exception ex)
             {
